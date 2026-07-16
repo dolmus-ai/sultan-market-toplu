@@ -21,3 +21,6 @@ revoke all on function public.get_secret(text) from public;
 revoke all on function public.get_secret(text) from anon;
 revoke all on function public.get_secret(text) from authenticated;
 grant execute on function public.get_secret(text) to service_role;
+
+-- Güvenlik: trigger fonksiyonu API üzerinden çağrılamasın
+revoke execute on function public.handle_new_user() from public, anon, authenticated;

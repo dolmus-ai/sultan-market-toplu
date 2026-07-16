@@ -37,16 +37,38 @@ export default function FaturaTaraPage() {
   const [sonCariId, setSonCariId] = useState<string | null>(null);
   const [tamamMesaj, setTamamMesaj] = useState("");
 
+  // Depolama maliyetini düşürmek için görseli yüklemeden önce telefonda küçült
+  // (uzun kenar 1600px, %72 JPEG — fiş yazısı bu boyutta net okunur)
+  const kucult = (f: File): Promise<Blob> =>
+    new Promise((resolve) => {
+      const img = new Image();
+      const url = URL.createObjectURL(f);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const oran = Math.min(1, 1600 / Math.max(img.width, img.height));
+        const c = document.createElement("canvas");
+        c.width = Math.round(img.width * oran);
+        c.height = Math.round(img.height * oran);
+        c.getContext("2d")!.drawImage(img, 0, 0, c.width, c.height);
+        c.toBlob((b) => resolve(b ?? f), "image/jpeg", 0.72);
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        resolve(f);
+      };
+      img.src = url;
+    });
+
   const dosyaSecildi = async (f: File) => {
     setHata("");
     setAsama("isleniyor");
     setOnizleme(URL.createObjectURL(f));
 
-    const uzanti = f.name.toLowerCase().endsWith(".png") ? "png" : "jpg";
-    const yol = `${crypto.randomUUID()}.${uzanti}`;
+    const kucukGorsel = await kucult(f);
+    const yol = `${crypto.randomUUID()}.jpg`;
     const { error: upErr } = await supabase.storage
       .from("belgeler")
-      .upload(yol, f, { contentType: f.type || "image/jpeg" });
+      .upload(yol, kucukGorsel, { contentType: "image/jpeg" });
     if (upErr) {
       setHata("Görsel yüklenemedi. Tekrar deneyin.");
       setAsama("sec");

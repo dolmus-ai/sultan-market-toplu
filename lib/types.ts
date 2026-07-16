@@ -6,6 +6,7 @@ export type Profile = {
   id: string;
   full_name: string;
   role: "sahip" | "personel";
+  aktif: boolean;
   created_at: string;
 };
 

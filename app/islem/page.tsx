@@ -40,6 +40,7 @@ function IslemInner() {
   const [hata, setHata] = useState("");
   const [bekliyor, setBekliyor] = useState(false);
   const [tamam, setTamam] = useState<string | null>(null);
+  const [sonKayitId, setSonKayitId] = useState<string | null>(null);
 
   const gerekliTip =
     tur === "gelen_odeme" || tur === "veresiye" ? "alici" : "satici";
@@ -84,20 +85,36 @@ function IslemInner() {
       return;
     }
     setBekliyor(true);
-    const { error } = await supabase.from("hareketler").insert({
-      cari_id: cariId,
-      tur,
-      tutar: t,
-      odeme_yontemi: odemeMi ? yontem : null,
-      aciklama: aciklama.trim() || null,
-      tarih,
-    });
+    const { data: kayit, error } = await supabase
+      .from("hareketler")
+      .insert({
+        cari_id: cariId,
+        tur,
+        tutar: t,
+        odeme_yontemi: odemeMi ? yontem : null,
+        aciklama: aciklama.trim() || null,
+        tarih,
+      })
+      .select("id")
+      .single();
     setBekliyor(false);
-    if (error) {
+    if (error || !kayit) {
       setHata("Kayıt yapılamadı. Tekrar deneyin.");
       return;
     }
+    setSonKayitId(kayit.id);
     setTamam(`${TUR_LABEL[tur]} kaydedildi: ${secili?.unvan} — ${para(t)}`);
+  };
+
+  const geriAl = async () => {
+    if (sonKayitId) {
+      await supabase.from("hareketler").delete().eq("id", sonKayitId);
+    }
+    setSonKayitId(null);
+    setTamam(null);
+    setTutar("");
+    setAciklama("");
+    setHata("Kayıt geri alındı.");
   };
 
   if (tamam) {
@@ -123,6 +140,12 @@ function IslemInner() {
               className="rounded-xl bg-stone-200 py-3 font-bold text-stone-700"
             >
               Cari Hesaba Git
+            </button>
+            <button
+              onClick={geriAl}
+              className="rounded-xl bg-red-50 py-3 font-bold text-red-600"
+            >
+              Geri Al (kaydı sil)
             </button>
           </div>
         </div>

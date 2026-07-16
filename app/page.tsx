@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import Shell from "@/components/Shell";
 import { supabase } from "@/lib/supabase";
@@ -20,8 +20,7 @@ export default function AnaSayfa() {
   const [ozet, setOzet] = useState<Ozet | null>(null);
   const [sonIslemler, setSonIslemler] = useState<Hareket[]>([]);
 
-  useEffect(() => {
-    const yukle = async () => {
+  const yukle = useCallback(async () => {
       const [gunluk, bakiyeler, son] = await Promise.all([
         supabase.from("hareketler").select("tur,tutar").eq("tarih", bugun()),
         supabase.from("cari_ozet").select("tip,kalan_bakiye").eq("aktif", true),
@@ -53,9 +52,24 @@ export default function AnaSayfa() {
         toplamBorc,
       });
       setSonIslemler((son.data as Hareket[]) ?? []);
-    };
-    yukle();
   }, []);
+
+  useEffect(() => {
+    yukle();
+  }, [yukle]);
+
+  const islemSil = async (h: Hareket) => {
+    if (
+      !confirm(
+        `${h.cariler?.unvan ?? ""} — ${TUR_LABEL[h.tur]} ${para(
+          Number(h.tutar)
+        )} silinsin mi?`
+      )
+    )
+      return;
+    await supabase.from("hareketler").delete().eq("id", h.id);
+    yukle();
+  };
 
   const hizli = [
     { href: "/islem?tur=gelen_odeme", label: "Ödeme Al", desc: "Müşteriden", renk: "bg-green-700" },
@@ -78,6 +92,13 @@ export default function AnaSayfa() {
           </Link>
         ))}
       </div>
+
+      <Link
+        href="/fatura-tara"
+        className="mt-2 flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-green-700 bg-white py-3.5 font-bold text-green-800 shadow-sm active:scale-95"
+      >
+        📷 Fiş / Fatura Tara
+      </Link>
 
       <div className="mt-4 grid grid-cols-2 gap-2">
         <div className="rounded-2xl bg-white p-4 shadow-sm">
@@ -135,7 +156,18 @@ export default function AnaSayfa() {
                   {saatFmt(h.created_at)}
                 </div>
               </div>
-              <div className="text-sm font-bold">{para(Number(h.tutar))}</div>
+              <div className="flex items-center gap-2">
+                <div className="text-sm font-bold">
+                  {para(Number(h.tutar))}
+                </div>
+                <button
+                  onClick={() => islemSil(h)}
+                  className="rounded-lg bg-red-50 px-2 py-1 text-xs text-red-500"
+                  aria-label="Sil"
+                >
+                  ✕
+                </button>
+              </div>
             </li>
           ))}
         </ul>

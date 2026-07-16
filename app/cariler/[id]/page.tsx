@@ -80,6 +80,13 @@ export default function CariDetay() {
     yukle();
   };
 
+  const belgeAc = async (yol: string) => {
+    const { data } = await supabase.storage
+      .from("belgeler")
+      .createSignedUrl(yol, 3600);
+    if (data?.signedUrl) window.open(data.signedUrl, "_blank");
+  };
+
   if (!cari)
     return (
       <Shell title="Cari">
@@ -255,10 +262,19 @@ export default function CariDetay() {
                     {h.aciklama ? ` · ${h.aciklama}` : ""}
                   </span>
                   <span className="flex items-center gap-2">
+                    {h.belge_yolu && (
+                      <button
+                        onClick={() => belgeAc(h.belge_yolu!)}
+                        className="text-sky-600"
+                        aria-label="Belgeyi aç"
+                      >
+                        📎 Belge
+                      </button>
+                    )}
                     <span>Bakiye: {para(yuruyen.get(h.id) ?? 0)}</span>
                     <button
                       onClick={() => hareketSil(h.id)}
-                      className="text-red-300"
+                      className="rounded bg-red-50 px-1.5 py-0.5 text-red-500"
                       aria-label="Sil"
                     >
                       ✕

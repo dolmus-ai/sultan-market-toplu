@@ -35,6 +35,7 @@ export type Hareket = {
   odeme_yontemi: OdemeYontemi | null;
   aciklama: string | null;
   tarih: string;
+  belge_yolu: string | null;
   created_by: string | null;
   created_at: string;
   cariler?: { unvan: string; tip: CariTip } | null;

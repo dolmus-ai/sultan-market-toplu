@@ -6,6 +6,8 @@ export const metadata: Metadata = {
   title: "Sultan Market — Bakkal Defteri",
   description: "Cari hesap, tahsilat ve ödeme takibi — kağıt defterden daha hızlı.",
   manifest: "/manifest.webmanifest",
+  icons: { apple: "/apple-touch-icon.png" },
+  appleWebApp: { capable: true, statusBarStyle: "default", title: "Bakkal Defteri" },
 };
 
 export const viewport: Viewport = {

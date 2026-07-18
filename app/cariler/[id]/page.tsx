@@ -25,6 +25,7 @@ export default function CariDetay() {
   const [duzenle, setDuzenle] = useState(false);
   const [form, setForm] = useState({ unvan: "", telefon: "", adres: "" });
   const [mesaj, setMesaj] = useState("");
+  const [belgeGoster, setBelgeGoster] = useState<string | null>(null);
 
   const yukle = useCallback(async () => {
     const [c, h] = await Promise.all([
@@ -100,11 +101,17 @@ export default function CariDetay() {
     router.replace(`/cariler?tip=${cari.tip}`);
   };
 
+  // Belgeyi uygulama içinde tam ekran göster (window.open mobilde
+  // popup engeline takılıyordu; overlay her cihazda çalışır)
   const belgeAc = async (yol: string) => {
-    const { data } = await supabase.storage
+    const { data, error } = await supabase.storage
       .from("belgeler")
       .createSignedUrl(yol, 3600);
-    if (data?.signedUrl) window.open(data.signedUrl, "_blank");
+    if (error || !data?.signedUrl) {
+      setMesaj("Belge açılamadı. Tekrar deneyin.");
+      return;
+    }
+    setBelgeGoster(data.signedUrl);
   };
 
   if (!cari)
@@ -312,6 +319,38 @@ export default function CariDetay() {
           })}
         </ul>
       </div>
+
+      {belgeGoster && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-black/90">
+          <div className="flex items-center justify-between gap-2 p-3">
+            <a
+              href={belgeGoster}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-lg bg-white/15 px-3 py-2 text-sm font-bold text-white"
+            >
+              ⬇️ İndir
+            </a>
+            <button
+              onClick={() => setBelgeGoster(null)}
+              className="rounded-lg bg-white px-4 py-2 text-sm font-bold text-stone-800"
+            >
+              ✕ Kapat
+            </button>
+          </div>
+          <div
+            className="flex-1 overflow-auto p-2"
+            onClick={() => setBelgeGoster(null)}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={belgeGoster}
+              alt="Taranan belge"
+              className="mx-auto max-w-full rounded-lg"
+            />
+          </div>
+        </div>
+      )}
     </Shell>
   );
 }

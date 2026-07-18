@@ -73,6 +73,28 @@ function IslemInner() {
   const secili = cariler.find((c) => c.id === cariId);
   const odemeMi = ODEME_TURLERI.includes(tur);
 
+  // Yazılan isim listede yoksa tek dokunuşla yeni cari aç ve seç
+  const hizliEkle = async () => {
+    const ad = arama.trim();
+    if (!ad) return;
+    const { data, error } = await supabase
+      .from("cariler")
+      .insert({ tip: gerekliTip, unvan: ad })
+      .select("*")
+      .single();
+    if (error || !data) {
+      setHata("Eklenemedi. Tekrar deneyin.");
+      return;
+    }
+    setCariler((mevcut) =>
+      [...mevcut, data as Cari].sort((a, b) =>
+        a.unvan.localeCompare(b.unvan, "tr")
+      )
+    );
+    setCariId(data.id);
+    setArama("");
+  };
+
   const kaydet = async () => {
     setHata("");
     const t = parseTutar(tutar);
@@ -203,9 +225,23 @@ function IslemInner() {
                   {c.unvan}
                 </button>
               ))}
-              {filtreli.length === 0 && (
+              {arama.trim() &&
+                !filtreli.some(
+                  (c) =>
+                    c.unvan.toLocaleLowerCase("tr") ===
+                    arama.trim().toLocaleLowerCase("tr")
+                ) && (
+                  <button
+                    onClick={hizliEkle}
+                    className="block w-full rounded-lg bg-green-50 px-3 py-2.5 text-left text-sm font-bold text-green-800"
+                  >
+                    ➕ &quot;{arama.trim()}&quot; adıyla yeni{" "}
+                    {gerekliTip === "alici" ? "müşteri" : "toptancı"} ekle
+                  </button>
+                )}
+              {filtreli.length === 0 && !arama.trim() && (
                 <p className="py-3 text-center text-xs text-stone-400">
-                  Bulunamadı.
+                  Kayıt yok — yukarıya adını yazıp ekleyin.
                 </p>
               )}
             </div>

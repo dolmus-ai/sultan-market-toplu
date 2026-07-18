@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Shell from "@/components/Shell";
 import { supabase } from "@/lib/supabase";
 import {
@@ -19,6 +19,7 @@ import type { CariOzet, Hareket } from "@/lib/types";
 
 export default function CariDetay() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const [cari, setCari] = useState<CariOzet | null>(null);
   const [hareketler, setHareketler] = useState<Hareket[]>([]);
   const [duzenle, setDuzenle] = useState(false);
@@ -78,6 +79,25 @@ export default function CariDetay() {
     if (!confirm("Bu kayıt silinsin mi?")) return;
     await supabase.from("hareketler").delete().eq("id", hid);
     yukle();
+  };
+
+  const cariSil = async () => {
+    if (!cari) return;
+    if (
+      !confirm(
+        `${cari.unvan} ve geçmişteki TÜM hareketleri kalıcı olarak silinecek. Bu işlem geri alınamaz. Emin misiniz?`
+      )
+    )
+      return;
+    const { error } = await supabase
+      .from("cariler")
+      .delete()
+      .eq("id", cari.id);
+    if (error) {
+      setMesaj("Silinemedi. Tekrar deneyin.");
+      return;
+    }
+    router.replace(`/cariler?tip=${cari.tip}`);
   };
 
   const belgeAc = async (yol: string) => {
@@ -206,6 +226,12 @@ export default function CariDetay() {
                 {cari.aktif ? "Pasif Yap" : "Aktif Yap"}
               </button>
             </div>
+            <button
+              onClick={cariSil}
+              className="w-full rounded-lg bg-red-50 py-2 text-sm font-bold text-red-600"
+            >
+              Cariyi Sil (tüm geçmişiyle)
+            </button>
           </div>
         )}
         {mesaj && <p className="mt-2 text-xs text-green-700">{mesaj}</p>}

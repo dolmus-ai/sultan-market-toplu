@@ -43,7 +43,7 @@ function CarilerInner() {
   return (
     <Shell title="Cari Hesaplar">
       <div className="flex gap-2">
-        {(["alici", "satici"] as const).map((t) => (
+        {(["satici", "alici"] as const).map((t) => (
           <button
             key={t}
             onClick={() => router.replace(`/cariler?tip=${t}`)}

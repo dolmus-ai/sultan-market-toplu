@@ -44,7 +44,7 @@ function YeniCariInner() {
     <Shell title="Yeni Cari">
       <form onSubmit={kaydet} className="space-y-3">
         <div className="flex gap-2">
-          {(["alici", "satici"] as const).map((t) => (
+          {(["satici", "alici"] as const).map((t) => (
             <button
               type="button"
               key={t}

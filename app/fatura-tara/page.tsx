@@ -7,27 +7,55 @@ import { supabase } from "@/lib/supabase";
 import { bugun, para, parseTutar } from "@/lib/format";
 import type { Cari } from "@/lib/types";
 
+// Tarama modu: toptancı faturası mı, müşteri veresiye fişi mi?
+type Mod = "fatura" | "veresiye";
+
 type OcrSonuc = {
   tedarikci?: string | null;
+  el_yazisi?: string | null;
   tarih?: string | null;
   toplam?: number | null;
   kdv?: number | null;
   fatura_no?: string | null;
 };
 
+const MOD_META: Record<
+  Mod,
+  {
+    cariTip: "satici" | "alici";
+    cariAd: string;
+    kayitAd: string;
+    kaydetBtn: string;
+  }
+> = {
+  fatura: {
+    cariTip: "satici",
+    cariAd: "Toptancı",
+    kayitAd: "Fatura",
+    kaydetBtn: "Faturayı Kaydet",
+  },
+  veresiye: {
+    cariTip: "alici",
+    cariAd: "Müşteri",
+    kayitAd: "Veresiye",
+    kaydetBtn: "Veresiyeyi Kaydet",
+  },
+};
+
 export default function FaturaTaraPage() {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
+  const [mod, setMod] = useState<Mod>("fatura");
   const [asama, setAsama] = useState<"sec" | "isleniyor" | "onay" | "tamam">(
     "sec"
   );
   const [hata, setHata] = useState("");
   const [belgeYolu, setBelgeYolu] = useState("");
   const [onizleme, setOnizleme] = useState("");
-  const [saticilar, setSaticilar] = useState<Cari[]>([]);
+  const [cariListe, setCariListe] = useState<Cari[]>([]);
 
   const [cariId, setCariId] = useState("");
-  const [yeniTedarikci, setYeniTedarikci] = useState("");
+  const [yeniCariAd, setYeniCariAd] = useState("");
   const [tarih, setTarih] = useState(bugun());
   const [tutar, setTutar] = useState("");
   const [faturaNo, setFaturaNo] = useState("");
@@ -36,6 +64,8 @@ export default function FaturaTaraPage() {
   const [sonHareketId, setSonHareketId] = useState<string | null>(null);
   const [sonCariId, setSonCariId] = useState<string | null>(null);
   const [tamamMesaj, setTamamMesaj] = useState("");
+
+  const meta = MOD_META[mod];
 
   // Depolama maliyetini düşürmek için görseli yüklemeden önce telefonda küçült
   // (uzun kenar 1600px, %72 JPEG — fiş yazısı bu boyutta net okunur)
@@ -76,17 +106,17 @@ export default function FaturaTaraPage() {
     }
     setBelgeYolu(yol);
 
-    const [{ data: sats }, ocr] = await Promise.all([
+    const [{ data: cs }, ocr] = await Promise.all([
       supabase
         .from("cariler")
         .select("*")
-        .eq("tip", "satici")
+        .eq("tip", meta.cariTip)
         .eq("aktif", true)
         .order("unvan"),
-      supabase.functions.invoke("fatura-ocr", { body: { path: yol } }),
+      supabase.functions.invoke("fatura-ocr", { body: { path: yol, mod } }),
     ]);
-    const liste = (sats as Cari[]) ?? [];
-    setSaticilar(liste);
+    const liste = (cs as Cari[]) ?? [];
+    setCariListe(liste);
 
     if (ocr.error || ocr.data?.error) {
       setHata("Görsel okunamadı — bilgileri elle tamamlayabilirsiniz.");
@@ -95,9 +125,13 @@ export default function FaturaTaraPage() {
     if (s.tarih && /^\d{4}-\d{2}-\d{2}$/.test(s.tarih)) setTarih(s.tarih);
     if (typeof s.toplam === "number" && s.toplam > 0)
       setTutar(String(s.toplam).replace(".", ","));
-    if (s.fatura_no) setFaturaNo(String(s.fatura_no));
-    if (s.tedarikci) {
-      const ad = s.tedarikci.toLocaleLowerCase("tr");
+    if (mod === "fatura" && s.fatura_no) setFaturaNo(String(s.fatura_no));
+
+    // Fatura modunda basılı tedarikçi adı, veresiyede fişteki el yazısı
+    // (genelde müşterinin adresi, bazen adı) cari adı olarak kullanılır.
+    const okunanAd = mod === "fatura" ? s.tedarikci : s.el_yazisi;
+    if (okunanAd) {
+      const ad = okunanAd.toLocaleLowerCase("tr");
       const eslesen = liste.find(
         (c) =>
           c.unvan.toLocaleLowerCase("tr").includes(ad) ||
@@ -107,7 +141,7 @@ export default function FaturaTaraPage() {
         setCariId(eslesen.id);
       } else {
         setCariId("");
-        setYeniTedarikci(s.tedarikci);
+        setYeniCariAd(okunanAd);
       }
     }
     setAsama("onay");
@@ -120,8 +154,10 @@ export default function FaturaTaraPage() {
       setHata("Geçerli bir tutar girin.");
       return;
     }
-    if (!cariId && !yeniTedarikci.trim()) {
-      setHata("Toptancı seçin veya yeni toptancı adı girin.");
+    if (!cariId && !yeniCariAd.trim()) {
+      setHata(
+        `${meta.cariAd} seçin veya yeni ${meta.cariAd.toLocaleLowerCase("tr")} adı girin.`
+      );
       return;
     }
     setKaydediliyor(true);
@@ -130,11 +166,11 @@ export default function FaturaTaraPage() {
     if (!hedefCari) {
       const { data: yeni, error: cErr } = await supabase
         .from("cariler")
-        .insert({ tip: "satici", unvan: yeniTedarikci.trim() })
+        .insert({ tip: meta.cariTip, unvan: yeniCariAd.trim() })
         .select("id")
         .single();
       if (cErr || !yeni) {
-        setHata("Toptancı oluşturulamadı.");
+        setHata(`${meta.cariAd} oluşturulamadı.`);
         setKaydediliyor(false);
         return;
       }
@@ -142,7 +178,7 @@ export default function FaturaTaraPage() {
     }
 
     const notlar = [
-      faturaNo.trim() ? `Fatura No: ${faturaNo.trim()}` : "",
+      mod === "fatura" && faturaNo.trim() ? `Fatura No: ${faturaNo.trim()}` : "",
       aciklama.trim(),
     ]
       .filter(Boolean)
@@ -152,7 +188,7 @@ export default function FaturaTaraPage() {
       .from("hareketler")
       .insert({
         cari_id: hedefCari,
-        tur: "fatura",
+        tur: mod,
         tutar: t,
         tarih,
         aciklama: notlar || null,
@@ -167,7 +203,7 @@ export default function FaturaTaraPage() {
     }
     setSonHareketId(h.id);
     setSonCariId(hedefCari);
-    setTamamMesaj(`Fatura kaydedildi — ${para(t)}`);
+    setTamamMesaj(`${meta.kayitAd} kaydedildi — ${para(t)}`);
     setAsama("tamam");
   };
 
@@ -183,8 +219,9 @@ export default function FaturaTaraPage() {
     setHata(mesaj);
     setBelgeYolu("");
     setOnizleme("");
+    setCariListe([]);
     setCariId("");
-    setYeniTedarikci("");
+    setYeniCariAd("");
     setTarih(bugun());
     setTutar("");
     setFaturaNo("");
@@ -227,11 +264,26 @@ export default function FaturaTaraPage() {
     <Shell title="Fiş / Fatura Tara">
       {asama === "sec" && (
         <div className="mt-6 rounded-2xl bg-white p-6 text-center shadow-sm">
-          <div className="text-5xl">📷</div>
+          <div className="flex gap-2">
+            {(["fatura", "veresiye"] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => setMod(m)}
+                className={`flex-1 rounded-xl py-2.5 text-sm font-bold ${
+                  mod === m
+                    ? "bg-green-700 text-white"
+                    : "bg-stone-100 text-stone-600"
+                }`}
+              >
+                {m === "fatura" ? "Toptancı Faturası" : "Müşteri Veresiyesi"}
+              </button>
+            ))}
+          </div>
+          <div className="mt-5 text-5xl">📷</div>
           <p className="mt-3 text-sm text-stone-500">
-            Fatura veya fişin fotoğrafını çekin; tedarikçi, tarih ve tutarı
-            otomatik okuyalım. Kaydetmeden önce her alanı
-            düzeltebilirsiniz.
+            {mod === "fatura"
+              ? "Fatura veya fişin fotoğrafını çekin; tedarikçi, tarih ve tutarı otomatik okuyalım. Kaydetmeden önce her alanı düzeltebilirsiniz."
+              : "Üzerine müşterinin adresi (veya adı) el yazısıyla yazılmış fişin fotoğrafını çekin; el yazısını, tarihi ve tutarı otomatik okuyalım. El yazısı müşteri adı olarak kaydedilir."}
           </p>
           {hata && (
             <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">
@@ -295,15 +347,17 @@ export default function FaturaTaraPage() {
           )}
 
           <label className="mt-3 block text-xs font-bold text-stone-400">
-            Toptancı
+            {meta.cariAd}
           </label>
           <select
             value={cariId}
             onChange={(e) => setCariId(e.target.value)}
             className="mt-1 w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-sm"
           >
-            <option value="">➕ Yeni toptancı ekle…</option>
-            {saticilar.map((c) => (
+            <option value="">
+              ➕ Yeni {meta.cariAd.toLocaleLowerCase("tr")} ekle…
+            </option>
+            {cariListe.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.unvan}
               </option>
@@ -311,9 +365,13 @@ export default function FaturaTaraPage() {
           </select>
           {!cariId && (
             <input
-              value={yeniTedarikci}
-              onChange={(e) => setYeniTedarikci(e.target.value)}
-              placeholder="Yeni toptancı adı"
+              value={yeniCariAd}
+              onChange={(e) => setYeniCariAd(e.target.value)}
+              placeholder={
+                mod === "fatura"
+                  ? "Yeni toptancı adı"
+                  : "Müşteri adı (fişteki el yazısı)"
+              }
               className="mt-2 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm"
             />
           )}
@@ -341,17 +399,19 @@ export default function FaturaTaraPage() {
                 className="mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm"
               />
             </div>
-            <div className="flex-1">
-              <label className="block text-xs font-bold text-stone-400">
-                Fatura No
-              </label>
-              <input
-                value={faturaNo}
-                onChange={(e) => setFaturaNo(e.target.value)}
-                placeholder="—"
-                className="mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm"
-              />
-            </div>
+            {mod === "fatura" && (
+              <div className="flex-1">
+                <label className="block text-xs font-bold text-stone-400">
+                  Fatura No
+                </label>
+                <input
+                  value={faturaNo}
+                  onChange={(e) => setFaturaNo(e.target.value)}
+                  placeholder="—"
+                  className="mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm"
+                />
+              </div>
+            )}
           </div>
 
           <input
@@ -373,7 +433,7 @@ export default function FaturaTaraPage() {
               disabled={kaydediliyor}
               className="flex-[2] rounded-xl bg-green-700 py-3.5 font-bold text-white disabled:opacity-60"
             >
-              {kaydediliyor ? "Kaydediliyor…" : "Faturayı Kaydet"}
+              {kaydediliyor ? "Kaydediliyor…" : meta.kaydetBtn}
             </button>
           </div>
         </div>

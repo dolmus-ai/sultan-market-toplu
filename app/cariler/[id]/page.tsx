@@ -199,6 +199,15 @@ export default function CariDetay() {
           </div>
         </div>
 
+        {cari.tip === "alici" && kalan === 0 && hareketler.length > 0 && (
+          <button
+            onClick={cariSil}
+            className="mt-3 w-full rounded-xl bg-red-50 py-2.5 text-sm font-bold text-red-600"
+          >
+            Borç kapandı — Müşteriyi Sil
+          </button>
+        )}
+
         {duzenle && (
           <div className="mt-3 space-y-2 border-t border-stone-100 pt-3">
             <input

@@ -11,7 +11,7 @@ import type { CariOzet, CariTip } from "@/lib/types";
 function CarilerInner() {
   const params = useSearchParams();
   const router = useRouter();
-  const tip = (params.get("tip") === "satici" ? "satici" : "alici") as CariTip;
+  const tip = (params.get("tip") === "alici" ? "alici" : "satici") as CariTip;
   const [liste, setListe] = useState<CariOzet[]>([]);
   const [arama, setArama] = useState("");
   const [pasifGoster, setPasifGoster] = useState(false);

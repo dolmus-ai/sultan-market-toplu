@@ -41,6 +41,7 @@ function IslemInner() {
   const [bekliyor, setBekliyor] = useState(false);
   const [tamam, setTamam] = useState<string | null>(null);
   const [sonKayitId, setSonKayitId] = useState<string | null>(null);
+  const [borcKapandi, setBorcKapandi] = useState(false);
 
   const gerekliTip =
     tur === "gelen_odeme" || tur === "veresiye" ? "alici" : "satici";
@@ -124,8 +125,43 @@ function IslemInner() {
       setHata("Kayıt yapılamadı. Tekrar deneyin.");
       return;
     }
+    // Ödeme borcu tam kapattıysa müşteriyi silme seçeneği sunulur
+    // (fiş taramasıyla açılan geçici veresiye müşterilerinin kalması gerekmiyor)
+    let kapandi = false;
+    if (tur === "gelen_odeme") {
+      const { data: oz } = await supabase
+        .from("cari_ozet")
+        .select("kalan_bakiye")
+        .eq("id", cariId)
+        .single();
+      kapandi = oz != null && Number(oz.kalan_bakiye) === 0;
+    }
+    setBorcKapandi(kapandi);
     setSonKayitId(kayit.id);
     setTamam(`${TUR_LABEL[tur]} kaydedildi: ${secili?.unvan} — ${para(t)}`);
+  };
+
+  const musteriSil = async () => {
+    if (!cariId) return;
+    if (
+      !confirm(
+        `${secili?.unvan ?? "Müşteri"} ve geçmişteki TÜM hareketleri kalıcı olarak silinecek. Bu işlem geri alınamaz. Emin misiniz?`
+      )
+    )
+      return;
+    const { error } = await supabase.from("cariler").delete().eq("id", cariId);
+    if (error) {
+      setHata("Silinemedi. Tekrar deneyin.");
+      return;
+    }
+    setCariler((mevcut) => mevcut.filter((c) => c.id !== cariId));
+    setBorcKapandi(false);
+    setSonKayitId(null);
+    setTamam(null);
+    setTutar("");
+    setAciklama("");
+    setCariId("");
+    setHata("Müşteri silindi.");
   };
 
   const geriAl = async () => {
@@ -133,6 +169,7 @@ function IslemInner() {
       await supabase.from("hareketler").delete().eq("id", sonKayitId);
     }
     setSonKayitId(null);
+    setBorcKapandi(false);
     setTamam(null);
     setTutar("");
     setAciklama("");
@@ -145,10 +182,25 @@ function IslemInner() {
         <div className="mt-10 rounded-2xl bg-white p-6 text-center shadow-sm">
           <div className="text-4xl">✅</div>
           <p className="mt-3 font-bold">{tamam}</p>
+          {borcKapandi && (
+            <p className="mt-2 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-800">
+              Borç tamamen kapandı. Müşterinin kalmasına gerek yoksa
+              silebilirsiniz.
+            </p>
+          )}
           <div className="mt-6 flex flex-col gap-2">
+            {borcKapandi && (
+              <button
+                onClick={musteriSil}
+                className="rounded-xl bg-red-600 py-3 font-bold text-white"
+              >
+                Müşteriyi Sil (borç kapandı)
+              </button>
+            )}
             <button
               onClick={() => {
                 setTamam(null);
+                setBorcKapandi(false);
                 setTutar("");
                 setAciklama("");
                 setCariId("");

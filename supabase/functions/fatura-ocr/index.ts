@@ -33,9 +33,11 @@ Deno.serve(async (req: Request) => {
     const { data: userData, error: userErr } = await admin.auth.getUser(token);
     if (userErr || !userData.user) return json({ error: "unauthorized" }, 401);
 
-    const { path } = await req.json();
+    const { path, mod } = await req.json();
     if (typeof path !== "string" || path.includes(".."))
       return json({ error: "bad_request" }, 400);
+    // mod: "fatura" (toptancı faturası, varsayılan) | "veresiye" (müşteri fişi + el yazısı)
+    const veresiye = mod === "veresiye";
 
     const { data: file, error: dlErr } = await admin.storage
       .from("belgeler")
@@ -59,8 +61,8 @@ Deno.serve(async (req: Request) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini",
-        temperature: 0,
+        model: "gpt-5.6-luna",
+        reasoning_effort: "low",
         response_format: { type: "json_object" },
         messages: [
           {
@@ -74,12 +76,19 @@ Deno.serve(async (req: Request) => {
             content: [
               {
                 type: "text",
-                text:
-                  "Bu fiş/fatura görselinden bilgileri çıkar ve YALNIZCA şu JSON ile yanıt ver: " +
-                  '{"tedarikci": string|null, "tarih": "YYYY-MM-DD"|null, "toplam": number|null, ' +
-                  '"kdv": number|null, "fatura_no": string|null}. ' +
-                  "tedarikci: satıcı firmanın adı. toplam: genel toplam tutar. " +
-                  "Tutarları sayı olarak ver (örn. 1234.56 — binlik ayracı yok, ondalık nokta).",
+                text: veresiye
+                  ? "Bu, üzerine el yazısıyla not düşülmüş bir yazarkasa fişi. " +
+                    "Bilgileri çıkar ve YALNIZCA şu JSON ile yanıt ver: " +
+                    '{"el_yazisi": string|null, "tarih": "YYYY-MM-DD"|null, "toplam": number|null}. ' +
+                    "el_yazisi: fişin üzerine EL YAZISIYLA yazılmış metin (genelde bir adres veya kişi adı) — " +
+                    "yalnızca el yazısını ver, fişin basılı/matbu metnini bu alana yazma; el yazısı yoksa null. " +
+                    "tarih ve toplam: fişin basılı kısmındaki tarih ve genel toplam tutar. " +
+                    "Tutarları sayı olarak ver (örn. 1234.56 — binlik ayracı yok, ondalık nokta)."
+                  : "Bu fiş/fatura görselinden bilgileri çıkar ve YALNIZCA şu JSON ile yanıt ver: " +
+                    '{"tedarikci": string|null, "tarih": "YYYY-MM-DD"|null, "toplam": number|null, ' +
+                    '"kdv": number|null, "fatura_no": string|null}. ' +
+                    "tedarikci: satıcı firmanın adı. toplam: genel toplam tutar. " +
+                    "Tutarları sayı olarak ver (örn. 1234.56 — binlik ayracı yok, ondalık nokta).",
               },
               {
                 type: "image_url",

@@ -4,8 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import Shell from "@/components/Shell";
+import BelgeGoruntuleyici from "@/components/BelgeGoruntuleyici";
 import { supabase } from "@/lib/supabase";
 import {
+  buyukHarf,
   girisBaslik,
   girisTuru,
   odemeBaslik,
@@ -212,7 +214,9 @@ export default function CariDetay() {
           <div className="mt-3 space-y-2 border-t border-stone-100 pt-3">
             <input
               value={form.unvan}
-              onChange={(e) => setForm({ ...form, unvan: e.target.value })}
+              onChange={(e) =>
+                setForm({ ...form, unvan: buyukHarf(e.target.value) })
+              }
               className="w-full rounded-lg border border-stone-200 px-3 py-2 text-sm"
               placeholder="Ünvan"
             />
@@ -224,7 +228,9 @@ export default function CariDetay() {
             />
             <input
               value={form.adres}
-              onChange={(e) => setForm({ ...form, adres: e.target.value })}
+              onChange={(e) =>
+                setForm({ ...form, adres: buyukHarf(e.target.value) })
+              }
               className="w-full rounded-lg border border-stone-200 px-3 py-2 text-sm"
               placeholder="Adres"
             />
@@ -330,35 +336,10 @@ export default function CariDetay() {
       </div>
 
       {belgeGoster && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-black/90">
-          <div className="flex items-center justify-between gap-2 p-3">
-            <a
-              href={belgeGoster}
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-lg bg-white/15 px-3 py-2 text-sm font-bold text-white"
-            >
-              ⬇️ İndir
-            </a>
-            <button
-              onClick={() => setBelgeGoster(null)}
-              className="rounded-lg bg-white px-4 py-2 text-sm font-bold text-stone-800"
-            >
-              ✕ Kapat
-            </button>
-          </div>
-          <div
-            className="flex-1 overflow-auto p-2"
-            onClick={() => setBelgeGoster(null)}
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={belgeGoster}
-              alt="Taranan belge"
-              className="mx-auto max-w-full rounded-lg"
-            />
-          </div>
-        </div>
+        <BelgeGoruntuleyici
+          url={belgeGoster}
+          onKapat={() => setBelgeGoster(null)}
+        />
       )}
     </Shell>
   );

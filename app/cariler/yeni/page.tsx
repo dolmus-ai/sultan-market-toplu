@@ -4,6 +4,7 @@ import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Shell from "@/components/Shell";
 import { supabase } from "@/lib/supabase";
+import { buyukHarf } from "@/lib/format";
 import type { CariTip } from "@/lib/types";
 
 function YeniCariInner() {
@@ -63,7 +64,7 @@ function YeniCariInner() {
           required
           placeholder={tip === "alici" ? "Müşteri adı" : "Toptancı adı"}
           value={unvan}
-          onChange={(e) => setUnvan(e.target.value)}
+          onChange={(e) => setUnvan(buyukHarf(e.target.value))}
           className="w-full rounded-xl border border-stone-200 bg-white px-4 py-3.5 text-base outline-none focus:border-green-600"
         />
         <input
@@ -76,7 +77,7 @@ function YeniCariInner() {
         <textarea
           placeholder="Adres (isteğe bağlı)"
           value={adres}
-          onChange={(e) => setAdres(e.target.value)}
+          onChange={(e) => setAdres(buyukHarf(e.target.value))}
           rows={2}
           className="w-full rounded-xl border border-stone-200 bg-white px-4 py-3.5 text-base outline-none focus:border-green-600"
         />

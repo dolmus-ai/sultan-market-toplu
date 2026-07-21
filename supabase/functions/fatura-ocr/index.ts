@@ -89,8 +89,11 @@ Deno.serve(async (req: Request) => {
                     '"kdv": number|null, "fatura_no": string|null, ' +
                     '"markalar": [{"marka": string, "tutar": number}]|null}. ' +
                     "tedarikci: satıcı firmanın adı. toplam: genel toplam tutar. " +
-                    "markalar: ürün kalemlerine bakarak ürünlerin ait olduğu markayı/bayiliği tespit et " +
-                    "(örn. Tadım, Ülker, Eti, Coca-Cola; sigara ürünleri için 'Sigara'). " +
+                    "markalar: ürün kalemlerine bakarak her ürünün markasını tespit et " +
+                    "(örn. Tadım, Ülker, Eti, Lay's, Pepsi; sigara ürünleri için 'Sigara'). " +
+                    "Her markayı ürünün üzerinde yazan adıyla AYRI eleman olarak ver; " +
+                    "markaları kendi başına birleştirip gruplama (örn. Lay's ile Doritos'u 'Cips' diye toplama) — " +
+                    "gruplamayı uygulama kendi eşleme tablosuyla yapar. " +
                     "Ürünlerin tamamı tek markaya aitse tek elemanlı liste ver ve tutar alanına genel toplamı yaz. " +
                     "Fişte birden fazla markanın ürünü varsa her marka için ayrı eleman ve o markanın ara toplamını ver " +
                     "(ara toplamların toplamı genel toplama eşit olmalı). " +

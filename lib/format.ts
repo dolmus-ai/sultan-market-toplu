@@ -54,6 +54,9 @@ export const girisBaslik = (tip: CariTip) =>
 export const odemeBaslik = (tip: CariTip) =>
   tip === "satici" ? "Yapılan Ödeme" : "Gelen Ödeme";
 
+// Türkçe kurallarına göre büyük harf (i → İ); tüm kayıtlar büyük harfle tutulur
+export const buyukHarf = (s: string) => s.toLocaleUpperCase("tr");
+
 export const parseTutar = (s: string) => {
   const n = parseFloat(s.replace(/\./g, "").replace(",", "."));
   return isNaN(n) ? NaN : Math.round(n * 100) / 100;

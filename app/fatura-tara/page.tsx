@@ -17,7 +17,14 @@ type OcrSonuc = {
   toplam?: number | null;
   kdv?: number | null;
   fatura_no?: string | null;
+  markalar?: { marka?: string | null; tutar?: number | null }[] | null;
 };
+
+// Bir fiş birden fazla kaleme (markaya/cariye) bölünebilir; her kalem
+// kendi carisine ayrı hareket olarak yazılır.
+type Kalem = { cariId: string; yeniCariAd: string; tutar: string };
+
+const bosKalem = (): Kalem => ({ cariId: "", yeniCariAd: "", tutar: "" });
 
 const MOD_META: Record<
   Mod,
@@ -54,18 +61,24 @@ export default function FaturaTaraPage() {
   const [onizleme, setOnizleme] = useState("");
   const [cariListe, setCariListe] = useState<Cari[]>([]);
 
-  const [cariId, setCariId] = useState("");
-  const [yeniCariAd, setYeniCariAd] = useState("");
+  const [kalemler, setKalemler] = useState<Kalem[]>([bosKalem()]);
   const [tarih, setTarih] = useState(bugun());
-  const [tutar, setTutar] = useState("");
   const [faturaNo, setFaturaNo] = useState("");
   const [aciklama, setAciklama] = useState("");
   const [kaydediliyor, setKaydediliyor] = useState(false);
-  const [sonHareketId, setSonHareketId] = useState<string | null>(null);
+  const [sonHareketIds, setSonHareketIds] = useState<string[]>([]);
   const [sonCariId, setSonCariId] = useState<string | null>(null);
   const [tamamMesaj, setTamamMesaj] = useState("");
 
   const meta = MOD_META[mod];
+
+  const kalemGuncelle = (i: number, degisiklik: Partial<Kalem>) =>
+    setKalemler((ks) =>
+      ks.map((k, j) => (j === i ? { ...k, ...degisiklik } : k))
+    );
+
+  const kalemSil = (i: number) =>
+    setKalemler((ks) => (ks.length > 1 ? ks.filter((_, j) => j !== i) : ks));
 
   // Depolama maliyetini düşürmek için görseli yüklemeden önce telefonda küçült
   // (uzun kenar 1600px, %72 JPEG — fiş yazısı bu boyutta net okunur)
@@ -123,59 +136,90 @@ export default function FaturaTaraPage() {
     }
     const s: OcrSonuc = ocr.data?.sonuc ?? {};
     if (s.tarih && /^\d{4}-\d{2}-\d{2}$/.test(s.tarih)) setTarih(s.tarih);
-    if (typeof s.toplam === "number" && s.toplam > 0)
-      setTutar(String(s.toplam).replace(".", ","));
     if (mod === "fatura" && s.fatura_no) setFaturaNo(String(s.fatura_no));
 
-    // Fatura modunda basılı tedarikçi adı, veresiyede fişteki el yazısı
-    // (genelde müşterinin adresi, bazen adı) cari adı olarak kullanılır.
-    const okunanAd = mod === "fatura" ? s.tedarikci : s.el_yazisi;
-    if (okunanAd) {
-      const ad = okunanAd.toLocaleLowerCase("tr");
-      const eslesen = liste.find(
-        (c) =>
-          c.unvan.toLocaleLowerCase("tr").includes(ad) ||
-          ad.includes(c.unvan.toLocaleLowerCase("tr"))
+    const tutarStr = (n: number | null | undefined) =>
+      typeof n === "number" && n > 0 ? String(n).replace(".", ",") : "";
+
+    // Ad üzerinden gevşek cari eşleştirme (iki yönlü "içeriyor" kontrolü)
+    const esle = (ad: string) => {
+      const a = ad.toLocaleLowerCase("tr");
+      return liste.find((c) => {
+        const u = c.unvan.toLocaleLowerCase("tr");
+        return u.includes(a) || a.includes(u);
+      });
+    };
+
+    const markalar =
+      mod === "fatura"
+        ? (s.markalar ?? []).filter((m) => m?.marka && String(m.marka).trim())
+        : [];
+
+    if (markalar.length > 0) {
+      // Aynı firmanın farklı bayilikleri ayrı cari tutulur: fişteki ürünlerden
+      // tespit edilen her marka için "Firma - Marka" carisi aranır/önerilir.
+      const firma = (s.tedarikci ?? "").trim();
+      setKalemler(
+        markalar.map((m, i) => {
+          const marka = String(m.marka).trim();
+          const oneriAd = firma ? `${firma} - ${marka}` : marka;
+          const markaL = marka.toLocaleLowerCase("tr");
+          const firmaL = firma.toLocaleLowerCase("tr");
+          // Yalnızca marka adı geçen cariler aday olur — sade firma carisiyle
+          // eşleşip bayilikleri tek cariye karıştırmamak için.
+          const adaylar = liste.filter((c) =>
+            c.unvan.toLocaleLowerCase("tr").includes(markaL)
+          );
+          const eslesen =
+            adaylar.find(
+              (c) =>
+                firmaL &&
+                c.unvan.toLocaleLowerCase("tr").includes(firmaL.split(" ")[0])
+            ) ?? adaylar[0];
+          return {
+            cariId: eslesen?.id ?? "",
+            yeniCariAd: eslesen ? "" : oneriAd,
+            tutar: tutarStr(
+              m.tutar ?? (markalar.length === 1 ? s.toplam : null)
+            ),
+          };
+        })
       );
-      if (eslesen) {
-        setCariId(eslesen.id);
-      } else {
-        setCariId("");
-        setYeniCariAd(okunanAd);
-      }
+    } else {
+      // Marka tespit edilemedi: eski davranış — tek kalem, firma/el yazısı adı
+      const okunanAd = (mod === "fatura" ? s.tedarikci : s.el_yazisi) ?? "";
+      const eslesen = okunanAd ? esle(okunanAd) : undefined;
+      setKalemler([
+        {
+          cariId: eslesen?.id ?? "",
+          yeniCariAd: eslesen ? "" : okunanAd,
+          tutar: tutarStr(s.toplam),
+        },
+      ]);
     }
     setAsama("onay");
   };
 
   const kaydet = async () => {
     setHata("");
-    const t = parseTutar(tutar);
-    if (isNaN(t) || t <= 0) {
-      setHata("Geçerli bir tutar girin.");
-      return;
-    }
-    if (!cariId && !yeniCariAd.trim()) {
-      setHata(
-        `${meta.cariAd} seçin veya yeni ${meta.cariAd.toLocaleLowerCase("tr")} adı girin.`
-      );
-      return;
-    }
-    setKaydediliyor(true);
-
-    let hedefCari = cariId;
-    if (!hedefCari) {
-      const { data: yeni, error: cErr } = await supabase
-        .from("cariler")
-        .insert({ tip: meta.cariTip, unvan: yeniCariAd.trim() })
-        .select("id")
-        .single();
-      if (cErr || !yeni) {
-        setHata(`${meta.cariAd} oluşturulamadı.`);
-        setKaydediliyor(false);
+    for (const k of kalemler) {
+      const t = parseTutar(k.tutar);
+      if (isNaN(t) || t <= 0) {
+        setHata(
+          kalemler.length > 1
+            ? "Her kalem için geçerli bir tutar girin."
+            : "Geçerli bir tutar girin."
+        );
         return;
       }
-      hedefCari = yeni.id;
+      if (!k.cariId && !k.yeniCariAd.trim()) {
+        setHata(
+          `${meta.cariAd} seçin veya yeni ${meta.cariAd.toLocaleLowerCase("tr")} adı girin.`
+        );
+        return;
+      }
     }
+    setKaydediliyor(true);
 
     const notlar = [
       mod === "fatura" && faturaNo.trim() ? `Fatura No: ${faturaNo.trim()}` : "",
@@ -184,33 +228,69 @@ export default function FaturaTaraPage() {
       .filter(Boolean)
       .join(" · ");
 
-    const { data: h, error: hErr } = await supabase
-      .from("hareketler")
-      .insert({
-        cari_id: hedefCari,
-        tur: mod,
-        tutar: t,
-        tarih,
-        aciklama: notlar || null,
-        belge_yolu: belgeYolu || null,
-      })
-      .select("id")
-      .single();
-    setKaydediliyor(false);
-    if (hErr || !h) {
-      setHata("Kayıt yapılamadı. Tekrar deneyin.");
-      return;
+    const ids: string[] = [];
+    let ilkCari: string | null = null;
+    let toplamT = 0;
+    for (const k of kalemler) {
+      let hedefCari = k.cariId;
+      if (!hedefCari) {
+        const { data: yeni, error: cErr } = await supabase
+          .from("cariler")
+          .insert({ tip: meta.cariTip, unvan: k.yeniCariAd.trim() })
+          .select("id")
+          .single();
+        if (cErr || !yeni) {
+          // Yarım kayıt bırakmamak için o ana dek yazılan hareketleri geri al
+          if (ids.length) {
+            await supabase.from("hareketler").delete().in("id", ids);
+          }
+          setHata(`${meta.cariAd} oluşturulamadı.`);
+          setKaydediliyor(false);
+          return;
+        }
+        hedefCari = yeni.id;
+      }
+
+      const t = parseTutar(k.tutar);
+      const { data: h, error: hErr } = await supabase
+        .from("hareketler")
+        .insert({
+          cari_id: hedefCari,
+          tur: mod,
+          tutar: t,
+          tarih,
+          aciklama: notlar || null,
+          belge_yolu: belgeYolu || null,
+        })
+        .select("id")
+        .single();
+      if (hErr || !h) {
+        if (ids.length) {
+          await supabase.from("hareketler").delete().in("id", ids);
+        }
+        setHata("Kayıt yapılamadı. Tekrar deneyin.");
+        setKaydediliyor(false);
+        return;
+      }
+      ids.push(h.id);
+      toplamT += t;
+      if (!ilkCari) ilkCari = hedefCari;
     }
-    setSonHareketId(h.id);
-    setSonCariId(hedefCari);
-    setTamamMesaj(`${meta.kayitAd} kaydedildi — ${para(t)}`);
+    setKaydediliyor(false);
+    setSonHareketIds(ids);
+    setSonCariId(ilkCari);
+    setTamamMesaj(
+      kalemler.length > 1
+        ? `${meta.kayitAd} kaydedildi — ${para(toplamT)} (${kalemler.length} cariye bölündü)`
+        : `${meta.kayitAd} kaydedildi — ${para(toplamT)}`
+    );
     setAsama("tamam");
   };
 
   const geriAl = async () => {
-    if (!sonHareketId) return;
-    await supabase.from("hareketler").delete().eq("id", sonHareketId);
-    setSonHareketId(null);
+    if (!sonHareketIds.length) return;
+    await supabase.from("hareketler").delete().in("id", sonHareketIds);
+    setSonHareketIds([]);
     sifirla("Kayıt geri alındı. Görsel arşivde durmaya devam ediyor.");
   };
 
@@ -220,10 +300,8 @@ export default function FaturaTaraPage() {
     setBelgeYolu("");
     setOnizleme("");
     setCariListe([]);
-    setCariId("");
-    setYeniCariAd("");
+    setKalemler([bosKalem()]);
     setTarih(bugun());
-    setTutar("");
     setFaturaNo("");
     setAciklama("");
     setTamamMesaj("");
@@ -282,7 +360,7 @@ export default function FaturaTaraPage() {
           <div className="mt-5 text-5xl">📷</div>
           <p className="mt-3 text-sm text-stone-500">
             {mod === "fatura"
-              ? "Fatura veya fişin fotoğrafını çekin; tedarikçi, tarih ve tutarı otomatik okuyalım. Kaydetmeden önce her alanı düzeltebilirsiniz."
+              ? "Fatura veya fişin fotoğrafını çekin; tedarikçi, marka ve tutarı otomatik okuyalım. Aynı firmanın farklı bayilikleri (örn. çekirdek, sigara, sucuk) markaya göre ayrı cariye yazılır."
               : "Üzerine müşterinin adresi (veya adı) el yazısıyla yazılmış fişin fotoğrafını çekin; el yazısını, tarihi ve tutarı otomatik okuyalım. El yazısı müşteri adı olarak kaydedilir."}
           </p>
           {hata && (
@@ -338,7 +416,9 @@ export default function FaturaTaraPage() {
             />
           )}
           <p className="mt-2 text-center text-xs text-stone-400">
-            Bilgileri kontrol edin, gerekirse düzeltin.
+            {kalemler.length > 1
+              ? "Fiş, markalara göre ayrı carilere bölündü. Kontrol edin, gerekirse düzeltin."
+              : "Bilgileri kontrol edin, gerekirse düzeltin."}
           </p>
           {hata && (
             <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">
@@ -346,46 +426,95 @@ export default function FaturaTaraPage() {
             </p>
           )}
 
-          <label className="mt-3 block text-xs font-bold text-stone-400">
-            {meta.cariAd}
-          </label>
-          <select
-            value={cariId}
-            onChange={(e) => setCariId(e.target.value)}
-            className="mt-1 w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-sm"
-          >
-            <option value="">
-              ➕ Yeni {meta.cariAd.toLocaleLowerCase("tr")} ekle…
-            </option>
-            {cariListe.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.unvan}
-              </option>
-            ))}
-          </select>
-          {!cariId && (
-            <input
-              value={yeniCariAd}
-              onChange={(e) => setYeniCariAd(e.target.value)}
-              placeholder={
-                mod === "fatura"
-                  ? "Yeni toptancı adı"
-                  : "Müşteri adı (fişteki el yazısı)"
+          {kalemler.map((k, i) => (
+            <div
+              key={i}
+              className={
+                kalemler.length > 1
+                  ? "mt-3 rounded-xl border border-stone-200 p-3"
+                  : ""
               }
-              className="mt-2 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm"
-            />
-          )}
+            >
+              {kalemler.length > 1 && (
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-stone-400">
+                    {i + 1}. kalem
+                  </span>
+                  <button
+                    onClick={() => kalemSil(i)}
+                    className="text-xs font-bold text-red-500"
+                  >
+                    Kaldır
+                  </button>
+                </div>
+              )}
 
-          <label className="mt-3 block text-xs font-bold text-stone-400">
-            Toplam Tutar
-          </label>
-          <input
-            inputMode="decimal"
-            value={tutar}
-            onChange={(e) => setTutar(e.target.value)}
-            placeholder="0,00"
-            className="mt-1 w-full rounded-xl border-2 border-green-600 px-4 py-3 text-center text-2xl font-bold outline-none"
-          />
+              <label className="mt-3 block text-xs font-bold text-stone-400">
+                {meta.cariAd}
+              </label>
+              <select
+                value={k.cariId}
+                onChange={(e) => kalemGuncelle(i, { cariId: e.target.value })}
+                className="mt-1 w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-sm"
+              >
+                <option value="">
+                  ➕ Yeni {meta.cariAd.toLocaleLowerCase("tr")} ekle…
+                </option>
+                {cariListe.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.unvan}
+                  </option>
+                ))}
+              </select>
+              {!k.cariId && (
+                <input
+                  value={k.yeniCariAd}
+                  onChange={(e) =>
+                    kalemGuncelle(i, { yeniCariAd: e.target.value })
+                  }
+                  placeholder={
+                    mod === "fatura"
+                      ? "Yeni toptancı adı (Firma - Marka)"
+                      : "Müşteri adı (fişteki el yazısı)"
+                  }
+                  className="mt-2 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm"
+                />
+              )}
+
+              <label className="mt-3 block text-xs font-bold text-stone-400">
+                {kalemler.length > 1 ? "Tutar" : "Toplam Tutar"}
+              </label>
+              <input
+                inputMode="decimal"
+                value={k.tutar}
+                onChange={(e) => kalemGuncelle(i, { tutar: e.target.value })}
+                placeholder="0,00"
+                className="mt-1 w-full rounded-xl border-2 border-green-600 px-4 py-3 text-center text-2xl font-bold outline-none"
+              />
+            </div>
+          ))}
+
+          {mod === "fatura" && (
+            <div className="mt-2 flex items-center justify-between">
+              <button
+                onClick={() => setKalemler((ks) => [...ks, bosKalem()])}
+                className="text-sm font-bold text-green-700"
+              >
+                ＋ Kalem ekle (fişi böl)
+              </button>
+              {kalemler.length > 1 && (
+                <span className="text-sm font-bold text-stone-600">
+                  Toplam:{" "}
+                  {para(
+                    kalemler.reduce(
+                      (s, k) => s + (parseTutar(k.tutar) || 0),
+                      0
+                    )
+                  )}
+                </span>
+              )}
+            </div>
+          )}
 
           <div className="mt-3 flex gap-2">
             <div className="flex-1">

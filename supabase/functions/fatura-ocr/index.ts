@@ -86,8 +86,15 @@ Deno.serve(async (req: Request) => {
                     "Tutarları sayı olarak ver (örn. 1234.56 — binlik ayracı yok, ondalık nokta)."
                   : "Bu fiş/fatura görselinden bilgileri çıkar ve YALNIZCA şu JSON ile yanıt ver: " +
                     '{"tedarikci": string|null, "tarih": "YYYY-MM-DD"|null, "toplam": number|null, ' +
-                    '"kdv": number|null, "fatura_no": string|null}. ' +
+                    '"kdv": number|null, "fatura_no": string|null, ' +
+                    '"markalar": [{"marka": string, "tutar": number}]|null}. ' +
                     "tedarikci: satıcı firmanın adı. toplam: genel toplam tutar. " +
+                    "markalar: ürün kalemlerine bakarak ürünlerin ait olduğu markayı/bayiliği tespit et " +
+                    "(örn. Tadım, Ülker, Eti, Coca-Cola; sigara ürünleri için 'Sigara'). " +
+                    "Ürünlerin tamamı tek markaya aitse tek elemanlı liste ver ve tutar alanına genel toplamı yaz. " +
+                    "Fişte birden fazla markanın ürünü varsa her marka için ayrı eleman ve o markanın ara toplamını ver " +
+                    "(ara toplamların toplamı genel toplama eşit olmalı). " +
+                    "Ürünlerden net bir marka çıkaramıyorsan markalar alanına null yaz, tahmin uydurma. " +
                     "Tutarları sayı olarak ver (örn. 1234.56 — binlik ayracı yok, ondalık nokta).",
               },
               {

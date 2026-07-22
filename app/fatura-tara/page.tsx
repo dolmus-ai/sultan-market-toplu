@@ -32,6 +32,15 @@ type Kalem = {
 
 const bosKalem = (): Kalem => ({ cariId: "", yeniCariAd: "", tutar: "" });
 
+// Marka eşleme anahtarı: Türkçe büyük harf + İ→I ve noktalama sadeleştirmesi.
+// OCR aynı markayı "Doritos"/"DORITOS"/"DORİTOS" ya da "Lay's"/"LAYS" gibi
+// farklı yazsa da anahtar tek olur.
+const markaAnahtar = (s: string) =>
+  buyukHarf(s.trim())
+    .replace(/İ/g, "I")
+    .replace(/['’´`.\-]/g, "")
+    .replace(/\s+/g, " ");
+
 const MOD_META: Record<
   Mod,
   {
@@ -137,10 +146,10 @@ export default function FaturaTaraPage() {
     ]);
     const liste = (cs as Cari[]) ?? [];
     setCariListe(liste);
-    // Öğrenilmiş marka→cari eşlemeleri (markalar DB'de büyük harfle tutulur)
+    // Öğrenilmiş marka→cari eşlemeleri (anahtarlar sadeleştirilmiş büyük harf)
     const esMap = new Map(
       ((es as { marka: string; cari_id: string }[] | null) ?? []).map((e) => [
-        e.marka,
+        markaAnahtar(e.marka),
         e.cari_id,
       ])
     );
@@ -174,7 +183,7 @@ export default function FaturaTaraPage() {
       // eşlemeler uygulanır: aynı cariye eşlenen markalar tek kaleme toplanır
       // (örn. LAYS + DORITOS → "MB GIDA - CİPS", NAMET → "... - İÇİM").
       const firma = (s.tedarikci ?? "").trim();
-      const firmaL = firma.toLocaleLowerCase("tr");
+      const firmaA = markaAnahtar(firma);
 
       const gruplar = new Map<
         string,
@@ -182,7 +191,7 @@ export default function FaturaTaraPage() {
       >();
       const yeniler: { marka: string; tutar: number | null }[] = [];
       for (const m of markalar) {
-        const marka = buyukHarf(String(m.marka).trim());
+        const marka = markaAnahtar(String(m.marka));
         const t =
           typeof m.tutar === "number" && m.tutar > 0
             ? m.tutar
@@ -219,17 +228,16 @@ export default function FaturaTaraPage() {
         // Eşlemesi olmayan marka: ada göre cari önerilir; kullanıcının onay
         // ekranındaki seçimi kayıt sırasında eşleme olarak öğrenilir.
         const oneriAd = buyukHarf(firma ? `${firma} - ${y.marka}` : y.marka);
-        const markaL = y.marka.toLocaleLowerCase("tr");
         // Yalnızca marka adı geçen cariler aday olur — sade firma carisiyle
-        // eşleşip bayilikleri tek cariye karıştırmamak için.
+        // eşleşip bayilikleri tek cariye karıştırmamak için. Karşılaştırma
+        // I/İ farkına takılmasın diye iki taraf da anahtar formuna çevrilir.
         const adaylar = liste.filter((c) =>
-          c.unvan.toLocaleLowerCase("tr").includes(markaL)
+          markaAnahtar(c.unvan).includes(y.marka)
         );
         const eslesen =
           adaylar.find(
             (c) =>
-              firmaL &&
-              c.unvan.toLocaleLowerCase("tr").includes(firmaL.split(" ")[0])
+              firmaA && markaAnahtar(c.unvan).includes(firmaA.split(" ")[0])
           ) ?? adaylar[0];
         sonucKalemler.push({
           cariId: eslesen?.id ?? "",

@@ -3,8 +3,10 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Shell from "@/components/Shell";
+import CariSecici from "@/components/CariSecici";
+import { BuyukHarfGirdi, TutarGirdi } from "@/components/Girdi";
 import { supabase } from "@/lib/supabase";
-import { bugun, buyukHarf, para, parseTutar } from "@/lib/format";
+import { bugun, buyukHarf, para, parseTutar, tutarYaz } from "@/lib/format";
 import type { Cari } from "@/lib/types";
 
 // Tarama modu: toptancı faturası mı, müşteri veresiye fişi mi?
@@ -17,29 +19,28 @@ type OcrSonuc = {
   toplam?: number | null;
   kdv?: number | null;
   fatura_no?: string | null;
-  markalar?: { marka?: string | null; tutar?: number | null }[] | null;
+  // OCR marka listesi: eski biçim {marka, tutar}, sade biçim "MARKA"
+  markalar?: ({ marka?: string | null; tutar?: number | null } | string)[] | null;
 };
 
-// Bir fiş birden fazla kaleme (markaya/cariye) bölünebilir; her kalem
-// kendi carisine ayrı hareket olarak yazılır. markalar: bu kalemi besleyen
-// OCR markaları — kayıt sırasında seçilen cariye eşlenerek öğrenilir.
+// Fatura tek cariye (firmaya) yazılır. Aynı firmanın farklı bayiliklerini ayrı
+// takip etmek isteyen kullanıcı fişi elle kaleme bölebilir; uygulama markaya
+// göre kendiliğinden bölme yapmaz.
 type Kalem = {
   cariId: string;
   yeniCariAd: string;
   tutar: string;
-  markalar?: string[];
 };
 
 const bosKalem = (): Kalem => ({ cariId: "", yeniCariAd: "", tutar: "" });
 
-// Marka eşleme anahtarı: Türkçe büyük harf + İ→I ve noktalama sadeleştirmesi.
-// OCR aynı markayı "Doritos"/"DORITOS"/"DORİTOS" ya da "Lay's"/"LAYS" gibi
-// farklı yazsa da anahtar tek olur.
-const markaAnahtar = (s: string) =>
-  buyukHarf(s.trim())
-    .replace(/İ/g, "I")
-    .replace(/['’´`.\-]/g, "")
-    .replace(/\s+/g, " ");
+// OCR'ın döndürdüğü marka listesini "İÇİM, NAMET" gibi tek satıra çevirir
+const markaListesi = (ms: OcrSonuc["markalar"]) =>
+  (ms ?? [])
+    .map((m) => (typeof m === "string" ? m : (m?.marka ?? "")))
+    .map((m) => String(m).trim())
+    .filter(Boolean)
+    .join(", ");
 
 const MOD_META: Record<
   Mod,
@@ -79,6 +80,8 @@ export default function FaturaTaraPage() {
   const [kalemler, setKalemler] = useState<Kalem[]>([bosKalem()]);
   const [tarih, setTarih] = useState(bugun());
   const [faturaNo, setFaturaNo] = useState("");
+  // Fişte okunan markalar — sadece not; istenirse elle düzeltilir
+  const [markaNotu, setMarkaNotu] = useState("");
   const [aciklama, setAciklama] = useState("");
   const [kaydediliyor, setKaydediliyor] = useState(false);
   const [sonHareketIds, setSonHareketIds] = useState<string[]>([]);
@@ -134,25 +137,17 @@ export default function FaturaTaraPage() {
     }
     setBelgeYolu(yol);
 
-    const [{ data: cs }, { data: es }, ocr] = await Promise.all([
+    const [{ data: cs }, ocr] = await Promise.all([
       supabase
         .from("cariler")
         .select("*")
         .eq("tip", meta.cariTip)
         .eq("aktif", true)
         .order("unvan"),
-      supabase.from("marka_esleme").select("marka, cari_id"),
       supabase.functions.invoke("fatura-ocr", { body: { path: yol, mod } }),
     ]);
     const liste = (cs as Cari[]) ?? [];
     setCariListe(liste);
-    // Öğrenilmiş marka→cari eşlemeleri (anahtarlar sadeleştirilmiş büyük harf)
-    const esMap = new Map(
-      ((es as { marka: string; cari_id: string }[] | null) ?? []).map((e) => [
-        markaAnahtar(e.marka),
-        e.cari_id,
-      ])
-    );
 
     if (ocr.error || ocr.data?.error) {
       setHata("Görsel okunamadı — bilgileri elle tamamlayabilirsiniz.");
@@ -162,7 +157,7 @@ export default function FaturaTaraPage() {
     if (mod === "fatura" && s.fatura_no) setFaturaNo(String(s.fatura_no));
 
     const tutarStr = (n: number | null | undefined) =>
-      typeof n === "number" && n > 0 ? String(n).replace(".", ",") : "";
+      typeof n === "number" && n > 0 ? tutarYaz(n) : "";
 
     // Ad üzerinden gevşek cari eşleştirme (iki yönlü "içeriyor" kontrolü)
     const esle = (ad: string) => {
@@ -173,92 +168,19 @@ export default function FaturaTaraPage() {
       });
     };
 
-    const markalar =
-      mod === "fatura"
-        ? (s.markalar ?? []).filter((m) => m?.marka && String(m.marka).trim())
-        : [];
+    // Markalar yalnızca not olarak taşınır; fiş markaya göre bölünmez.
+    if (mod === "fatura") setMarkaNotu(buyukHarf(markaListesi(s.markalar)));
 
-    if (markalar.length > 0) {
-      // Aynı firmanın farklı bayilikleri ayrı cari tutulur. Önce öğrenilmiş
-      // eşlemeler uygulanır: aynı cariye eşlenen markalar tek kaleme toplanır
-      // (örn. LAYS + DORITOS → "MB GIDA - CİPS", NAMET → "... - İÇİM").
-      const firma = (s.tedarikci ?? "").trim();
-      const firmaA = markaAnahtar(firma);
-
-      const gruplar = new Map<
-        string,
-        { markalar: string[]; toplam: number; eksik: boolean }
-      >();
-      const yeniler: { marka: string; tutar: number | null }[] = [];
-      for (const m of markalar) {
-        const marka = markaAnahtar(String(m.marka));
-        const t =
-          typeof m.tutar === "number" && m.tutar > 0
-            ? m.tutar
-            : markalar.length === 1 && typeof s.toplam === "number"
-              ? s.toplam
-              : null;
-        const cid = esMap.get(marka);
-        if (cid && liste.some((c) => c.id === cid)) {
-          const g = gruplar.get(cid) ?? {
-            markalar: [],
-            toplam: 0,
-            eksik: false,
-          };
-          g.markalar.push(marka);
-          if (t == null) g.eksik = true;
-          else g.toplam += t;
-          gruplar.set(cid, g);
-        } else {
-          yeniler.push({ marka, tutar: t });
-        }
-      }
-
-      const sonucKalemler: Kalem[] = [];
-      for (const [cid, g] of gruplar) {
-        sonucKalemler.push({
-          cariId: cid,
-          yeniCariAd: "",
-          markalar: g.markalar,
-          // Bir markanın ara toplamı okunamadıysa toplam güvenilmez — boş kalır
-          tutar: g.eksik ? "" : tutarStr(g.toplam),
-        });
-      }
-      for (const y of yeniler) {
-        // Eşlemesi olmayan marka: ada göre cari önerilir; kullanıcının onay
-        // ekranındaki seçimi kayıt sırasında eşleme olarak öğrenilir.
-        const oneriAd = buyukHarf(firma ? `${firma} - ${y.marka}` : y.marka);
-        // Yalnızca marka adı geçen cariler aday olur — sade firma carisiyle
-        // eşleşip bayilikleri tek cariye karıştırmamak için. Karşılaştırma
-        // I/İ farkına takılmasın diye iki taraf da anahtar formuna çevrilir.
-        const adaylar = liste.filter((c) =>
-          markaAnahtar(c.unvan).includes(y.marka)
-        );
-        const eslesen =
-          adaylar.find(
-            (c) =>
-              firmaA && markaAnahtar(c.unvan).includes(firmaA.split(" ")[0])
-          ) ?? adaylar[0];
-        sonucKalemler.push({
-          cariId: eslesen?.id ?? "",
-          yeniCariAd: eslesen ? "" : oneriAd,
-          markalar: [y.marka],
-          tutar: tutarStr(y.tutar),
-        });
-      }
-      setKalemler(sonucKalemler);
-    } else {
-      // Marka tespit edilemedi: eski davranış — tek kalem, firma/el yazısı adı
-      const okunanAd = (mod === "fatura" ? s.tedarikci : s.el_yazisi) ?? "";
-      const eslesen = okunanAd ? esle(okunanAd) : undefined;
-      setKalemler([
-        {
-          cariId: eslesen?.id ?? "",
-          yeniCariAd: eslesen ? "" : buyukHarf(okunanAd),
-          tutar: tutarStr(s.toplam),
-        },
-      ]);
-    }
+    // Fatura tek cariye yazılır: okunan firma adı (veresiyede el yazısı)
+    const okunanAd = (mod === "fatura" ? s.tedarikci : s.el_yazisi) ?? "";
+    const eslesen = okunanAd ? esle(okunanAd) : undefined;
+    setKalemler([
+      {
+        cariId: eslesen?.id ?? "",
+        yeniCariAd: eslesen ? "" : buyukHarf(okunanAd),
+        tutar: tutarStr(s.toplam),
+      },
+    ]);
     setAsama("onay");
   };
 
@@ -285,6 +207,7 @@ export default function FaturaTaraPage() {
 
     const notlar = [
       mod === "fatura" && faturaNo.trim() ? `Fatura No: ${faturaNo.trim()}` : "",
+      mod === "fatura" && markaNotu.trim() ? `Marka: ${markaNotu.trim()}` : "",
       aciklama.trim(),
     ]
       .filter(Boolean)
@@ -337,18 +260,6 @@ export default function FaturaTaraPage() {
       ids.push(h.id);
       toplamT += t;
       if (!ilkCari) ilkCari = hedefCari;
-
-      // Öğrenme: bu kalemi besleyen markalar artık seçilen cariye eşlenir;
-      // sonraki taramalarda aynı markalar otomatik bu cariye toplanır.
-      // (Eşleme yazılamazsa kayıt yine geçerlidir — hata yutuluyor.)
-      if (k.markalar?.length) {
-        await supabase
-          .from("marka_esleme")
-          .upsert(
-            k.markalar.map((marka) => ({ marka, cari_id: hedefCari })),
-            { onConflict: "marka" }
-          );
-      }
     }
     setKaydediliyor(false);
     setSonHareketIds(ids);
@@ -377,6 +288,7 @@ export default function FaturaTaraPage() {
     setKalemler([bosKalem()]);
     setTarih(bugun());
     setFaturaNo("");
+    setMarkaNotu("");
     setAciklama("");
     setTamamMesaj("");
   };
@@ -434,7 +346,7 @@ export default function FaturaTaraPage() {
           <div className="mt-5 text-5xl">📷</div>
           <p className="mt-3 text-sm text-stone-500">
             {mod === "fatura"
-              ? "Fatura veya fişin fotoğrafını çekin; tedarikçi, marka ve tutarı otomatik okuyalım. Aynı firmanın farklı bayilikleri markaya göre ayrı cariye yazılır; hangi markanın hangi cariye gideceğini seçimlerinizden öğreniriz."
+              ? "Fatura veya fişin fotoğrafını çekin; tedarikçi, tarih ve tutarı otomatik okuyalım. Fatura tek toptancıya yazılır; fişteki markalar sadece not olarak eklenir. Bayiliklere ayırmak isterseniz kalem ekleyip fişi kendiniz bölebilirsiniz."
               : "Üzerine müşterinin adresi (veya adı) el yazısıyla yazılmış fişin fotoğrafını çekin; el yazısını, tarihi ve tutarı otomatik okuyalım. El yazısı müşteri adı olarak kaydedilir."}
           </p>
           {hata && (
@@ -491,7 +403,7 @@ export default function FaturaTaraPage() {
           )}
           <p className="mt-2 text-center text-xs text-stone-400">
             {kalemler.length > 1
-              ? "Fiş, markalara göre ayrı carilere bölündü. Kontrol edin, gerekirse düzeltin."
+              ? "Fişi kalemlere böldünüz. Her kalemin carisini ve tutarını kontrol edin."
               : "Bilgileri kontrol edin, gerekirse düzeltin."}
           </p>
           {hata && (
@@ -526,48 +438,21 @@ export default function FaturaTaraPage() {
               <label className="mt-3 block text-xs font-bold text-stone-400">
                 {meta.cariAd}
               </label>
-              <select
-                value={k.cariId}
-                onChange={(e) => kalemGuncelle(i, { cariId: e.target.value })}
-                className="mt-1 w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-sm"
-              >
-                <option value="">
-                  ➕ Yeni {meta.cariAd.toLocaleLowerCase("tr")} ekle…
-                </option>
-                {cariListe.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.unvan}
-                  </option>
-                ))}
-              </select>
-              {!k.cariId && (
-                <input
-                  value={k.yeniCariAd}
-                  onChange={(e) =>
-                    kalemGuncelle(i, { yeniCariAd: buyukHarf(e.target.value) })
-                  }
-                  placeholder={
-                    mod === "fatura"
-                      ? "Yeni toptancı adı (Firma - Marka)"
-                      : "Müşteri adı (fişteki el yazısı)"
-                  }
-                  className="mt-2 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm"
-                />
-              )}
-              {(k.markalar?.length ?? 0) > 0 && (
-                <p className="mt-1 text-[11px] text-stone-400">
-                  Okunan marka: {k.markalar!.join(", ")} — seçtiğiniz cari bu
-                  markalar için öğrenilir.
-                </p>
-              )}
-
+              <CariSecici
+                liste={cariListe}
+                cariId={k.cariId}
+                aramaAd={k.yeniCariAd}
+                etiket={meta.cariAd}
+                onSec={(id) => kalemGuncelle(i, { cariId: id })}
+                onAramaAd={(ad) => kalemGuncelle(i, { yeniCariAd: ad })}
+              />
               <label className="mt-3 block text-xs font-bold text-stone-400">
                 {kalemler.length > 1 ? "Tutar" : "Toplam Tutar"}
               </label>
-              <input
+              <TutarGirdi
                 inputMode="decimal"
                 value={k.tutar}
-                onChange={(e) => kalemGuncelle(i, { tutar: e.target.value })}
+                onValueChange={(t) => kalemGuncelle(i, { tutar: t })}
                 placeholder="0,00"
                 className="mt-1 w-full rounded-xl border-2 border-green-600 px-4 py-3 text-center text-2xl font-bold outline-none"
               />
@@ -580,7 +465,7 @@ export default function FaturaTaraPage() {
                 onClick={() => setKalemler((ks) => [...ks, bosKalem()])}
                 className="text-sm font-bold text-green-700"
               >
-                ＋ Kalem ekle (fişi böl)
+                ＋ Kalem ekle (başka cariye böl)
               </button>
               {kalemler.length > 1 && (
                 <span className="text-sm font-bold text-stone-600">
@@ -613,9 +498,9 @@ export default function FaturaTaraPage() {
                 <label className="block text-xs font-bold text-stone-400">
                   Fatura No
                 </label>
-                <input
+                <BuyukHarfGirdi
                   value={faturaNo}
-                  onChange={(e) => setFaturaNo(buyukHarf(e.target.value))}
+                  onValueChange={setFaturaNo}
                   placeholder="—"
                   className="mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm"
                 />
@@ -623,9 +508,28 @@ export default function FaturaTaraPage() {
             )}
           </div>
 
-          <input
+          {mod === "fatura" && (
+            <div className="mt-3">
+              <label className="block text-xs font-bold text-stone-400">
+                Markalar (isteğe bağlı)
+              </label>
+              <BuyukHarfGirdi
+                value={markaNotu}
+                onValueChange={setMarkaNotu}
+                placeholder="Örn. İÇİM, NAMET"
+                className="mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm"
+              />
+              <p className="mt-1 text-[11px] text-stone-400">
+                Fişten okunanlar yazılı gelir; düzeltebilir veya
+                silebilirsiniz. Hareketin açıklamasına not olarak eklenir, ayrı
+                cari açılmaz.
+              </p>
+            </div>
+          )}
+
+          <BuyukHarfGirdi
             value={aciklama}
-            onChange={(e) => setAciklama(buyukHarf(e.target.value))}
+            onValueChange={setAciklama}
             placeholder="Açıklama (isteğe bağlı)"
             className="mt-3 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm"
           />

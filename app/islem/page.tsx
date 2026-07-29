@@ -3,12 +3,14 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Shell from "@/components/Shell";
+import { BuyukHarfGirdi, TutarGirdi } from "@/components/Girdi";
 import { supabase } from "@/lib/supabase";
 import {
   bugun,
   buyukHarf,
   para,
   parseTutar,
+  tutarYaz,
   TUR_LABEL,
   YONTEM_LABEL,
 } from "@/lib/format";
@@ -165,8 +167,7 @@ function IslemInner() {
       ? (s.tur as HareketTur)
       : tur;
     setTur(yeniTur);
-    if (typeof s.tutar === "number" && s.tutar > 0)
-      setTutar(String(s.tutar).replace(".", ","));
+    if (typeof s.tutar === "number" && s.tutar > 0) setTutar(tutarYaz(s.tutar));
     if (s.odeme_yontemi && s.odeme_yontemi in YONTEM_LABEL)
       setYontem(s.odeme_yontemi as OdemeYontemi);
     if (s.tarih && /^\d{4}-\d{2}-\d{2}$/.test(s.tarih)) setTarih(s.tarih);
@@ -387,10 +388,10 @@ function IslemInner() {
           </div>
         ) : (
           <>
-            <input
+            <BuyukHarfGirdi
               placeholder="Ara…"
               value={arama}
-              onChange={(e) => setArama(buyukHarf(e.target.value))}
+              onValueChange={setArama}
               className="w-full rounded-xl border border-stone-200 px-4 py-2.5 text-base outline-none focus:border-green-600"
             />
             <div className="mt-2 max-h-48 space-y-1 overflow-y-auto">
@@ -428,11 +429,11 @@ function IslemInner() {
       </div>
 
       <div className="mt-3 rounded-2xl bg-white p-4 shadow-sm">
-        <input
+        <TutarGirdi
           inputMode="decimal"
           placeholder="0,00"
           value={tutar}
-          onChange={(e) => setTutar(e.target.value)}
+          onValueChange={setTutar}
           className="w-full rounded-xl border-2 border-green-600 px-4 py-4 text-center text-3xl font-bold outline-none"
         />
 
@@ -461,10 +462,10 @@ function IslemInner() {
             onChange={(e) => setTarih(e.target.value)}
             className="flex-1 rounded-xl border border-stone-200 px-3 py-2.5 text-sm"
           />
-          <input
+          <BuyukHarfGirdi
             placeholder="Açıklama (isteğe bağlı)"
             value={aciklama}
-            onChange={(e) => setAciklama(buyukHarf(e.target.value))}
+            onValueChange={setAciklama}
             className="flex-[2] rounded-xl border border-stone-200 px-3 py-2.5 text-sm"
           />
         </div>

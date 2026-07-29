@@ -3,8 +3,8 @@
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Shell from "@/components/Shell";
+import { BuyukHarfGirdi, BuyukHarfMetinAlani } from "@/components/Girdi";
 import { supabase } from "@/lib/supabase";
-import { buyukHarf } from "@/lib/format";
 import type { CariTip } from "@/lib/types";
 
 function YeniCariInner() {
@@ -60,11 +60,11 @@ function YeniCariInner() {
             </button>
           ))}
         </div>
-        <input
+        <BuyukHarfGirdi
           required
           placeholder={tip === "alici" ? "Müşteri adı" : "Toptancı adı"}
           value={unvan}
-          onChange={(e) => setUnvan(buyukHarf(e.target.value))}
+          onValueChange={setUnvan}
           className="w-full rounded-xl border border-stone-200 bg-white px-4 py-3.5 text-base outline-none focus:border-green-600"
         />
         <input
@@ -74,10 +74,10 @@ function YeniCariInner() {
           onChange={(e) => setTelefon(e.target.value)}
           className="w-full rounded-xl border border-stone-200 bg-white px-4 py-3.5 text-base outline-none focus:border-green-600"
         />
-        <textarea
+        <BuyukHarfMetinAlani
           placeholder="Adres (isteğe bağlı)"
           value={adres}
-          onChange={(e) => setAdres(buyukHarf(e.target.value))}
+          onValueChange={setAdres}
           rows={2}
           className="w-full rounded-xl border border-stone-200 bg-white px-4 py-3.5 text-base outline-none focus:border-green-600"
         />

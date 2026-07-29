@@ -61,3 +61,21 @@ export const parseTutar = (s: string) => {
   const n = parseFloat(s.replace(/\./g, "").replace(",", "."));
   return isNaN(n) ? NaN : Math.round(n * 100) / 100;
 };
+
+// Tutar alanlarında yazarken uygulanan biçim: binlik ayracı nokta, ondalık
+// ayracı virgül (1234567,5 → 1.234.567,5). Rakam ve tek virgül dışındaki
+// her şey atılır; ondalık en fazla 2 hane.
+export const tutarFormatla = (ham: string) => {
+  let s = ham.replace(/[^\d,]/g, "");
+  const ilkVirgul = s.indexOf(",");
+  if (ilkVirgul !== -1) {
+    s = s.slice(0, ilkVirgul + 1) + s.slice(ilkVirgul + 1).replace(/,/g, "");
+  }
+  const [tamHam, ondalik] = s.split(",");
+  const tam = tamHam.replace(/^0+(?=\d)/, "");
+  const gruplu = tam.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return ondalik === undefined ? gruplu : `${gruplu},${ondalik.slice(0, 2)}`;
+};
+
+// Sayıyı tutar alanına yazılabilir biçimde verir (OCR/ses sonuçları için)
+export const tutarYaz = (n: number) => tutarFormatla(String(n).replace(".", ","));

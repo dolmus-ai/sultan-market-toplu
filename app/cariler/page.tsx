@@ -13,6 +13,9 @@ function CarilerInner() {
   const router = useRouter();
   const tip = (params.get("tip") === "alici" ? "alici" : "satici") as CariTip;
   const [liste, setListe] = useState<CariOzet[]>([]);
+  const [tumCariler, setTumCariler] = useState<
+    { tip: CariTip; aktif: boolean }[]
+  >([]);
   const [arama, setArama] = useState("");
   const [pasifGoster, setPasifGoster] = useState(false);
   const [yukleniyor, setYukleniyor] = useState(true);
@@ -29,6 +32,20 @@ function CarilerInner() {
         setYukleniyor(false);
       });
   }, [tip]);
+
+  // Sekme başlıklarındaki toptancı/müşteri sayıları için (tip'ten bağımsız,
+  // bir kez yüklenir)
+  useEffect(() => {
+    supabase
+      .from("cariler")
+      .select("tip, aktif")
+      .then(({ data }) =>
+        setTumCariler((data as { tip: CariTip; aktif: boolean }[]) ?? [])
+      );
+  }, []);
+
+  const sayi = (t: CariTip) =>
+    tumCariler.filter((c) => c.tip === t && (pasifGoster || c.aktif)).length;
 
   const filtreli = useMemo(
     () =>
@@ -54,6 +71,13 @@ function CarilerInner() {
             }`}
           >
             {t === "alici" ? "Müşteriler" : "Toptancılar"}
+            <span
+              className={`ml-1.5 rounded-full px-1.5 py-0.5 text-xs ${
+                tip === t ? "bg-white/20" : "bg-stone-100 text-stone-500"
+              }`}
+            >
+              {sayi(t)}
+            </span>
           </button>
         ))}
       </div>
@@ -73,14 +97,24 @@ function CarilerInner() {
         </Link>
       </div>
 
-      <label className="mt-2 flex items-center gap-2 px-1 text-xs text-stone-500">
-        <input
-          type="checkbox"
-          checked={pasifGoster}
-          onChange={(e) => setPasifGoster(e.target.checked)}
-        />
-        Pasif carileri de göster
-      </label>
+      <div className="mt-2 flex items-center justify-between px-1 text-xs text-stone-500">
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={pasifGoster}
+            onChange={(e) => setPasifGoster(e.target.checked)}
+          />
+          Pasif carileri de göster
+        </label>
+        <span className="font-semibold">
+          {sayi("satici")} toptancı · {sayi("alici")} müşteri
+        </span>
+      </div>
+
+      <div className="mt-2 px-1 text-xs text-stone-400">
+        Toplam {sayi(tip)} {tip === "satici" ? "toptancı" : "müşteri"}
+        {arama.trim() && ` · listelenen ${filtreli.length}`}
+      </div>
 
       <div className="mt-3 space-y-2">
         {yukleniyor && <p className="text-center text-stone-400">Yükleniyor…</p>}

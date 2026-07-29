@@ -5,9 +5,9 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import Shell from "@/components/Shell";
 import BelgeGoruntuleyici from "@/components/BelgeGoruntuleyici";
+import { BuyukHarfGirdi } from "@/components/Girdi";
 import { supabase } from "@/lib/supabase";
 import {
-  buyukHarf,
   girisBaslik,
   girisTuru,
   odemeBaslik,
@@ -212,11 +212,9 @@ export default function CariDetay() {
 
         {duzenle && (
           <div className="mt-3 space-y-2 border-t border-stone-100 pt-3">
-            <input
+            <BuyukHarfGirdi
               value={form.unvan}
-              onChange={(e) =>
-                setForm({ ...form, unvan: buyukHarf(e.target.value) })
-              }
+              onValueChange={(v) => setForm({ ...form, unvan: v })}
               className="w-full rounded-lg border border-stone-200 px-3 py-2 text-sm"
               placeholder="Ünvan"
             />
@@ -226,11 +224,9 @@ export default function CariDetay() {
               className="w-full rounded-lg border border-stone-200 px-3 py-2 text-sm"
               placeholder="Telefon"
             />
-            <input
+            <BuyukHarfGirdi
               value={form.adres}
-              onChange={(e) =>
-                setForm({ ...form, adres: buyukHarf(e.target.value) })
-              }
+              onValueChange={(v) => setForm({ ...form, adres: v })}
               className="w-full rounded-lg border border-stone-200 px-3 py-2 text-sm"
               placeholder="Adres"
             />

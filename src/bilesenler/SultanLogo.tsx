@@ -4,14 +4,27 @@ import { motion } from "motion/react";
 
 /**
  * Sultan Market amblemi — mağaza tabelasındaki işaretin yeniden çizimi:
- * lacivert "S" kıvrımı, tepesinde kırmızı küre, altında üç kırmızı damla.
+ * yandan görünen alışveriş arabası; tepesinde kırmızı küre, sepet gövdesi
+ * koyu, altında iki kırmızı tekerlek.
  *
- * Gerçek vektör dosyası eldeyse bu bileşenin içindeki path'leri
- * değiştirmek yeterli; uygulamanın kalanı buradan besleniyor.
+ * Gerçek vektör dosyası eldeyse yalnızca bu dosyadaki path'leri değiştirmek
+ * yeterli; üst çubuk, giriş ekranı, hata ekranı ve harita pini buradan besleniyor.
  */
 
-export const MARKA_LACIVERT = "#1b2836";
+export const MARKA_LACIVERT = "#16212e";
 export const MARKA_KIRMIZI = "#e30a17";
+
+/* Ortak geometri — animasyonlu ve durağan sürümler aynı yolları kullanır. */
+const SAP = "M13.6 28.2C10.4 24.6 11.6 19.4 16.2 17.8";
+const SEPET =
+  "M11.8 28.4C21.4 24.2 44.6 24.2 54.2 28.4L46.6 45.4C39.2 48.4 27.4 48.4 20 45.4Z";
+const AG_1 = "M15.6 34.2C24.2 31.2 43 31.2 50.6 34.2";
+const AG_2 = "M18.4 40.2C26 37.6 41.2 37.6 47.8 40.2";
+const KURE = { cx: 25.5, cy: 12.4, r: 7.9 };
+const TEKERLEKLER = [
+  { cx: 26.5, cy: 55, r: 4.5 },
+  { cx: 43.5, cy: 55, r: 4.5 },
+];
 
 export function SultanAmblem({
   boyut = 48,
@@ -21,6 +34,8 @@ export function SultanAmblem({
   /** Lacivert yuvarlak zemin çizilsin mi? */
   zeminli?: boolean;
 }) {
+  const arabaRengi = zeminli ? "#ffffff" : MARKA_LACIVERT;
+
   return (
     <svg
       width={boyut}
@@ -32,27 +47,35 @@ export function SultanAmblem({
     >
       {zeminli && <rect width="64" height="64" rx="18" fill={MARKA_LACIVERT} />}
 
-      {/* S kıvrımı */}
       <path
-        d="M42.5 20.5c-2.6-3.4-7-5.2-11.6-4.6-5.6.7-9.6 4.7-9.6 9.4 0 4.4 3.2 7 9.2 8.6 5.2 1.4 7 2.6 7 5 0 2.6-2.6 4.4-6.4 4.4-3.6 0-6.4-1.4-8.4-4"
-        stroke={zeminli ? "#ffffff" : MARKA_LACIVERT}
-        strokeWidth="5.2"
+        d={SAP}
+        stroke={arabaRengi}
+        strokeWidth="4.6"
         strokeLinecap="round"
-        strokeLinejoin="round"
+      />
+      <path d={SEPET} fill={arabaRengi} />
+      <path
+        d={AG_1}
+        stroke={zeminli ? MARKA_LACIVERT : "#ffffff"}
+        strokeWidth="2.6"
+        strokeLinecap="round"
+      />
+      <path
+        d={AG_2}
+        stroke={zeminli ? MARKA_LACIVERT : "#ffffff"}
+        strokeWidth="2.6"
+        strokeLinecap="round"
       />
 
-      {/* Tepedeki küre */}
-      <circle cx="45.5" cy="15.5" r="5.5" fill={MARKA_KIRMIZI} />
-
-      {/* Alttaki üç damla */}
-      <circle cx="20" cy="44.5" r="3.6" fill={MARKA_KIRMIZI} />
-      <circle cx="27.5" cy="49.5" r="3.1" fill={MARKA_KIRMIZI} />
-      <circle cx="35" cy="53" r="2.6" fill={MARKA_KIRMIZI} />
+      <circle {...KURE} fill={MARKA_KIRMIZI} />
+      {TEKERLEKLER.map((t) => (
+        <circle key={t.cx} {...t} fill={MARKA_KIRMIZI} />
+      ))}
     </svg>
   );
 }
 
-/** Tabeladaki gibi: kalın beyaz "SULTAN MARKET" + altında kırmızı şerit. */
+/** Tabeladaki gibi: kalın "SULTAN MARKET" + altında kırmızı şerit. */
 export function SultanTabela({
   boyut = 1,
   ton = "koyu",
@@ -68,7 +91,7 @@ export function SultanTabela({
         className="whitespace-nowrap font-black leading-none tracking-[-0.02em]"
         style={{ fontSize: 34 * boyut, color: yazi }}
       >
-        SULTAN <span style={{ letterSpacing: "-0.01em" }}>MARKET</span>
+        SULTAN MARKET
       </p>
       <div
         className="mt-2 rounded-full"
@@ -85,8 +108,8 @@ export function SultanTabela({
 const YAY = { type: "spring", stiffness: 260, damping: 20 } as const;
 
 /**
- * Amblem çizilir, küre düşer, damlalar sırayla belirir, tabela açılır.
- * `onBitti` son kare oynadığında çağrılır.
+ * Zemin oturur, sap çizilir, sepet açılır, tel örgü çizilir, küre düşer,
+ * tekerlekler sırayla yerine oturur. `onBitti` son kare oynadığında çağrılır.
  */
 export function SultanAcilis({
   onBitti,
@@ -115,48 +138,76 @@ export function SultanAcilis({
           fill={MARKA_LACIVERT}
           initial={{ rx: 32 }}
           animate={{ rx: 18 }}
-          transition={{ duration: 0.5, delay: 0.35, ease: [0.22, 1, 0.36, 1] }}
+          transition={{ duration: 0.5, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
         />
 
-        {/* S kıvrımı çizilerek gelir */}
+        {/* Sap çizilir */}
         <motion.path
-          d="M42.5 20.5c-2.6-3.4-7-5.2-11.6-4.6-5.6.7-9.6 4.7-9.6 9.4 0 4.4 3.2 7 9.2 8.6 5.2 1.4 7 2.6 7 5 0 2.6-2.6 4.4-6.4 4.4-3.6 0-6.4-1.4-8.4-4"
+          d={SAP}
           stroke="#ffffff"
-          strokeWidth="5.2"
+          strokeWidth="4.6"
           strokeLinecap="round"
-          strokeLinejoin="round"
           initial={{ pathLength: 0, opacity: 0 }}
           animate={{ pathLength: 1, opacity: 1 }}
-          transition={{ duration: 0.85, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
+          transition={{ duration: 0.4, delay: 0.35, ease: "easeOut" }}
         />
+
+        {/* Sepet tabandan açılır */}
+        <motion.path
+          d={SEPET}
+          fill="#ffffff"
+          initial={{ scaleY: 0, opacity: 0 }}
+          animate={{ scaleY: 1, opacity: 1 }}
+          style={{ originX: "32px", originY: "47px" }}
+          transition={{ ...YAY, delay: 0.55 }}
+        />
+
+        {/* Tel örgü çizgileri */}
+        {[AG_1, AG_2].map((d, i) => (
+          <motion.path
+            key={d}
+            d={d}
+            stroke={MARKA_LACIVERT}
+            strokeWidth="2.6"
+            strokeLinecap="round"
+            initial={{ pathLength: 0 }}
+            animate={{ pathLength: 1 }}
+            transition={{ duration: 0.35, delay: 0.85 + i * 0.1 }}
+          />
+        ))}
 
         {/* Küre yukarıdan düşer */}
         <motion.circle
-          cx="45.5"
-          cy="15.5"
-          r="5.5"
+          cx={KURE.cx}
+          r={KURE.r}
           fill={MARKA_KIRMIZI}
           initial={{ cy: -14, opacity: 0 }}
-          animate={{ cy: 15.5, opacity: 1 }}
-          transition={{ type: "spring", stiffness: 320, damping: 14, delay: 0.95 }}
+          animate={{ cy: KURE.cy, opacity: 1 }}
+          transition={{
+            type: "spring",
+            stiffness: 320,
+            damping: 14,
+            delay: 1.05,
+          }}
         />
 
-        {/* Damlalar sırayla */}
-        {[
-          { cx: 20, cy: 44.5, r: 3.6, g: 1.15 },
-          { cx: 27.5, cy: 49.5, r: 3.1, g: 1.25 },
-          { cx: 35, cy: 53, r: 2.6, g: 1.35 },
-        ].map((d) => (
+        {/* Tekerlekler sırayla oturur */}
+        {TEKERLEKLER.map((t, i) => (
           <motion.circle
-            key={d.cx}
-            cx={d.cx}
-            cy={d.cy}
-            r={d.r}
+            key={t.cx}
+            cx={t.cx}
+            cy={t.cy}
+            r={t.r}
             fill={MARKA_KIRMIZI}
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            style={{ originX: `${d.cx}px`, originY: `${d.cy}px` }}
-            transition={{ type: "spring", stiffness: 420, damping: 16, delay: d.g }}
+            style={{ originX: `${t.cx}px`, originY: `${t.cy}px` }}
+            transition={{
+              type: "spring",
+              stiffness: 420,
+              damping: 15,
+              delay: 1.2 + i * 0.12,
+            }}
           />
         ))}
       </motion.svg>
@@ -167,7 +218,7 @@ export function SultanAcilis({
           className="whitespace-nowrap text-[30px] font-black leading-none tracking-[-0.02em] text-metin"
           initial={{ y: 34, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          transition={{ ...YAY, delay: 1.1 }}
+          transition={{ ...YAY, delay: 1.35 }}
         >
           SULTAN MARKET
         </motion.p>
@@ -178,7 +229,7 @@ export function SultanAcilis({
         className="h-1 rounded-full bg-kirmizi"
         initial={{ width: 0 }}
         animate={{ width: 168 }}
-        transition={{ duration: 0.55, delay: 1.35, ease: [0.22, 1, 0.36, 1] }}
+        transition={{ duration: 0.55, delay: 1.6, ease: [0.22, 1, 0.36, 1] }}
         onAnimationComplete={onBitti}
       />
     </div>

@@ -109,15 +109,17 @@ async function marketiIsaretle(harita: MapLibreMap) {
   kutu.className = "relative";
   kutu.innerHTML = `
     <div style="display:flex;flex-direction:column;align-items:center;gap:3px">
-      <div style="width:36px;height:36px;border-radius:13px;background:#1b2836;
+      <div style="width:36px;height:36px;border-radius:13px;background:#16212e;
                   display:flex;align-items:center;justify-content:center;
                   box-shadow:0 4px 14px rgba(14,14,17,.4);border:2.5px solid #fff">
-        <svg width="26" height="26" viewBox="0 0 64 64" fill="none">
-          <path d="M42.5 20.5c-2.6-3.4-7-5.2-11.6-4.6-5.6.7-9.6 4.7-9.6 9.4 0 4.4 3.2 7 9.2 8.6 5.2 1.4 7 2.6 7 5 0 2.6-2.6 4.4-6.4 4.4-3.6 0-6.4-1.4-8.4-4"
-                stroke="#ffffff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
-          <circle cx="45.5" cy="15.5" r="6" fill="#e30a17"/>
-          <circle cx="20" cy="44.5" r="4" fill="#e30a17"/>
-          <circle cx="27.5" cy="49.5" r="3.4" fill="#e30a17"/>
+        <svg width="27" height="27" viewBox="0 0 64 64" fill="none">
+          <path d="M13.6 28.2C10.4 24.6 11.6 19.4 16.2 17.8" stroke="#fff" stroke-width="5" stroke-linecap="round"/>
+          <path d="M11.8 28.4C21.4 24.2 44.6 24.2 54.2 28.4L46.6 45.4C39.2 48.4 27.4 48.4 20 45.4Z" fill="#fff"/>
+          <path d="M15.6 34.2C24.2 31.2 43 31.2 50.6 34.2" stroke="#16212e" stroke-width="2.8" stroke-linecap="round"/>
+          <path d="M18.4 40.2C26 37.6 41.2 37.6 47.8 40.2" stroke="#16212e" stroke-width="2.8" stroke-linecap="round"/>
+          <circle cx="25.5" cy="12.4" r="8.2" fill="#e30a17"/>
+          <circle cx="26.5" cy="55" r="4.8" fill="#e30a17"/>
+          <circle cx="43.5" cy="55" r="4.8" fill="#e30a17"/>
         </svg>
       </div>
       <span style="font:800 10px/1 ui-sans-serif,system-ui;color:#0e0e11;

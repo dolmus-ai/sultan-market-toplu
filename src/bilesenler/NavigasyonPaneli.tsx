@@ -3,7 +3,12 @@
 import { AnimatePresence, motion } from "motion/react";
 
 import { mesafeYaz, sureYaz } from "@/lib/rota";
-import { varisSaati, type Adim, type Manevra, type RotaSecenegi } from "@/lib/navigasyon";
+import {
+  varisSaati,
+  type Adim,
+  type Manevra,
+  type RotaSecenegi,
+} from "@/lib/navigasyon";
 import type { Siparis } from "@/lib/tipler";
 
 export type NavigasyonDurumu = "secim" | "surus";
@@ -15,6 +20,7 @@ type Props = {
   seciliId: string | null;
   yukleniyor: boolean;
   adim: Adim | null;
+  sonrakiAdim: Adim | null;
   adimaKalanM: number;
   kalanMesafeM: number;
   kalanSureSn: number;
@@ -38,6 +44,7 @@ export default function NavigasyonPaneli({
   seciliId,
   yukleniyor,
   adim,
+  sonrakiAdim,
   adimaKalanM,
   kalanMesafeM,
   kalanSureSn,
@@ -61,28 +68,48 @@ export default function NavigasyonPaneli({
         {durum === "surus" && adim && (
           <motion.div
             key="manevra"
-            initial={{ y: -80, opacity: 0 }}
+            initial={{ y: -90, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
-            exit={{ y: -80, opacity: 0 }}
+            exit={{ y: -90, opacity: 0 }}
             transition={{ type: "spring", stiffness: 380, damping: 34 }}
-            className="absolute inset-x-3 top-[calc(env(safe-area-inset-top)+12px)] z-40 flex items-center gap-3 rounded-[24px] bg-kirmizi p-4 text-white shadow-kirmizi"
+            className="absolute inset-x-3 top-[calc(env(safe-area-inset-top)+12px)] z-40 overflow-hidden rounded-[26px] bg-kirmizi text-white shadow-kirmizi"
           >
-            <ManevraIkonu manevra={adim.manevra} />
-            <div className="min-w-0 flex-1">
-              <p className="text-[26px] font-black leading-none">
-                {mesafeYaz(adimaKalanM)}
-              </p>
-              <p className="mt-1 truncate text-[14px] font-bold leading-tight text-white/90">
-                {adim.tarif}
-              </p>
+            <div className="flex items-center gap-3 p-4">
+              <ManevraIkonu manevra={adim.manevra} />
+              <div className="min-w-0 flex-1">
+                <p className="text-[30px] font-black leading-none tracking-tight">
+                  {mesafeYaz(adimaKalanM)}
+                </p>
+                <p className="mt-1.5 truncate text-[15px] font-bold leading-tight text-white/90">
+                  {adim.yol || adim.tarif}
+                </p>
+              </div>
+              <button
+                onClick={onSes}
+                aria-label={sesAcik ? "Sesli tarifi kapat" : "Sesli tarifi aç"}
+                title={sesAcik ? "Sesli tarifi kapat" : "Sesli tarifi aç"}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/20"
+              >
+                <HoparlorIkonu acik={sesAcik} />
+              </button>
+              <button
+                onClick={onBitir}
+                aria-label="Navigasyonu bitir"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/20 text-lg font-bold"
+              >
+                ×
+              </button>
             </div>
-            <button
-              onClick={onBitir}
-              aria-label="Navigasyonu bitir"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-yuzey/20 text-lg font-bold"
-            >
-              ×
-            </button>
+
+            {/* Bir sonraki manevra — Apple'daki ikinci satır */}
+            {sonrakiAdim && sonrakiAdim.manevra !== "varis" && (
+              <div className="flex items-center gap-3 border-t border-white/15 bg-black/15 px-4 py-2.5">
+                <ManevraIkonu manevra={sonrakiAdim.manevra} kucuk />
+                <p className="truncate text-[13px] font-semibold text-white/85">
+                  Sonra: {sonrakiAdim.tarif}
+                </p>
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -99,13 +126,10 @@ export default function NavigasyonPaneli({
             onClick={onTakip}
             aria-label="Konumuma dön"
             title="Konumuma dön"
-            className="absolute bottom-[210px] left-4 z-40 flex h-14 w-14 items-center justify-center rounded-full border border-cizgi bg-yuzey/90 shadow-yuzen backdrop-blur-xl active:scale-95"
+            className="absolute bottom-[190px] left-4 z-40 flex h-14 w-14 items-center justify-center rounded-full border border-cizgi bg-yuzey/90 shadow-yuzen backdrop-blur-xl active:scale-95"
           >
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-              <path
-                d="M4.5 11.2 20 4.5l-6.7 15.5-2-6.3-6.8-2.5Z"
-                fill="#e30a17"
-              />
+              <path d="M4.5 11.2 20 4.5l-6.7 15.5-2-6.3-6.8-2.5Z" fill="#e30a17" />
             </svg>
           </motion.button>
         )}
@@ -117,7 +141,7 @@ export default function NavigasyonPaneli({
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: 90, opacity: 0 }}
         transition={{ type: "spring", stiffness: 380, damping: 36 }}
-        className="absolute inset-x-0 bottom-0 z-40 rounded-t-[28px] border-t border-cizgi bg-yuzey/95 px-4 pb-[calc(env(safe-area-inset-bottom)+16px)] pt-4 shadow-[0_-14px_50px_-16px_rgba(14,14,17,0.3)] backdrop-blur-2xl"
+        className="absolute inset-x-0 bottom-0 z-40 rounded-t-[28px] border-t border-cizgi bg-yuzey/95 px-4 pb-[calc(env(safe-area-inset-bottom)+16px)] pt-4 shadow-[0_-14px_50px_-16px_rgba(0,0,0,0.35)] backdrop-blur-2xl"
       >
         <div className="mb-3 flex items-start gap-3">
           <div className="min-w-0 flex-1">
@@ -154,28 +178,34 @@ export default function NavigasyonPaneli({
         ) : (
           <>
             {/* Özet */}
-            <div className="mb-3 flex items-end gap-4">
-              <div>
-                <p className="text-[28px] font-black leading-none text-kirmizi">
-                  {sureYaz(durum === "surus" ? kalanSureSn : (secili?.sureSn ?? 0))}
-                </p>
-                <p className="mt-1 text-[12px] font-bold text-gri">
-                  {mesafeYaz(
-                    durum === "surus" ? kalanMesafeM : (secili?.mesafeM ?? 0),
-                  )}{" "}
-                  ·{" "}
-                  {varisSaati(
-                    durum === "surus" ? kalanSureSn : (secili?.sureSn ?? 0),
-                  )}{" "}
-                  varış
-                </p>
+            {durum === "surus" ? (
+              <div className="mb-3 grid grid-cols-3 items-end">
+                <Sutun ust={varisSaati(kalanSureSn)} alt="varış" vurgu />
+                <Sutun
+                  ust={String(Math.max(1, Math.round(kalanSureSn / 60)))}
+                  alt="dk."
+                  hiza="orta"
+                />
+                <Sutun {...mesafeSutunu(kalanMesafeM)} hiza="sag" />
               </div>
-              {secili?.motor === "yerel" && (
-                <p className="ml-auto max-w-[45%] text-right text-[11px] font-semibold leading-tight text-gri">
-                  Yol ağı servisi kapalı — kuş uçuşu tahmin
-                </p>
-              )}
-            </div>
+            ) : (
+              <div className="mb-3 flex items-end gap-4">
+                <div>
+                  <p className="text-[28px] font-black leading-none text-kirmizi">
+                    {sureYaz(secili?.sureSn ?? 0)}
+                  </p>
+                  <p className="mt-1 text-[12px] font-bold text-gri">
+                    {mesafeYaz(secili?.mesafeM ?? 0)} ·{" "}
+                    {varisSaati(secili?.sureSn ?? 0)} varış
+                  </p>
+                </div>
+                {secili?.motor === "yerel" && (
+                  <p className="ml-auto max-w-[45%] text-right text-[11px] font-semibold leading-tight text-gri">
+                    Yol ağı servisi kapalı — kuş uçuşu tahmin
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Alternatifler */}
             {durum === "secim" && secenekler.length > 1 && (
@@ -261,25 +291,12 @@ export default function NavigasyonPaneli({
                   ✓ Teslim ettim
                 </motion.button>
               ) : (
-                <>
-                  <button
-                    onClick={onBitir}
-                    className="flex h-14 flex-1 items-center justify-center rounded-hap border border-cizgi bg-yuzey text-[15px] font-black"
-                  >
-                    Navigasyonu bitir
-                  </button>
-                  <button
-                    onClick={onSes}
-                    aria-label={sesAcik ? "Sesli tarifi kapat" : "Sesli tarifi aç"}
-                    className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-hap border transition-colors ${
-                      sesAcik
-                        ? "border-kirmizi bg-kirmizi text-white"
-                        : "border-cizgi bg-yuzey text-gri"
-                    }`}
-                  >
-                    <HoparlorIkonu acik={sesAcik} />
-                  </button>
-                </>
+                <button
+                  onClick={onBitir}
+                  className="flex h-14 flex-1 items-center justify-center rounded-hap border border-cizgi bg-yuzey text-[15px] font-black"
+                >
+                  Navigasyonu bitir
+                </button>
               )}
             </div>
           </>
@@ -290,6 +307,42 @@ export default function NavigasyonPaneli({
 }
 
 /* ------------------------------------------------------------------ */
+
+function Sutun({
+  ust,
+  alt,
+  vurgu,
+  hiza = "sol",
+}: {
+  ust: string;
+  alt: string;
+  vurgu?: boolean;
+  hiza?: "sol" | "orta" | "sag";
+}) {
+  const yon =
+    hiza === "orta" ? "text-center" : hiza === "sag" ? "text-right" : "text-left";
+  return (
+    <div className={yon}>
+      <p
+        className={`text-[26px] font-black leading-none tracking-tight ${
+          vurgu ? "text-kirmizi" : "text-metin"
+        }`}
+      >
+        {ust}
+      </p>
+      <p className="mt-1 text-[12px] font-bold text-gri">{alt}</p>
+    </div>
+  );
+}
+
+/** "420" + "m" ya da "5,9" + "km" olarak ayırır. */
+function mesafeSutunu(metre: number): { ust: string; alt: string } {
+  if (metre < 950) return { ust: String(Math.round(metre)), alt: "m" };
+  return {
+    ust: (metre / 1000).toLocaleString("tr-TR", { maximumFractionDigits: 1 }),
+    alt: "km",
+  };
+}
 
 function HoparlorIkonu({ acik }: { acik: boolean }) {
   return (
@@ -331,18 +384,27 @@ const DONUS_ACISI: Partial<Record<Manevra, number>> = {
   cikis: 0,
 };
 
-function ManevraIkonu({ manevra }: { manevra: Manevra }) {
+function ManevraIkonu({
+  manevra,
+  kucuk,
+}: {
+  manevra: Manevra;
+  kucuk?: boolean;
+}) {
+  const kutu = kucuk ? "h-8 w-8 rounded-xl" : "h-12 w-12 rounded-2xl";
+  const olcu = kucuk ? 18 : 26;
+  const cerceve = `flex ${kutu} shrink-0 items-center justify-center bg-white/20`;
+
   if (manevra === "varis") {
     return (
-      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-yuzey/20 text-2xl">
-        📍
-      </span>
+      <span className={`${cerceve} ${kucuk ? "text-base" : "text-2xl"}`}>📍</span>
     );
   }
+
   if (manevra === "gobek") {
     return (
-      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-yuzey/20">
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+      <span className={cerceve}>
+        <svg width={olcu} height={olcu} viewBox="0 0 24 24" fill="none">
           <circle cx="12" cy="13" r="4.5" stroke="currentColor" strokeWidth="2" />
           <path
             d="M12 22v-4.5M16.5 13H21l-2.5-2.5M21 13l-2.5 2.5"
@@ -355,10 +417,11 @@ function ManevraIkonu({ manevra }: { manevra: Manevra }) {
       </span>
     );
   }
+
   if (manevra === "u-donusu") {
     return (
-      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-yuzey/20">
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+      <span className={cerceve}>
+        <svg width={olcu} height={olcu} viewBox="0 0 24 24" fill="none">
           <path
             d="M8 21V10a4 4 0 0 1 8 0v11M4.5 13.5 8 10l3.5 3.5"
             stroke="currentColor"
@@ -371,22 +434,40 @@ function ManevraIkonu({ manevra }: { manevra: Manevra }) {
     );
   }
 
+  // Dönüşler: Apple'daki gibi köşeli ok, açıya göre döndürülür.
+  const aci = DONUS_ACISI[manevra] ?? 0;
+  const donus = manevra === "sol" || manevra === "sag";
+
   return (
-    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-yuzey/20">
+    <span className={cerceve}>
       <svg
-        width="26"
-        height="26"
+        width={olcu}
+        height={olcu}
         viewBox="0 0 24 24"
         fill="none"
-        style={{ transform: `rotate(${DONUS_ACISI[manevra] ?? 0}deg)` }}
+        style={{ transform: donus ? undefined : `rotate(${aci}deg)` }}
       >
-        <path
-          d="M12 21V5M6 11l6-6 6 6"
-          stroke="currentColor"
-          strokeWidth="2.2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
+        {donus ? (
+          <path
+            d={
+              manevra === "sol"
+                ? "M18 21v-8a4 4 0 0 0-4-4H7M11 5 6 9l5 4"
+                : "M6 21v-8a4 4 0 0 1 4-4h7M13 5l5 4-5 4"
+            }
+            stroke="currentColor"
+            strokeWidth="2.3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        ) : (
+          <path
+            d="M12 21V5M6 11l6-6 6 6"
+            stroke="currentColor"
+            strokeWidth="2.3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        )}
       </svg>
     </span>
   );

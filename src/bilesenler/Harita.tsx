@@ -190,15 +190,27 @@ function katmanlariKur(
 
   /* Navigasyon — seçilmeyen alternatifler soluk, seçili olan kırmızı */
   harita.addLayer({
+    id: "nav-alternatif-kenar",
+    type: "line",
+    source: "navigasyon",
+    filter: ["!", ["get", "secili"]],
+    layout: { "line-cap": "round", "line-join": "round" },
+    paint: {
+      "line-color": ["get", "altKenar"],
+      "line-width": ["interpolate", ["linear"], ["zoom"], 10, 8, 17, 15],
+      "line-opacity": 0.9,
+    },
+  });
+  harita.addLayer({
     id: "nav-alternatif",
     type: "line",
     source: "navigasyon",
     filter: ["!", ["get", "secili"]],
     layout: { "line-cap": "round", "line-join": "round" },
     paint: {
-      "line-color": "#9aa1ab",
-      "line-width": ["interpolate", ["linear"], ["zoom"], 10, 4, 17, 9],
-      "line-opacity": 0.75,
+      "line-color": ["get", "alt"],
+      "line-width": ["interpolate", ["linear"], ["zoom"], 10, 5, 17, 11],
+      "line-opacity": 0.95,
     },
   });
   harita.addLayer({
@@ -208,10 +220,22 @@ function katmanlariKur(
     filter: ["get", "secili"],
     layout: { "line-cap": "round", "line-join": "round" },
     paint: {
-      "line-color": "#0e0e11",
-      "line-width": ["interpolate", ["linear"], ["zoom"], 10, 10, 17, 20],
-      "line-opacity": 0.16,
-      "line-blur": 4,
+      "line-color": "#000000",
+      "line-width": ["interpolate", ["linear"], ["zoom"], 10, 14, 17, 26],
+      "line-opacity": 0.22,
+      "line-blur": 6,
+      "line-translate": [0, 2],
+    },
+  });
+  harita.addLayer({
+    id: "nav-kenar",
+    type: "line",
+    source: "navigasyon",
+    filter: ["get", "secili"],
+    layout: { "line-cap": "round", "line-join": "round" },
+    paint: {
+      "line-color": "#7d060f",
+      "line-width": ["interpolate", ["linear"], ["zoom"], 10, 10, 17, 19],
     },
   });
   harita.addLayer({
@@ -222,7 +246,21 @@ function katmanlariKur(
     layout: { "line-cap": "round", "line-join": "round" },
     paint: {
       "line-color": "#e30a17",
-      "line-width": ["interpolate", ["linear"], ["zoom"], 10, 5, 17, 11],
+      "line-width": ["interpolate", ["linear"], ["zoom"], 10, 6.5, 17, 14],
+    },
+  });
+  // Üstte ince açık kırmızı bir parlaklık — şerit hacim kazansın.
+  harita.addLayer({
+    id: "nav-parlak",
+    type: "line",
+    source: "navigasyon",
+    filter: ["get", "secili"],
+    layout: { "line-cap": "round", "line-join": "round" },
+    paint: {
+      "line-color": "#ff5a67",
+      "line-width": ["interpolate", ["linear"], ["zoom"], 10, 2, 17, 4.5],
+      "line-opacity": 0.55,
+      "line-translate": [0, -1.5],
     },
   });
   harita.addLayer({
@@ -233,8 +271,8 @@ function katmanlariKur(
     layout: { "line-cap": "butt", "line-join": "round" },
     paint: {
       "line-color": "#ffffff",
-      "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1.8, 17, 3.4],
-      "line-opacity": 0.9,
+      "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1.4, 17, 2.6],
+      "line-opacity": 0.75,
       "line-dasharray": [0, 3.5, 1.5, 3.5],
     },
   });
@@ -583,8 +621,8 @@ export default function Harita({
       // ayrıştırılır ayrıştırılmaz kuruyoruz.
       const kur = () => {
         if (iptal || hazirRef.current || !harita.getStyle()?.layers) return;
-        markaStiliUygula(harita, temaRef.current);
         ucBoyutluBinalarEkle(harita);
+        markaStiliUygula(harita, temaRef.current);
         katmanlariKur(harita, secimRef, tiklamaRef, secenekRef);
         marketiIsaretle(harita);
         hazirRef.current = true;
@@ -714,11 +752,16 @@ export default function Harita({
         )
         .map((s) => ({
           type: "Feature",
-          properties: { id: s.id, secili: s.id === seciliSecenekId },
+          properties: {
+            id: s.id,
+            secili: s.id === seciliSecenekId,
+            alt: katmanlar.karanlik ? "#8e9bab" : "#a9b0ba",
+            altKenar: katmanlar.karanlik ? "#5c6673" : "#8a919c",
+          },
           geometry: { type: "LineString", coordinates: s.geometri },
         })),
     });
-  }, [hazir, navigasyonSecenekleri, seciliSecenekId]);
+  }, [hazir, navigasyonSecenekleri, seciliSecenekId, katmanlar.karanlik]);
 
   /* Tema değişince harita paletini yeniden uygula. */
   useEffect(() => {
@@ -787,28 +830,41 @@ export default function Harita({
 
       if (!kuryeMarkerRef.current) {
         const kutu = document.createElement("div");
-        kutu.className = "relative h-6 w-6";
+        kutu.style.cssText = "width:132px;height:132px;position:relative";
+        // Koni ve nokta haritayla birlikte dönsün diye rotationAlignment: map.
         kutu.innerHTML = `
-          <span class="absolute inset-0 rounded-full bg-[#e30a17]/25 animate-ping"></span>
-          <span class="absolute inset-[5px] rounded-full bg-[#0e0e11] ring-[3px] ring-white shadow-[0_2px_10px_rgba(0,0,0,.35)]"></span>
-          <svg class="kurye-yon absolute -top-2 left-1/2 h-3 w-3 -translate-x-1/2" viewBox="0 0 12 12" fill="none">
-            <path d="M6 0 L10.5 10.5 L6 8 L1.5 10.5 Z" fill="#e30a17"/>
+          <svg viewBox="-66 -66 132 132" width="132" height="132" style="overflow:visible">
+            <defs>
+              <radialGradient id="kurye-koni" cx="50%" cy="100%" r="100%">
+                <stop offset="0%" stop-color="#e30a17" stop-opacity=".55"/>
+                <stop offset="55%" stop-color="#e30a17" stop-opacity=".22"/>
+                <stop offset="100%" stop-color="#e30a17" stop-opacity="0"/>
+              </radialGradient>
+            </defs>
+            <path class="kurye-koni" d="M0 0 L-30 -56 A63 63 0 0 1 30 -56 Z"
+                  fill="url(#kurye-koni)"/>
+            <circle cx="0" cy="0" r="17" fill="#e30a17" opacity=".18"/>
+            <circle cx="0" cy="0" r="11" fill="#ffffff"/>
+            <circle cx="0" cy="0" r="7.5" fill="#e30a17"/>
           </svg>`;
-        kuryeMarkerRef.current = new MapLibreMarker({ element: kutu })
+
+        kuryeMarkerRef.current = new MapLibreMarker({
+          element: kutu,
+          rotationAlignment: "map",
+          pitchAlignment: "map",
+        })
           .setLngLat([kuryeKonumu.lng, kuryeKonumu.lat])
           .addTo(harita);
       } else {
         kuryeMarkerRef.current.setLngLat([kuryeKonumu.lng, kuryeKonumu.lat]);
       }
 
-      const ok = kuryeMarkerRef.current
+      // Yön bilinmiyorsa koniyi gizle, imleci sade nokta olarak bırak.
+      const koni = kuryeMarkerRef.current
         ?.getElement()
-        .querySelector<SVGElement>(".kurye-yon");
-      if (ok) {
-        ok.style.transformOrigin = "50% 200%";
-        ok.style.transition = "transform .4s cubic-bezier(.22,1,.36,1)";
-        ok.style.transform = `translateX(-50%) rotate(${kuryeYonu ?? 0}deg)`;
-      }
+        .querySelector<SVGElement>(".kurye-koni");
+      if (koni) koni.style.display = kuryeYonu == null ? "none" : "";
+      kuryeMarkerRef.current?.setRotation(kuryeYonu ?? 0);
     })();
 
     return () => {

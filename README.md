@@ -108,6 +108,16 @@ drop policy "muhasebe kilidi" on public.profiles;
 - **Karanlık harita:** katman panelindeki anahtar hem harita paletini hem tüm
   arayüz yüzeylerini gece moduna alır; tercih `localStorage`'a yazılır.
   Karanlıkta kaybolacak siyah "yolda" rozeti ve pini otomatik ters çevrilir.
+- **Harita paleti:** gündüz sıcak kırık beyaz zemin + beyaz yollar; gece
+  arduvaz-mavi arazi ve arazi'den **daha koyu** yollar — Apple'ın gece
+  navigasyonundaki okunaklılığı veren ters kontrast. 3B binalar, POI ikonları
+  ve sokak adları iki temada da ayrı ayrı ayarlanır.
+- **Rota şeridi:** gölge + koyu kenarlık + marka kırmızısı gövde + ince açık
+  kırmızı parlaklık + akan beyaz kesikler; alternatifler soluk gri, tıklanınca
+  seçilir.
+- **Konum imleci:** beyaz halkalı kırmızı nokta ve yön konisi. Koni haritayla
+  birlikte döner (`rotationAlignment: map`), eğimde yere yatar; yön bilinmiyorsa
+  gizlenir.
 - **Pin renkleri:** kırmızı = bekliyor, turuncu = hazırlanıyor, siyah = yolda,
   yeşil = teslim, gri = iptal. Bekleyen ve yoldaki teslimatlar nabız atar.
 - **Alt panel** (sürüklenebilir, 3 kademeli): Teslimatlar · Abonelikler ·

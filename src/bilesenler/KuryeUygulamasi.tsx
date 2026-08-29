@@ -331,6 +331,7 @@ export default function KuryeUygulamasi({
   );
 
   const navAdim = navSecili?.adimlar[navAdimIndeks] ?? null;
+  const navSonraki = navSecili?.adimlar[navAdimIndeks + 1] ?? null;
 
   useEffect(() => {
     navRef.current = { durum: navDurum, secenek: navSecili, takip: navTakip };
@@ -822,6 +823,7 @@ export default function KuryeUygulamasi({
             seciliId={navSeciliId}
             yukleniyor={navYukleniyor}
             adim={navAdim}
+            sonrakiAdim={navSonraki}
             adimaKalanM={navAdimaKalanM}
             kalanMesafeM={navKalan.mesafeM}
             kalanSureSn={navKalan.sureSn}

@@ -59,18 +59,19 @@
 /* Karanlık harita modu — tüm arayüz yüzeyleriyle birlikte */
 [data-tema="karanlik"] {
   color-scheme: dark;
-  --zemin: #101216;
-  --cam-zemin: #16181d;
-  --cam-oran: 78%;
+  /* Harita gece paletiyle aynı arduvaz-mavi aile */
+  --zemin: #1b222b;
+  --cam-zemin: #232c36;
+  --cam-oran: 76%;
 
-  --color-yuzey: #16181d;
-  --color-yuzey2: #1e2128;
-  --color-metin: #eef0f3;
-  --color-gri: #9aa1ab;
-  --color-cizgi: #2a2e36;
-  --color-duman: #1e2128;
-  --color-kontrast: #333844;
-  --color-kirmizi-sis: #2a1418;
+  --color-yuzey: #232c36;
+  --color-yuzey2: #2c3641;
+  --color-metin: #eef3f8;
+  --color-gri: #9fadba;
+  --color-cizgi: #3a4653;
+  --color-duman: #2c3641;
+  --color-kontrast: #3e4b59;
+  --color-kirmizi-sis: #34181d;
   --color-kirmizi-acik: #ff5a67;
 
   /* Siyah "yolda" rozeti karanlıkta kaybolmasın diye tersine çevrilir. */

@@ -28,43 +28,46 @@ type Palet = {
  * Karanlık: gece sürüşü için düşük parlaklık, kırmızı yalnızca bize ait.
  */
 const PALETLER: Record<Tema, Palet> = {
+  // Gündüz: sıcak kırık beyaz zemin, yumuşak mavi su, okunur yeşil parklar.
   aydinlik: {
-    zemin: "#fbfbfc",
-    su: "#dfe7ef",
-    yesil: "#eef2ea",
-    arazi: "#f3f3f6",
-    bina: "#ebebef",
-    binaCizgi: "#e0e0e6",
+    zemin: "#f7f6f3",
+    su: "#c5deef",
+    yesil: "#d8e9cf",
+    arazi: "#efeeea",
+    bina: "#e9e7e2",
+    binaCizgi: "#dcd9d3",
     yolBeyaz: "#ffffff",
-    yolIkincil: "#fafafb",
-    yolKenar: "#e2e2e8",
+    yolIkincil: "#fbfaf8",
+    yolKenar: "#dfdcd6",
     otoyol: "#ffffff",
-    otoyolKenar: "#d6d6de",
-    demiryolu: "#dcdce3",
-    sinir: "#d9d9e0",
-    yazi: "#3f434a",
-    yaziSonuk: "#8b9099",
+    otoyolKenar: "#cfcabf",
+    demiryolu: "#cfcbc4",
+    sinir: "#cdc9c2",
+    yazi: "#39404a",
+    yaziSonuk: "#7d8792",
     hale: "#ffffff",
-    bina3b: ["#f0f0f4", "#e2e2e9", "#d3d3dc"],
+    bina3b: ["#eeece7", "#e3e0d9", "#d5d1c9"],
   },
+  // Gece: arduvaz-mavi arazi, arazi'den KOYU yollar — Apple'ın gece
+  // navigasyonundaki okunaklılığı veren şey bu ters kontrast.
   karanlik: {
-    zemin: "#101216",
-    su: "#0c1520",
-    yesil: "#141b17",
-    arazi: "#161920",
-    bina: "#1d2129",
-    binaCizgi: "#252a33",
-    yolBeyaz: "#2c323c",
-    yolIkincil: "#232830",
-    yolKenar: "#141720",
-    otoyol: "#3a414d",
-    otoyolKenar: "#11141a",
-    demiryolu: "#2a2f38",
-    sinir: "#343a45",
-    yazi: "#c9ced6",
-    yaziSonuk: "#7b828d",
-    hale: "#0b0d11",
-    bina3b: ["#1f232c", "#272c37", "#313743"],
+    zemin: "#4a5663",
+    su: "#33414f",
+    yesil: "#465a4e",
+    arazi: "#4e5a67",
+    bina: "#414d5a",
+    binaCizgi: "#3a4552",
+    yolBeyaz: "#333d48",
+    yolIkincil: "#3a4450",
+    yolKenar: "#2a323b",
+    otoyol: "#2e3843",
+    otoyolKenar: "#222932",
+    demiryolu: "#5d6874",
+    sinir: "#616c79",
+    yazi: "#f4f7fa",
+    yaziSonuk: "#cbd4dd",
+    hale: "#2b333c",
+    bina3b: ["#4d5a69", "#45515f", "#3d4855"],
   },
 };
 
@@ -109,7 +112,12 @@ export function markaStiliUygula(harita: MapLibreMap, tema: Tema = "aydinlik") {
 
   for (const katman of stil.layers as LayerSpecification[]) {
     const id = katman.id;
-    if (id.startsWith("nav-") || id.startsWith("rota-") || id === "bina-3b")
+    // Kendi çizgilerimiz ve 3B binalar ayrı ele alınıyor.
+    if (
+      id.startsWith("nav-") ||
+      id.startsWith("rota-") ||
+      katman.type === "fill-extrusion"
+    )
       continue;
 
     const kaynakKatman =
@@ -140,6 +148,11 @@ export function markaStiliUygula(harita: MapLibreMap, tema: Tema = "aydinlik") {
       case "landcover":
         guvenliBoya(harita, id, "fill-color", P.yesil);
         guvenliBoya(harita, id, "fill-opacity", 0.9);
+        guvenliBoya(harita, id, "line-color", P.yesil);
+        break;
+      case "aeroway":
+        guvenliBoya(harita, id, "fill-color", P.arazi);
+        guvenliBoya(harita, id, "line-color", P.arazi);
         break;
       case "landuse":
         guvenliBoya(harita, id, "fill-color", P.arazi);
@@ -180,9 +193,27 @@ export function markaStiliUygula(harita: MapLibreMap, tema: Tema = "aydinlik") {
   binaTemasiUygula(harita, tema);
 }
 
-/** Stildeki bina kaynağını bulup 3B kabartma katmanı ekler. */
+/**
+ * Haritadaki 3B bina katmanının kimliği. Liberty stili kendi
+ * `building-3d` katmanıyla geliyor; varsa onu kullanırız, yoksa ekleriz.
+ * İkisini birden çizmek z-çakışmasına yol açıyor.
+ */
+export function ucBoyutluBinaKatmani(harita: MapLibreMap): string | null {
+  const katmanlar = harita.getStyle()?.layers as
+    | LayerSpecification[]
+    | undefined;
+  const bulunan = katmanlar?.find(
+    (k) =>
+      k.type === "fill-extrusion" &&
+      "source-layer" in k &&
+      k["source-layer"] === "building",
+  );
+  return bulunan?.id ?? null;
+}
+
+/** Stilde 3B bina katmanı yoksa ekler. */
 export function ucBoyutluBinalarEkle(harita: MapLibreMap) {
-  if (harita.getLayer("bina-3b")) return;
+  if (ucBoyutluBinaKatmani(harita)) return;
 
   const stil = harita.getStyle();
   const binaKatmani = (stil?.layers as LayerSpecification[] | undefined)?.find(
@@ -221,9 +252,11 @@ export function ucBoyutluBinalarEkle(harita: MapLibreMap) {
 
 /** 3B binaların rengini temaya göre günceller. */
 export function binaTemasiUygula(harita: MapLibreMap, tema: Tema) {
-  if (!harita.getLayer("bina-3b")) return;
+  const id = ucBoyutluBinaKatmani(harita);
+  if (!id) return;
   const [a, b, c] = PALETLER[tema].bina3b;
-  guvenliBoya(harita, "bina-3b", "fill-extrusion-color", [
+  guvenliBoya(harita, id, "fill-extrusion-opacity", 0.9);
+  guvenliBoya(harita, id, "fill-extrusion-color", [
     "interpolate",
     ["linear"],
     ["coalesce", ["get", "render_height"], 6],
@@ -237,6 +270,7 @@ export function binaTemasiUygula(harita: MapLibreMap, tema: Tema) {
 }
 
 export function ucBoyutluBinalariGoster(harita: MapLibreMap, goster: boolean) {
-  if (!harita.getLayer("bina-3b")) return;
-  guvenliDuzen(harita, "bina-3b", "visibility", goster ? "visible" : "none");
+  const id = ucBoyutluBinaKatmani(harita);
+  if (!id) return;
+  guvenliDuzen(harita, id, "visibility", goster ? "visible" : "none");
 }

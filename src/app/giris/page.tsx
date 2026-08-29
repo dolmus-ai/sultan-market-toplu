@@ -40,7 +40,7 @@ export default function GirisSayfasi() {
   }
 
   return (
-    <main className="relative flex min-h-dvh items-center justify-center overflow-hidden bg-white px-6">
+    <main className="relative flex min-h-dvh items-center justify-center overflow-hidden bg-yuzey px-6">
       {/* Arka plan: kırmızı ışıklar + ince ızgara */}
       <div
         aria-hidden
@@ -59,7 +59,7 @@ export default function GirisSayfasi() {
       />
       <motion.div
         aria-hidden
-        className="pointer-events-none absolute -bottom-48 -right-32 h-[30rem] w-[30rem] rounded-full bg-siyah/15 blur-[130px]"
+        className="pointer-events-none absolute -bottom-48 -right-32 h-[30rem] w-[30rem] rounded-full bg-kontrast/15 blur-[130px]"
         animate={{ scale: [1.1, 1, 1.1], opacity: [0.5, 0.75, 0.5] }}
         transition={{ duration: 11, repeat: Infinity, ease: "easeInOut" }}
       />
@@ -68,7 +68,7 @@ export default function GirisSayfasi() {
         initial={{ opacity: 0, y: 28, filter: "blur(8px)" }}
         animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
         transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-        className="relative w-full max-w-sm rounded-[28px] border border-cizgi bg-white/90 p-8 shadow-yuzen backdrop-blur-xl"
+        className="relative w-full max-w-sm rounded-[28px] border border-cizgi bg-yuzey/90 p-8 shadow-yuzen backdrop-blur-xl"
       >
         <div className="mb-8 flex items-center gap-3">
           <motion.div
@@ -168,7 +168,7 @@ function Alan({
         placeholder={yer}
         required
         autoComplete={tip === "password" ? "current-password" : "email"}
-        className="h-14 w-full rounded-2xl border border-cizgi bg-duman px-4 text-[15px] font-medium outline-none transition-all placeholder:text-gri/60 focus:border-kirmizi focus:bg-white focus:ring-4 focus:ring-kirmizi/12"
+        className="h-14 w-full rounded-2xl border border-cizgi bg-yuzey2 px-4 text-[15px] font-medium outline-none transition-all placeholder:text-gri/60 focus:border-kirmizi focus:bg-yuzey focus:ring-4 focus:ring-kirmizi/12"
       />
     </label>
   );

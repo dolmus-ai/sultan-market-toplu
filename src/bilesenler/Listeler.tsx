@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from "motion/react";
 
 import {
   DURUM_ETIKET,
-  DURUM_RENK,
+  DURUM_STIL,
   adresYaz,
   gunlerYaz,
   miktarYaz,
@@ -45,7 +45,7 @@ export function TeslimatSatiri({
       className={`flex w-full items-center gap-3 rounded-[20px] border p-3 text-left transition-colors ${
         secili || isaretli
           ? "border-kirmizi bg-kirmizi-sis"
-          : "border-cizgi bg-white hover:bg-duman"
+          : "border-cizgi bg-yuzey hover:bg-yuzey2"
       }`}
     >
       {/* Sıra veya durum göstergesi */}
@@ -55,19 +55,19 @@ export function TeslimatSatiri({
             className={`flex h-7 w-7 items-center justify-center rounded-full border-2 transition-colors ${
               isaretli
                 ? "border-kirmizi bg-kirmizi text-white"
-                : "border-cizgi bg-white"
+                : "border-cizgi bg-yuzey"
             }`}
           >
             {isaretli && <span className="text-xs font-black">✓</span>}
           </span>
         ) : sira ? (
-          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-siyah text-sm font-black text-white">
+          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-kontrast text-sm font-black text-white">
             {sira}
           </span>
         ) : (
           <span
-            className="h-3.5 w-3.5 rounded-full ring-4 ring-white"
-            style={{ background: DURUM_RENK[siparis.durum] }}
+            className="h-3.5 w-3.5 rounded-full ring-4 ring-yuzey"
+            style={{ background: DURUM_STIL[siparis.durum].background }}
           />
         )}
       </span>
@@ -86,8 +86,8 @@ export function TeslimatSatiri({
         </span>
         <span className="mt-1.5 flex items-center gap-2 text-[12px] font-semibold text-gri">
           <span
-            className="rounded-hap px-2 py-0.5 text-white"
-            style={{ background: DURUM_RENK[siparis.durum] }}
+            className="rounded-hap px-2 py-0.5"
+            style={DURUM_STIL[siparis.durum]}
           >
             {DURUM_ETIKET[siparis.durum]}
           </span>
@@ -129,9 +129,9 @@ export function AbonelikSatiri({
       layout
       onClick={onTikla}
       whileTap={{ scale: 0.985 }}
-      className="flex w-full items-center gap-3 rounded-[20px] border border-cizgi bg-white p-3 text-left hover:bg-duman"
+      className="flex w-full items-center gap-3 rounded-[20px] border border-cizgi bg-yuzey p-3 text-left hover:bg-yuzey2"
     >
-      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-[3px] border-siyah bg-white">
+      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-[3px] border-kontrast bg-yuzey">
         <span className="h-2.5 w-2.5 rounded-full bg-kirmizi" />
       </span>
       <span className="min-w-0 flex-1">
@@ -175,7 +175,7 @@ export function SepetSatiri({
       layout
       onClick={onTikla}
       whileTap={{ scale: 0.985 }}
-      className="w-full rounded-[20px] border border-cizgi bg-white p-3 text-left hover:bg-duman"
+      className="w-full rounded-[20px] border border-cizgi bg-yuzey p-3 text-left hover:bg-yuzey2"
     >
       <span className="flex items-center gap-2">
         <span className="truncate text-[15px] font-bold">
@@ -188,7 +188,7 @@ export function SepetSatiri({
         {(sepet.kalemler ?? []).slice(0, 8).map((k) => (
           <span
             key={k.id}
-            className="rounded-hap bg-duman px-2.5 py-1 text-[12px] font-semibold"
+            className="rounded-hap bg-yuzey2 px-2.5 py-1 text-[12px] font-semibold"
           >
             {k.urun?.emoji ? `${k.urun.emoji} ` : ""}
             {k.urun?.ad ?? "Ürün"}
@@ -199,7 +199,7 @@ export function SepetSatiri({
           </span>
         ))}
         {(sepet.kalemler?.length ?? 0) > 8 && (
-          <span className="rounded-hap bg-duman px-2.5 py-1 text-[12px] font-semibold text-gri">
+          <span className="rounded-hap bg-yuzey2 px-2.5 py-1 text-[12px] font-semibold text-gri">
             +{(sepet.kalemler?.length ?? 0) - 8}
           </span>
         )}
@@ -232,12 +232,12 @@ export function UrunListesi({ urunler }: { urunler: Urun[] }) {
 
   return (
     <div className="space-y-3">
-      <div className="sticky top-0 z-10 -mx-1 bg-white/85 px-1 pb-2 pt-1 backdrop-blur-xl">
+      <div className="sticky top-0 z-10 -mx-1 bg-yuzey/85 px-1 pb-2 pt-1 backdrop-blur-xl">
         <input
           value={arama}
           onChange={(e) => setArama(e.target.value)}
           placeholder="Ürün ara…"
-          className="h-11 w-full rounded-hap border border-cizgi bg-duman px-4 text-sm font-medium outline-none transition-all placeholder:text-gri/70 focus:border-kirmizi focus:bg-white focus:ring-4 focus:ring-kirmizi/12"
+          className="h-11 w-full rounded-hap border border-cizgi bg-yuzey2 px-4 text-sm font-medium outline-none transition-all placeholder:text-gri/70 focus:border-kirmizi focus:bg-yuzey focus:ring-4 focus:ring-kirmizi/12"
         />
         <div className="ince-kaydirma -mx-1 mt-2 flex gap-1.5 overflow-x-auto px-1 pb-1">
           <Cip aktif={!kategori} onClick={() => setKategori(null)}>
@@ -265,14 +265,14 @@ export function UrunListesi({ urunler }: { urunler: Urun[] }) {
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.94 }}
               transition={{ duration: 0.18 }}
-              className="rounded-[20px] border border-cizgi bg-white p-3"
+              className="rounded-[20px] border border-cizgi bg-yuzey p-3"
             >
               <div className="flex items-start justify-between gap-2">
                 <span className="text-2xl leading-none">{u.emoji ?? "🛒"}</span>
                 <span
                   className={`rounded-hap px-2 py-0.5 text-[10px] font-black uppercase tracking-wide ${
                     u.stok > 0
-                      ? "bg-duman text-gri"
+                      ? "bg-yuzey2 text-gri"
                       : "bg-kirmizi-sis text-kirmizi-koyu"
                   }`}
                 >
@@ -313,9 +313,9 @@ export function Etiket({
   ton?: "notr" | "kirmizi" | "siyah";
 }) {
   const stiller = {
-    notr: "bg-duman text-gri",
+    notr: "bg-yuzey2 text-gri",
     kirmizi: "bg-kirmizi text-white",
-    siyah: "bg-siyah text-white",
+    siyah: "bg-kontrast text-white",
   };
   return (
     <span
@@ -339,7 +339,7 @@ function Cip({
     <button
       onClick={onClick}
       className={`shrink-0 rounded-hap px-3.5 py-1.5 text-[13px] font-bold transition-colors ${
-        aktif ? "bg-siyah text-white" : "bg-duman text-gri hover:bg-cizgi"
+        aktif ? "bg-kontrast text-white" : "bg-yuzey2 text-gri hover:bg-cizgi"
       }`}
     >
       {children}
@@ -358,7 +358,7 @@ export function KalemListesi({
   }[];
 }) {
   return (
-    <ul className="divide-y divide-cizgi overflow-hidden rounded-[20px] border border-cizgi bg-white">
+    <ul className="divide-y divide-cizgi overflow-hidden rounded-[20px] border border-cizgi bg-yuzey">
       {kalemler.map((k) => {
         const fiyat = k.birim_fiyat ?? k.urun?.fiyat ?? 0;
         return (

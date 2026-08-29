@@ -9,9 +9,15 @@
 
   --color-siyah: #0e0e11;
   --color-kurum: #1b1c21;
+
+  /* Temaya göre değişen anlamsal renkler */
+  --color-yuzey: #ffffff;
+  --color-yuzey2: #f6f6f8;
+  --color-metin: #0e0e11;
   --color-gri: #6b6f76;
   --color-cizgi: #e8e8ec;
   --color-duman: #f6f6f8;
+  --color-kontrast: #0e0e11;
 
   --color-yesil: #16a34a;
   --color-turuncu: #f59e0b;
@@ -34,6 +40,46 @@
 :root {
   color-scheme: light;
   --zemin: #ffffff;
+  --cam-zemin: #ffffff;
+  --cam-oran: 82%;
+
+  /* Teslimat durumu renkleri — karanlıkta okunur kalsınlar diye değişken */
+  --durum-bekliyor: #e30a17;
+  --durum-bekliyor-yazi: #ffffff;
+  --durum-hazirlaniyor: #f59e0b;
+  --durum-hazirlaniyor-yazi: #ffffff;
+  --durum-yolda: #111114;
+  --durum-yolda-yazi: #ffffff;
+  --durum-teslim: #16a34a;
+  --durum-teslim-yazi: #ffffff;
+  --durum-iptal: #9ca3af;
+  --durum-iptal-yazi: #ffffff;
+}
+
+/* Karanlık harita modu — tüm arayüz yüzeyleriyle birlikte */
+[data-tema="karanlik"] {
+  color-scheme: dark;
+  --zemin: #101216;
+  --cam-zemin: #16181d;
+  --cam-oran: 78%;
+
+  --color-yuzey: #16181d;
+  --color-yuzey2: #1e2128;
+  --color-metin: #eef0f3;
+  --color-gri: #9aa1ab;
+  --color-cizgi: #2a2e36;
+  --color-duman: #1e2128;
+  --color-kontrast: #333844;
+  --color-kirmizi-sis: #2a1418;
+  --color-kirmizi-acik: #ff5a67;
+
+  /* Siyah "yolda" rozeti karanlıkta kaybolmasın diye tersine çevrilir. */
+  --durum-yolda: #e9ecf1;
+  --durum-yolda-yazi: #101216;
+  --durum-iptal: #6b7280;
+
+  --shadow-yumusak: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px -8px rgb(0 0 0 / 0.6);
+  --shadow-yuzen: 0 2px 6px rgb(0 0 0 / 0.45), 0 18px 48px -12px rgb(0 0 0 / 0.7);
 }
 
 * {
@@ -48,7 +94,7 @@ body {
 
 body {
   background: var(--zemin);
-  color: var(--color-siyah);
+  color: var(--color-metin);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -73,7 +119,7 @@ body {
 
 /* ---------- Cam yüzeyler ---------- */
 .cam {
-  background: color-mix(in srgb, #ffffff 82%, transparent);
+  background: color-mix(in srgb, var(--cam-zemin) var(--cam-oran), transparent);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
 }
@@ -118,9 +164,9 @@ body {
 .iskelet {
   background: linear-gradient(
     90deg,
-    var(--color-duman) 25%,
-    #ececed 50%,
-    var(--color-duman) 75%
+    var(--color-yuzey2) 25%,
+    color-mix(in srgb, var(--color-yuzey2) 80%, var(--color-gri)) 50%,
+    var(--color-yuzey2) 75%
   );
   background-size: 220% 100%;
   animation: parilti 1.4s linear infinite;
@@ -135,7 +181,7 @@ body {
 /* ---------- MapLibre üzerine marka dokunuşu ---------- */
 .maplibregl-ctrl-attrib {
   font-size: 10px !important;
-  background: color-mix(in srgb, #ffffff 76%, transparent) !important;
+  background: color-mix(in srgb, var(--cam-zemin) 76%, transparent) !important;
   backdrop-filter: blur(8px);
   border-radius: 999px 0 0 0 !important;
   padding: 2px 8px !important;

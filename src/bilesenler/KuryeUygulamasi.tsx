@@ -25,6 +25,7 @@ import {
   siradakiAdim,
   type RotaSecenegi,
 } from "@/lib/navigasyon";
+import { adimCumlesi, konus, sesiKes } from "@/lib/ses";
 import { abonelikBugunMu, sepetToplami } from "@/lib/veri";
 import { para } from "@/lib/bicim";
 import type {
@@ -48,6 +49,21 @@ const SEKMELER: { anahtar: Sekme; ad: string }[] = [
 ];
 
 const AKTIF_DURUMLAR: SiparisDurumu[] = ["bekliyor", "hazirlaniyor", "yolda"];
+
+const TERCIH_ANAHTARI = "sultan-tercih";
+
+/**
+ * Kayıtlı tercihler. Sunucuda boş döner; bu değerler yalnızca açılışta
+ * kapalı olan panellerde kullanıldığı için hidrasyon uyuşmazlığı doğurmaz.
+ */
+function tercihOku(): { karanlik?: boolean; ses?: boolean } {
+  if (typeof window === "undefined") return {};
+  try {
+    return JSON.parse(localStorage.getItem(TERCIH_ANAHTARI) ?? "{}");
+  } catch {
+    return {};
+  }
+}
 
 type Props = {
   kurye: Kurye | null;
@@ -81,12 +97,13 @@ export default function KuryeUygulamasi({
   const [rota, setRota] = useState<RotaSonucu | null>(null);
   const [rotaHesapla, setRotaHesapla] = useState(false);
 
-  const [katmanlar, setKatmanlar] = useState<Katmanlar>({
+  const [katmanlar, setKatmanlar] = useState<Katmanlar>(() => ({
     abonelikler: true,
     teslimEdilenler: false,
     ucBoyut: true,
     isiHaritasi: false,
-  });
+    karanlik: tercihOku().karanlik ?? false,
+  }));
   const [katmanPaneli, setKatmanPaneli] = useState(false);
 
   const [kuryeKonumu, setKuryeKonumu] = useState<Nokta | null>(null);
@@ -100,12 +117,22 @@ export default function KuryeUygulamasi({
   const [navSeciliId, setNavSeciliId] = useState<string | null>(null);
   const [navYukleniyor, setNavYukleniyor] = useState(false);
   const [navAdimIndeks, setNavAdimIndeks] = useState(0);
+  const [navTakip, setNavTakip] = useState(true);
+  const [sesAcik, setSesAcik] = useState(() => tercihOku().ses ?? true);
 
   // Konum geri çağırımı içinden güncel navigasyon durumuna erişmek için.
-  const navRef = useRef<{ durum: NavigasyonDurumu; secenek: RotaSecenegi | null }>({
-    durum: "secim",
-    secenek: null,
+  const navRef = useRef<{
+    durum: NavigasyonDurumu;
+    secenek: RotaSecenegi | null;
+    takip: boolean;
+  }>({ durum: "secim", secenek: null, takip: true });
+  /** Hangi adım için hangi uyarının seslendirildiğini tutar. */
+  const seslendirilenRef = useRef<{ adim: number; yakin: boolean }>({
+    adim: -1,
+    yakin: false,
   });
+  const navAdimRef = useRef(0);
+  const sesRef = useRef(true);
 
   const [konumDuzeltme, setKonumDuzeltme] = useState<string | null>(null);
   const [islemde, setIslemde] = useState(false);
@@ -141,6 +168,21 @@ export default function KuryeUygulamasi({
         (rotaSirasi.get(a.id) ?? 999) - (rotaSirasi.get(b.id) ?? 999),
     );
   }, [teslimatlar, katmanlar.teslimEdilenler, rotaSirasi]);
+
+  /* Temayı belgeye yansıt ve tercihleri sakla. */
+  useEffect(() => {
+    document.documentElement.dataset.tema = katmanlar.karanlik
+      ? "karanlik"
+      : "aydinlik";
+    try {
+      localStorage.setItem(
+        TERCIH_ANAHTARI,
+        JSON.stringify({ karanlik: katmanlar.karanlik, ses: sesAcik }),
+      );
+    } catch {
+      /* depolama kapalıysa yok say */
+    }
+  }, [katmanlar.karanlik, sesAcik]);
 
   /* ------------------------- Bildirim ------------------------- */
   const uyar = useCallback((mesaj: string) => {
@@ -178,6 +220,40 @@ export default function KuryeUygulamasi({
     };
   }, [db, teslimatlariTazele]);
 
+  /* ------------------------- Sesli tarif ------------------------- */
+  useEffect(() => {
+    sesRef.current = sesAcik;
+    if (!sesAcik) sesiKes();
+  }, [sesAcik]);
+
+  const seslendir = useCallback(
+    (
+      secenek: RotaSecenegi,
+      indeks: number,
+      konum: Nokta,
+      adimDegisti: boolean,
+    ) => {
+      if (!sesRef.current) return;
+      const adim = secenek.adimlar[indeks];
+      if (!adim) return;
+
+      const mesafe = haversine(konum, adim.nokta);
+      const onceki = seslendirilenRef.current;
+
+      // Yeni manevraya geçildiğinde bir kez, manevraya yaklaşınca bir kez daha.
+      if (adimDegisti || onceki.adim !== indeks) {
+        seslendirilenRef.current = { adim: indeks, yakin: mesafe < 90 };
+        konus(adimCumlesi(adim, mesafe));
+        return;
+      }
+      if (!onceki.yakin && mesafe < 90) {
+        seslendirilenRef.current = { adim: indeks, yakin: true };
+        konus(adimCumlesi(adim, mesafe));
+      }
+    },
+    [],
+  );
+
   /* ------------------------- Canlı konum ------------------------- */
   useEffect(() => {
     if (!("geolocation" in navigator)) return;
@@ -197,10 +273,18 @@ export default function KuryeUygulamasi({
         if (yon != null) setKuryeYonu(yon);
 
         // Sürüş modunda sıradaki manevraya geç ve kamerayı kuryeye kilitle.
-        const { durum: navD, secenek } = navRef.current;
+        const { durum: navD, secenek, takip } = navRef.current;
         if (navD === "surus" && secenek) {
-          setNavAdimIndeks((o) => siradakiAdim(secenek.adimlar, o, nokta));
-          haritaApi.current?.surusKamerasi(nokta, yon ?? 0);
+          const yeniAdim = siradakiAdim(
+            secenek.adimlar,
+            navAdimRef.current,
+            nokta,
+          );
+          const adimDegisti = yeniAdim !== navAdimRef.current;
+          navAdimRef.current = yeniAdim;
+          setNavAdimIndeks(yeniAdim);
+          seslendir(secenek, yeniAdim, nokta, adimDegisti);
+          if (takip) haritaApi.current?.surusKamerasi(nokta, yon ?? 0);
         }
 
         const simdi = Date.now();
@@ -225,7 +309,7 @@ export default function KuryeUygulamasi({
     );
 
     return () => navigator.geolocation.clearWatch(izleyici);
-  }, [db, kurye]);
+  }, [db, kurye, seslendir]);
 
   /* İlk açılışta teslimatlara odaklan */
   const ilkOdakRef = useRef(false);
@@ -249,7 +333,7 @@ export default function KuryeUygulamasi({
   const navAdim = navSecili?.adimlar[navAdimIndeks] ?? null;
 
   useEffect(() => {
-    navRef.current = { durum: navDurum, secenek: navSecili };
+    navRef.current = { durum: navDurum, secenek: navSecili, takip: navTakip };
   });
 
   const navHedefNokta = useMemo<Nokta | null>(
@@ -285,6 +369,9 @@ export default function KuryeUygulamasi({
     setNavHedef(siparis);
     setNavDurum("secim");
     setNavAdimIndeks(0);
+    navAdimRef.current = 0;
+    seslendirilenRef.current = { adim: -1, yakin: false };
+    setNavTakip(true);
     setNavSecenekler([]);
     setNavSeciliId(null);
     setNavYukleniyor(true);
@@ -314,22 +401,41 @@ export default function KuryeUygulamasi({
   }
 
   function navigasyonuKapat() {
+    sesiKes();
     setNavHedef(null);
     setNavSecenekler([]);
     setNavSeciliId(null);
     setNavDurum("secim");
     setNavAdimIndeks(0);
+    navAdimRef.current = 0;
+    setNavTakip(true);
   }
 
   function surusuBaslat() {
     if (!navSecili) return;
     setNavDurum("surus");
     setNavAdimIndeks(0);
+    navAdimRef.current = 0;
+    seslendirilenRef.current = { adim: -1, yakin: false };
+    setNavTakip(true);
+
     const nokta = kuryeKonumu ?? {
       lat: navSecili.geometri[0][1],
       lng: navSecili.geometri[0][0],
     };
     haritaApi.current?.surusKamerasi(nokta, kuryeYonu ?? aci.bearing);
+
+    // İlk yönergeyi hemen söyle — kullanıcı dokunuşu sesi de yetkilendirir.
+    if (sesRef.current && navSecili.adimlar[0]) {
+      konus(adimCumlesi(navSecili.adimlar[0], navSecili.adimlar[0].mesafeM));
+      seslendirilenRef.current = { adim: 0, yakin: false };
+    }
+  }
+
+  /** Kamerayı yeniden kuryeye kilitler. */
+  function takibeDon() {
+    setNavTakip(true);
+    if (kuryeKonumu) haritaApi.current?.surusKamerasi(kuryeKonumu, kuryeYonu ?? 0);
   }
 
   function hariciNavigasyon() {
@@ -501,7 +607,7 @@ export default function KuryeUygulamasi({
   const toplamTahsilat = aktifTeslimatlar.reduce((t, s) => t + s.tutar, 0);
 
   return (
-    <main className="relative h-dvh w-full overflow-hidden bg-duman">
+    <main className="relative h-dvh w-full overflow-hidden bg-yuzey2">
       <Harita
         ref={haritaApi}
         teslimatlar={teslimatlar}
@@ -517,6 +623,10 @@ export default function KuryeUygulamasi({
         kuryeYonu={kuryeYonu}
         onSecim={pinSecildi}
         onSecenekSec={setNavSeciliId}
+        onKullaniciHareketi={() => {
+          if (navRef.current.durum === "surus") setNavTakip(false);
+          setKonumTakibi(false);
+        }}
         onHaritaTikla={konumDuzeltme ? konumuKaydet : undefined}
         onAciDegisti={(bearing, pitch) => setAci({ bearing, pitch })}
         onHazir={haritaHazir}
@@ -529,7 +639,7 @@ export default function KuryeUygulamasi({
         transition={{ type: "spring", stiffness: 320, damping: 30 }}
         className="pointer-events-none absolute inset-x-0 top-0 z-20 p-3 pt-[calc(env(safe-area-inset-top)+12px)]"
       >
-        <div className="pointer-events-auto flex items-center gap-2.5 rounded-[22px] border border-cizgi bg-white/85 p-2 pr-3 shadow-yumusak backdrop-blur-2xl">
+        <div className="pointer-events-auto flex items-center gap-2.5 rounded-[22px] border border-cizgi bg-yuzey/85 p-2 pr-3 shadow-yumusak backdrop-blur-2xl">
           <MarkaIsareti boyut={38} />
           <div className="min-w-0 flex-1">
             <p className="truncate text-[13px] font-extrabold leading-tight">
@@ -547,7 +657,7 @@ export default function KuryeUygulamasi({
             className={`rounded-hap px-3 py-1.5 text-[11px] font-black uppercase tracking-wide transition-colors ${
               kurye?.vardiyada
                 ? "bg-kirmizi text-white"
-                : "bg-duman text-gri hover:bg-cizgi"
+                : "bg-yuzey2 text-gri hover:bg-cizgi"
             }`}
           >
             {kurye?.vardiyada ? "Vardiyada" : "Mola"}
@@ -555,7 +665,7 @@ export default function KuryeUygulamasi({
           <button
             onClick={cikis}
             aria-label="Çıkış"
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-duman text-gri transition-colors hover:bg-cizgi"
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-yuzey2 text-gri transition-colors hover:bg-cizgi"
           >
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
               <path
@@ -598,7 +708,7 @@ export default function KuryeUygulamasi({
             initial={{ y: -20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: -20, opacity: 0 }}
-            className="absolute inset-x-3 top-[calc(env(safe-area-inset-top)+80px)] z-20 flex items-center gap-3 rounded-[20px] border border-siyah/10 bg-siyah/92 p-3 text-white shadow-yuzen backdrop-blur-xl"
+            className="absolute inset-x-3 top-[calc(env(safe-area-inset-top)+80px)] z-20 flex items-center gap-3 rounded-[20px] border border-kontrast/10 bg-kontrast/92 p-3 text-white shadow-yuzen backdrop-blur-xl"
           >
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-kirmizi text-sm font-black">
               {rota.sira.length}
@@ -623,7 +733,7 @@ export default function KuryeUygulamasi({
             <button
               onClick={() => setRota(null)}
               aria-label="Rotayı kapat"
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white/70"
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-yuzey/10 text-white/70"
             >
               ×
             </button>
@@ -646,7 +756,7 @@ export default function KuryeUygulamasi({
             </p>
             <button
               onClick={() => setKonumDuzeltme(null)}
-              className="rounded-hap bg-white/20 px-3 py-1.5 text-[12px] font-black"
+              className="rounded-hap bg-yuzey/20 px-3 py-1.5 text-[12px] font-black"
             >
               Vazgeç
             </button>
@@ -662,7 +772,7 @@ export default function KuryeUygulamasi({
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 60, opacity: 0 }}
             transition={{ type: "spring", stiffness: 400, damping: 34 }}
-            className="absolute inset-x-3 bottom-4 z-40 flex items-center gap-2 rounded-[22px] bg-siyah p-2 pl-4 text-white shadow-yuzen"
+            className="absolute inset-x-3 bottom-4 z-40 flex items-center gap-2 rounded-[22px] bg-kontrast p-2 pl-4 text-white shadow-yuzen"
           >
             <p className="flex-1 text-[13px] font-extrabold">
               {secilenler.length} durak seçildi
@@ -672,7 +782,7 @@ export default function KuryeUygulamasi({
                 setSecimModu(false);
                 setSecilenler([]);
               }}
-              className="rounded-hap bg-white/10 px-3.5 py-2.5 text-[12px] font-bold"
+              className="rounded-hap bg-yuzey/10 px-3.5 py-2.5 text-[12px] font-bold"
             >
               Vazgeç
             </button>
@@ -694,7 +804,7 @@ export default function KuryeUygulamasi({
             initial={{ y: 24, opacity: 0, scale: 0.95 }}
             animate={{ y: 0, opacity: 1, scale: 1 }}
             exit={{ y: 24, opacity: 0, scale: 0.95 }}
-            className="pointer-events-none absolute inset-x-0 bottom-32 z-50 mx-auto w-fit rounded-hap bg-siyah px-4 py-2.5 text-[13px] font-bold text-white shadow-yuzen"
+            className="pointer-events-none absolute inset-x-0 bottom-32 z-50 mx-auto w-fit rounded-hap bg-kontrast px-4 py-2.5 text-[13px] font-bold text-white shadow-yuzen"
           >
             {bildirim}
           </motion.div>
@@ -716,6 +826,10 @@ export default function KuryeUygulamasi({
             kalanMesafeM={navKalan.mesafeM}
             kalanSureSn={navKalan.sureSn}
             vardi={navVardi}
+            takipAcik={navTakip}
+            sesAcik={sesAcik}
+            onTakip={takibeDon}
+            onSes={() => setSesAcik((o) => !o)}
             onSecenek={setNavSeciliId}
             onBasla={surusuBaslat}
             onBitir={navigasyonuKapat}
@@ -746,14 +860,14 @@ export default function KuryeUygulamasi({
                     if (panel === "kapali") setPanel("yari");
                   }}
                   className={`relative shrink-0 rounded-hap px-3.5 py-2 text-[13px] font-bold transition-colors ${
-                    sekme === s.anahtar ? "text-white" : "text-gri hover:bg-duman"
+                    sekme === s.anahtar ? "text-white" : "text-gri hover:bg-yuzey2"
                   }`}
                 >
                   {sekme === s.anahtar && (
                     <motion.span
                       layoutId="sekme-arka"
                       transition={{ type: "spring", stiffness: 420, damping: 34 }}
-                      className="absolute inset-0 rounded-hap bg-siyah"
+                      className="absolute inset-0 rounded-hap bg-kontrast"
                     />
                   )}
                   <span className="relative">{s.ad}</span>

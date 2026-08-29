@@ -22,6 +22,7 @@ const KATMAN_ETIKET: Record<keyof Katmanlar, { ad: string; ikon: string }> = {
   teslimEdilenler: { ad: "Teslim edilenler", ikon: "✓" },
   ucBoyut: { ad: "3B binalar", ikon: "◪" },
   isiHaritasi: { ad: "Talep ısı haritası", ikon: "◍" },
+  karanlik: { ad: "Karanlık harita", ikon: "◐" },
 };
 
 export default function HaritaKontrolleri({
@@ -50,7 +51,7 @@ export default function HaritaKontrolleri({
             transition={{ type: "spring", stiffness: 380, damping: 26 }}
             onClick={onPusula}
             aria-label="Kuzeye döndür"
-            className="pointer-events-auto flex h-11 w-11 items-center justify-center rounded-full border border-cizgi bg-white/85 shadow-yumusak backdrop-blur-xl active:scale-95"
+            className="pointer-events-auto flex h-11 w-11 items-center justify-center rounded-full border border-cizgi bg-yuzey/85 shadow-yumusak backdrop-blur-xl active:scale-95"
           >
             <motion.svg
               width="20"
@@ -60,7 +61,7 @@ export default function HaritaKontrolleri({
               transition={{ type: "spring", stiffness: 200, damping: 22 }}
             >
               <path d="M12 3 L15.6 13 L12 11 L8.4 13 Z" fill="#e30a17" />
-              <path d="M12 21 L8.4 11 L12 13 L15.6 11 Z" fill="#0e0e11" />
+              <path d="M12 21 L8.4 11 L12 13 L15.6 11 Z" fill="currentColor" />
             </motion.svg>
           </motion.button>
         )}
@@ -156,7 +157,7 @@ export default function HaritaKontrolleri({
             animate={{ opacity: 1, scale: 1, x: 0 }}
             exit={{ opacity: 0, scale: 0.9, x: 16 }}
             transition={{ type: "spring", stiffness: 340, damping: 28 }}
-            className="pointer-events-auto w-60 origin-top-right rounded-3xl border border-cizgi bg-white/90 p-2 shadow-yuzen backdrop-blur-2xl"
+            className="pointer-events-auto w-60 origin-top-right rounded-3xl border border-cizgi bg-yuzey/90 p-2 shadow-yuzen backdrop-blur-2xl"
           >
             <p className="px-3 pb-1.5 pt-2 text-[11px] font-bold uppercase tracking-wider text-gri">
               Harita katmanları
@@ -165,7 +166,7 @@ export default function HaritaKontrolleri({
               <button
                 key={k}
                 onClick={() => onKatman(k)}
-                className="flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition-colors hover:bg-duman"
+                className="flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition-colors hover:bg-yuzey2"
               >
                 <span className="w-5 text-center text-[15px] text-gri">
                   {KATMAN_ETIKET[k].ikon}
@@ -181,7 +182,7 @@ export default function HaritaKontrolleri({
                   <motion.span
                     layout
                     transition={{ type: "spring", stiffness: 520, damping: 32 }}
-                    className="absolute top-0.5 h-5 w-5 rounded-full bg-white shadow"
+                    className="absolute top-0.5 h-5 w-5 rounded-full bg-yuzey shadow"
                     style={{ left: katmanlar[k] ? 18 : 2 }}
                   />
                 </span>
@@ -196,7 +197,7 @@ export default function HaritaKontrolleri({
 
 function Kume({ children }: { children: React.ReactNode }) {
   return (
-    <div className="pointer-events-auto overflow-hidden rounded-[18px] border border-cizgi bg-white/85 shadow-yumusak backdrop-blur-xl">
+    <div className="pointer-events-auto overflow-hidden rounded-[18px] border border-cizgi bg-yuzey/85 shadow-yumusak backdrop-blur-xl">
       {children}
     </div>
   );
@@ -221,7 +222,7 @@ function Dugme({
       aria-label={etiket}
       title={etiket}
       className={`relative flex h-11 w-11 items-center justify-center transition-colors active:scale-90 ${
-        aktif ? "bg-kirmizi text-white" : "text-siyah hover:bg-duman"
+        aktif ? "bg-kirmizi text-white" : "text-metin hover:bg-yuzey2"
       }`}
     >
       {children}

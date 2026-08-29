@@ -105,6 +105,9 @@ drop policy "muhasebe kilidi" on public.profiles;
 
 - **Harita:** 3B eğim/döndürme, pusula, akıcı `flyTo` geçişleri, pin kümeleme,
   talep ısı haritası, 3B binalar, katman anahtarları.
+- **Karanlık harita:** katman panelindeki anahtar hem harita paletini hem tüm
+  arayüz yüzeylerini gece moduna alır; tercih `localStorage`'a yazılır.
+  Karanlıkta kaybolacak siyah "yolda" rozeti ve pini otomatik ters çevrilir.
 - **Pin renkleri:** kırmızı = bekliyor, turuncu = hazırlanıyor, siyah = yolda,
   yeşil = teslim, gri = iptal. Bekleyen ve yoldaki teslimatlar nabız atar.
 - **Alt panel** (sürüklenebilir, 3 kademeli): Teslimatlar · Abonelikler ·
@@ -224,5 +227,8 @@ restart identity cascade;
 - OpenFreeMap'te trafik katmanı ve Street View yoktur. Bunlar gerekiyorsa
   `NEXT_PUBLIC_HARITA_STILI` değiştirilip harita sağlayıcısı Google/Mapbox'a
   taşınabilir; uygulama içindeki harita kodu tek dosyada (`src/bilesenler/Harita.tsx`).
+- Sesli tarif tarayıcının `speechSynthesis` desteğine bağlıdır. Cihazda
+  Türkçe ses paketi yoksa sistem varsayılanı okur; hiç destek yoksa sessiz
+  kalır, uygulama çalışmaya devam eder.
 - Supabase'de "Leaked password protection" kapalı — Dashboard → Authentication
   → Policies bölümünden açmanız önerilir.

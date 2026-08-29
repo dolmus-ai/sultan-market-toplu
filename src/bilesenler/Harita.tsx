@@ -20,7 +20,8 @@ import {
   ucBoyutluBinalarEkle,
   ucBoyutluBinalariGoster,
 } from "@/lib/harita-stili";
-import { DURUM_RENK } from "@/lib/bicim";
+import { haritaDurumRengi } from "@/lib/bicim";
+import type { Tema } from "@/lib/harita-stili";
 import { MARKET } from "@/lib/market";
 import type { RotaSecenegi } from "@/lib/navigasyon";
 import type { Nokta, RotaSonucu, Siparis, Abonelik } from "@/lib/tipler";
@@ -30,6 +31,7 @@ export type Katmanlar = {
   teslimEdilenler: boolean;
   ucBoyut: boolean;
   isiHaritasi: boolean;
+  karanlik: boolean;
 };
 
 export type HaritaApi = {
@@ -60,6 +62,8 @@ type Props = {
   kuryeYonu: number | null;
   onSecim: (id: string) => void;
   onSecenekSec?: (id: string) => void;
+  /** Kurye haritayı eliyle kaydırdığında — takip kilidini bırakmak için. */
+  onKullaniciHareketi?: () => void;
   onHaritaTikla?: (nokta: Nokta) => void;
   onAciDegisti?: (bearing: number, pitch: number) => void;
   onHazir?: () => void;
@@ -503,6 +507,7 @@ export default function Harita({
   kuryeYonu,
   onSecim,
   onSecenekSec,
+  onKullaniciHareketi,
   onHaritaTikla,
   onAciDegisti,
   onHazir,
@@ -517,10 +522,13 @@ export default function Harita({
   const secimRef = useRef(onSecim);
   const tiklamaRef = useRef(onHaritaTikla);
   const secenekRef = useRef(onSecenekSec);
+  const temaRef = useRef<Tema>(katmanlar.karanlik ? "karanlik" : "aydinlik");
+  const onKullaniciHareketiRef = useRef(onKullaniciHareketi);
   useEffect(() => {
     secimRef.current = onSecim;
     tiklamaRef.current = onHaritaTikla;
     secenekRef.current = onSecenekSec;
+    onKullaniciHareketiRef.current = onKullaniciHareketi;
   });
 
   /* ---------------- Haritayı kur ---------------- */
@@ -557,6 +565,13 @@ export default function Harita({
         );
       }
 
+      for (const olay of ["dragstart", "zoomstart", "rotatestart"] as const) {
+        harita.on(olay, (e: { originalEvent?: unknown }) => {
+          // Yalnızca elle yapılan hareketler takibi bırakır.
+          if (e?.originalEvent) onKullaniciHareketiRef.current?.();
+        });
+      }
+
       harita.on("rotate", () =>
         onAciDegisti?.(harita.getBearing(), harita.getPitch()),
       );
@@ -568,7 +583,7 @@ export default function Harita({
       // ayrıştırılır ayrıştırılmaz kuruyoruz.
       const kur = () => {
         if (iptal || hazirRef.current || !harita.getStyle()?.layers) return;
-        markaStiliUygula(harita);
+        markaStiliUygula(harita, temaRef.current);
         ucBoyutluBinalarEkle(harita);
         katmanlariKur(harita, secimRef, tiklamaRef, secenekRef);
         marketiIsaretle(harita);
@@ -605,6 +620,7 @@ export default function Harita({
 
     const sirali = new Map(rota?.sira.map((id, i) => [id, i + 1]) ?? []);
     const secilenKume = new Set(secilenler);
+    const renkler = haritaDurumRengi(katmanlar.karanlik);
 
     const ozellikler: GeoJSON.Feature[] = teslimatlar
       .filter((s) => noktaVar(s.adres))
@@ -618,17 +634,33 @@ export default function Harita({
         properties: {
           id: s.id,
           durum: s.durum,
-          renk: DURUM_RENK[s.durum],
+          renk: renkler[s.durum],
           ad: s.musteri?.ad ?? "Müşteri",
           sira: sirali.has(s.id) ? String(sirali.get(s.id)) : "",
           secili: secilenKume.has(s.id) || seciliId === s.id,
+          cerceve:
+            secilenKume.has(s.id) || seciliId === s.id
+              ? katmanlar.karanlik
+                ? "#ffffff"
+                : "#0e0e11"
+              : katmanlar.karanlik
+                ? "#101216"
+                : "#ffffff",
           aktif: seciliId === s.id,
         },
       }));
 
     kaynak.setData({ type: "FeatureCollection", features: ozellikler });
     yogunluk?.setData({ type: "FeatureCollection", features: ozellikler });
-  }, [hazir, teslimatlar, seciliId, secilenler, rota, katmanlar.teslimEdilenler]);
+  }, [
+    hazir,
+    teslimatlar,
+    seciliId,
+    secilenler,
+    rota,
+    katmanlar.teslimEdilenler,
+    katmanlar.karanlik,
+  ]);
 
   useEffect(() => {
     const harita = haritaRef.current;
@@ -687,6 +719,47 @@ export default function Harita({
         })),
     });
   }, [hazir, navigasyonSecenekleri, seciliSecenekId]);
+
+  /* Tema değişince harita paletini yeniden uygula. */
+  useEffect(() => {
+    const tema: Tema = katmanlar.karanlik ? "karanlik" : "aydinlik";
+    temaRef.current = tema;
+    const harita = haritaRef.current;
+    if (!harita || !hazirRef.current) return;
+
+    markaStiliUygula(harita, tema);
+
+    // Kendi katmanlarımızın kontrastını da çevir.
+    const karanlik = tema === "karanlik";
+    if (harita.getLayer("teslimat-etiket")) {
+      harita.setPaintProperty(
+        "teslimat-etiket",
+        "text-color",
+        karanlik ? "#eef0f3" : "#0e0e11",
+      );
+      harita.setPaintProperty(
+        "teslimat-etiket",
+        "text-halo-color",
+        karanlik ? "#101216" : "#ffffff",
+      );
+    }
+    for (const katman of ["abonelik-halka", "kume"]) {
+      if (harita.getLayer(katman)) {
+        harita.setPaintProperty(
+          katman,
+          "circle-stroke-color",
+          karanlik ? "#e9ecf1" : "#ffffff",
+        );
+      }
+    }
+    if (harita.getLayer("abonelik-halka")) {
+      harita.setPaintProperty(
+        "abonelik-halka",
+        "circle-color",
+        karanlik ? "#101216" : "#ffffff",
+      );
+    }
+  }, [hazir, katmanlar.karanlik]);
 
   /* ---------------- Katman görünürlüğü ---------------- */
   useEffect(() => {

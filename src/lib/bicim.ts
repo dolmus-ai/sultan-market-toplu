@@ -30,13 +30,48 @@ export const DURUM_ETIKET: Record<SiparisDurumu, string> = {
   iptal: "İptal",
 };
 
-/** Harita pinleri ve rozetler için durum rengi. */
+/** Harita pinleri için durum rengi (aydınlık tema). */
 export const DURUM_RENK: Record<SiparisDurumu, string> = {
   bekliyor: "#E30A17",
   hazirlaniyor: "#F59E0B",
   yolda: "#111114",
   teslim: "#16A34A",
   iptal: "#9CA3AF",
+};
+
+/** Karanlık haritada siyah pin kaybolduğu için ters çevrilmiş palet. */
+export const DURUM_RENK_KARANLIK: Record<SiparisDurumu, string> = {
+  ...DURUM_RENK,
+  yolda: "#E9ECF1",
+  iptal: "#6B7280",
+};
+
+export function haritaDurumRengi(karanlik: boolean) {
+  return karanlik ? DURUM_RENK_KARANLIK : DURUM_RENK;
+}
+
+/**
+ * Arayüz rozetleri için tema değişkenleri — CSS tarafında çevrildiği için
+ * bileşenlere tema bilgisi taşımaya gerek kalmaz.
+ */
+export const DURUM_STIL: Record<
+  SiparisDurumu,
+  { background: string; color: string }
+> = {
+  bekliyor: {
+    background: "var(--durum-bekliyor)",
+    color: "var(--durum-bekliyor-yazi)",
+  },
+  hazirlaniyor: {
+    background: "var(--durum-hazirlaniyor)",
+    color: "var(--durum-hazirlaniyor-yazi)",
+  },
+  yolda: { background: "var(--durum-yolda)", color: "var(--durum-yolda-yazi)" },
+  teslim: {
+    background: "var(--durum-teslim)",
+    color: "var(--durum-teslim-yazi)",
+  },
+  iptal: { background: "var(--durum-iptal)", color: "var(--durum-iptal-yazi)" },
 };
 
 export const ODEME_ETIKET: Record<OdemeYontemi, string> = {

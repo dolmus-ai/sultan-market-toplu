@@ -62,7 +62,7 @@ export default function AltPanel({ durum, onDurum, baslik, children }: Props) {
       animate={{ y: duraklar[durum] }}
       transition={{ type: "spring", stiffness: 420, damping: 42, mass: 0.9 }}
       style={{ height: yukseklik }}
-      className="absolute inset-x-0 bottom-0 z-30 flex flex-col rounded-t-[28px] border-t border-cizgi bg-white/92 shadow-[0_-14px_50px_-16px_rgba(14,14,17,0.28)] backdrop-blur-2xl"
+      className="absolute inset-x-0 bottom-0 z-30 flex flex-col rounded-t-[28px] border-t border-cizgi bg-yuzey/92 shadow-[0_-14px_50px_-16px_rgba(14,14,17,0.28)] backdrop-blur-2xl"
     >
       {/* Tutamak + başlık: sürüklenebilir bölge */}
       <div

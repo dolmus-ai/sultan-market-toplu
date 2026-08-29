@@ -19,6 +19,11 @@ type Props = {
   kalanMesafeM: number;
   kalanSureSn: number;
   vardi: boolean;
+  /** Kamera kuryeyi takip ediyor mu? False ise "konuma dön" butonu çıkar. */
+  takipAcik: boolean;
+  sesAcik: boolean;
+  onTakip: () => void;
+  onSes: () => void;
   onSecenek: (id: string) => void;
   onBasla: () => void;
   onBitir: () => void;
@@ -37,6 +42,10 @@ export default function NavigasyonPaneli({
   kalanMesafeM,
   kalanSureSn,
   vardi,
+  takipAcik,
+  sesAcik,
+  onTakip,
+  onSes,
   onSecenek,
   onBasla,
   onBitir,
@@ -70,11 +79,35 @@ export default function NavigasyonPaneli({
             <button
               onClick={onBitir}
               aria-label="Navigasyonu bitir"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/20 text-lg font-bold"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-yuzey/20 text-lg font-bold"
             >
               ×
             </button>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Sol altta "konuma dön" — kurye haritayı elle kaydırınca belirir */}
+      <AnimatePresence>
+        {durum === "surus" && !takipAcik && (
+          <motion.button
+            key="takip"
+            initial={{ opacity: 0, scale: 0.6, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.6, y: 10 }}
+            transition={{ type: "spring", stiffness: 400, damping: 26 }}
+            onClick={onTakip}
+            aria-label="Konumuma dön"
+            title="Konumuma dön"
+            className="absolute bottom-[210px] left-4 z-40 flex h-14 w-14 items-center justify-center rounded-full border border-cizgi bg-yuzey/90 shadow-yuzen backdrop-blur-xl active:scale-95"
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+              <path
+                d="M4.5 11.2 20 4.5l-6.7 15.5-2-6.3-6.8-2.5Z"
+                fill="#e30a17"
+              />
+            </svg>
+          </motion.button>
         )}
       </AnimatePresence>
 
@@ -84,7 +117,7 @@ export default function NavigasyonPaneli({
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: 90, opacity: 0 }}
         transition={{ type: "spring", stiffness: 380, damping: 36 }}
-        className="absolute inset-x-0 bottom-0 z-40 rounded-t-[28px] border-t border-cizgi bg-white/95 px-4 pb-[calc(env(safe-area-inset-bottom)+16px)] pt-4 shadow-[0_-14px_50px_-16px_rgba(14,14,17,0.3)] backdrop-blur-2xl"
+        className="absolute inset-x-0 bottom-0 z-40 rounded-t-[28px] border-t border-cizgi bg-yuzey/95 px-4 pb-[calc(env(safe-area-inset-bottom)+16px)] pt-4 shadow-[0_-14px_50px_-16px_rgba(14,14,17,0.3)] backdrop-blur-2xl"
       >
         <div className="mb-3 flex items-start gap-3">
           <div className="min-w-0 flex-1">
@@ -102,7 +135,7 @@ export default function NavigasyonPaneli({
             <button
               onClick={onBitir}
               aria-label="Kapat"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-duman text-lg font-bold text-gri"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-yuzey2 text-lg font-bold text-gri"
             >
               ×
             </button>
@@ -154,7 +187,7 @@ export default function NavigasyonPaneli({
                     className={`shrink-0 rounded-2xl border px-3.5 py-2 text-left transition-colors ${
                       s.id === seciliId
                         ? "border-kirmizi bg-kirmizi-sis"
-                        : "border-cizgi bg-white hover:bg-duman"
+                        : "border-cizgi bg-yuzey hover:bg-yuzey2"
                     }`}
                   >
                     <span className="block text-[11px] font-black uppercase tracking-wide text-gri">
@@ -191,10 +224,22 @@ export default function NavigasyonPaneli({
                     Başla
                   </motion.button>
                   <button
+                    onClick={onSes}
+                    aria-label={sesAcik ? "Sesli tarifi kapat" : "Sesli tarifi aç"}
+                    title={sesAcik ? "Sesli tarifi kapat" : "Sesli tarifi aç"}
+                    className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-hap border transition-colors ${
+                      sesAcik
+                        ? "border-kirmizi bg-kirmizi text-white"
+                        : "border-cizgi bg-yuzey text-gri"
+                    }`}
+                  >
+                    <HoparlorIkonu acik={sesAcik} />
+                  </button>
+                  <button
                     onClick={onHariciAc}
                     aria-label="Harici harita uygulamasında aç"
                     title="Harici harita uygulamasında aç"
-                    className="flex h-14 w-14 shrink-0 items-center justify-center rounded-hap border border-cizgi bg-white"
+                    className="flex h-14 w-14 shrink-0 items-center justify-center rounded-hap border border-cizgi bg-yuzey"
                   >
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
                       <path
@@ -216,12 +261,25 @@ export default function NavigasyonPaneli({
                   ✓ Teslim ettim
                 </motion.button>
               ) : (
-                <button
-                  onClick={onBitir}
-                  className="flex h-14 flex-1 items-center justify-center rounded-hap border border-cizgi bg-white text-[15px] font-black"
-                >
-                  Navigasyonu bitir
-                </button>
+                <>
+                  <button
+                    onClick={onBitir}
+                    className="flex h-14 flex-1 items-center justify-center rounded-hap border border-cizgi bg-yuzey text-[15px] font-black"
+                  >
+                    Navigasyonu bitir
+                  </button>
+                  <button
+                    onClick={onSes}
+                    aria-label={sesAcik ? "Sesli tarifi kapat" : "Sesli tarifi aç"}
+                    className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-hap border transition-colors ${
+                      sesAcik
+                        ? "border-kirmizi bg-kirmizi text-white"
+                        : "border-cizgi bg-yuzey text-gri"
+                    }`}
+                  >
+                    <HoparlorIkonu acik={sesAcik} />
+                  </button>
+                </>
               )}
             </div>
           </>
@@ -232,6 +290,35 @@ export default function NavigasyonPaneli({
 }
 
 /* ------------------------------------------------------------------ */
+
+function HoparlorIkonu({ acik }: { acik: boolean }) {
+  return (
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none">
+      <path
+        d="M4 9.5h3.2L12 5.5v13l-4.8-4H4v-5Z"
+        fill="currentColor"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+      {acik ? (
+        <path
+          d="M15.5 9.2a4 4 0 0 1 0 5.6M18.2 6.6a7.6 7.6 0 0 1 0 10.8"
+          stroke="currentColor"
+          strokeWidth="1.9"
+          strokeLinecap="round"
+        />
+      ) : (
+        <path
+          d="m16 9.5 5 5m0-5-5 5"
+          stroke="currentColor"
+          strokeWidth="1.9"
+          strokeLinecap="round"
+        />
+      )}
+    </svg>
+  );
+}
 
 const DONUS_ACISI: Partial<Record<Manevra, number>> = {
   sol: -90,
@@ -247,14 +334,14 @@ const DONUS_ACISI: Partial<Record<Manevra, number>> = {
 function ManevraIkonu({ manevra }: { manevra: Manevra }) {
   if (manevra === "varis") {
     return (
-      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/20 text-2xl">
+      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-yuzey/20 text-2xl">
         📍
       </span>
     );
   }
   if (manevra === "gobek") {
     return (
-      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/20">
+      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-yuzey/20">
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
           <circle cx="12" cy="13" r="4.5" stroke="currentColor" strokeWidth="2" />
           <path
@@ -270,7 +357,7 @@ function ManevraIkonu({ manevra }: { manevra: Manevra }) {
   }
   if (manevra === "u-donusu") {
     return (
-      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/20">
+      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-yuzey/20">
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
           <path
             d="M8 21V10a4 4 0 0 1 8 0v11M4.5 13.5 8 10l3.5 3.5"
@@ -285,7 +372,7 @@ function ManevraIkonu({ manevra }: { manevra: Manevra }) {
   }
 
   return (
-    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/20">
+    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-yuzey/20">
       <svg
         width="26"
         height="26"

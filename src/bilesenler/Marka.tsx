@@ -27,7 +27,7 @@ export function MarkaIsareti({ boyut = 40 }: { boyut?: number }) {
 }
 
 export function MarkaYazi({ ton = "koyu" }: { ton?: "koyu" | "acik" }) {
-  const ana = ton === "koyu" ? "text-siyah" : "text-white";
+  const ana = ton === "koyu" ? "text-metin" : "text-white";
   return (
     <span className={`font-extrabold tracking-tight ${ana}`}>
       SULTAN<span className="text-kirmizi">.</span>

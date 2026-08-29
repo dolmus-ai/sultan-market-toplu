@@ -5,7 +5,7 @@ import { motion } from "motion/react";
 
 import {
   DURUM_ETIKET,
-  DURUM_RENK,
+  DURUM_STIL,
   ODEME_ETIKET,
   adresYaz,
   para,
@@ -69,8 +69,8 @@ export default function TeslimatDetay({
               {siparis.musteri?.ad ?? "Müşteri"}
             </h2>
             <span
-              className="rounded-hap px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wide text-white"
-              style={{ background: DURUM_RENK[siparis.durum] }}
+              className="rounded-hap px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wide"
+              style={DURUM_STIL[siparis.durum]}
             >
               {DURUM_ETIKET[siparis.durum]}
             </span>
@@ -80,7 +80,7 @@ export default function TeslimatDetay({
             {adres ? adresYaz(adres) : "Adres tanımsız"}
           </p>
           {adres?.tarif && (
-            <p className="mt-1.5 rounded-2xl bg-duman px-3 py-2 text-[13px] font-medium">
+            <p className="mt-1.5 rounded-2xl bg-yuzey2 px-3 py-2 text-[13px] font-medium">
               📍 {adres.tarif}
             </p>
           )}
@@ -88,7 +88,7 @@ export default function TeslimatDetay({
         <button
           onClick={onKapat}
           aria-label="Kapat"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-duman text-lg font-bold text-gri transition-colors hover:bg-cizgi"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-yuzey2 text-lg font-bold text-gri transition-colors hover:bg-cizgi"
         >
           ×
         </button>
@@ -116,7 +116,7 @@ export default function TeslimatDetay({
         {konumVar && (
           <button
             onClick={onNavigasyon}
-            className="flex h-12 flex-1 items-center justify-center gap-2 rounded-hap bg-siyah text-[14px] font-bold text-white active:scale-[0.98]"
+            className="flex h-12 flex-1 items-center justify-center gap-2 rounded-hap bg-kontrast text-[14px] font-bold text-white active:scale-[0.98]"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
               <path
@@ -132,7 +132,7 @@ export default function TeslimatDetay({
         {siparis.musteri?.telefon && (
           <a
             href={`tel:${siparis.musteri.telefon.replace(/\s/g, "")}`}
-            className="flex h-12 flex-1 items-center justify-center gap-2 rounded-hap border border-cizgi bg-white text-[14px] font-bold active:scale-[0.98]"
+            className="flex h-12 flex-1 items-center justify-center gap-2 rounded-hap border border-cizgi bg-yuzey text-[14px] font-bold active:scale-[0.98]"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
               <path
@@ -157,7 +157,7 @@ export default function TeslimatDetay({
 
       {/* Notlar */}
       {(siparis.notlar || siparis.musteri?.notlar) && (
-        <div className="rounded-[20px] border border-cizgi bg-white p-3.5">
+        <div className="rounded-[20px] border border-cizgi bg-yuzey p-3.5">
           <button
             onClick={() => setNotAcik(!notAcik)}
             className="flex w-full items-center justify-between text-[13px] font-bold"
@@ -193,7 +193,7 @@ export default function TeslimatDetay({
         )}
         <button
           onClick={onKonumDuzelt}
-          className="flex h-14 shrink-0 items-center justify-center rounded-hap border border-cizgi bg-white px-4 text-[13px] font-bold active:scale-[0.98]"
+          className="flex h-14 shrink-0 items-center justify-center rounded-hap border border-cizgi bg-yuzey px-4 text-[13px] font-bold active:scale-[0.98]"
         >
           Konumu düzelt
         </button>
@@ -214,7 +214,7 @@ function Kutu({
   return (
     <div
       className={`rounded-[18px] border p-3 ${
-        vurgu ? "border-kirmizi/25 bg-kirmizi-sis" : "border-cizgi bg-white"
+        vurgu ? "border-kirmizi/25 bg-kirmizi-sis" : "border-cizgi bg-yuzey"
       }`}
     >
       <p className="text-[10px] font-black uppercase tracking-wider text-gri">

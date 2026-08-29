@@ -15,7 +15,7 @@ import {
   TeslimatSatiri,
   UrunListesi,
 } from "./Listeler";
-import { MarkaIsareti } from "./Marka";
+import { SultanAmblem } from "./SultanLogo";
 
 import { tarayiciIstemcisi } from "@/lib/supabase/client";
 import { haversine, mesafeYaz, sureYaz } from "@/lib/rota";
@@ -641,7 +641,7 @@ export default function KuryeUygulamasi({
         className="pointer-events-none absolute inset-x-0 top-0 z-20 p-3 pt-[calc(env(safe-area-inset-top)+12px)]"
       >
         <div className="pointer-events-auto flex items-center gap-2.5 rounded-[22px] border border-cizgi bg-yuzey/85 p-2 pr-3 shadow-yumusak backdrop-blur-2xl">
-          <MarkaIsareti boyut={38} />
+          <SultanAmblem boyut={38} />
           <div className="min-w-0 flex-1">
             <p className="truncate text-[13px] font-extrabold leading-tight">
               {kurye?.ad || "Kurye"}

@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 
-import { MarkaIsareti } from "@/bilesenler/Marka";
+import { SultanAmblem } from "@/bilesenler/SultanLogo";
 
 /**
  * Çalışma anındaki bir hata tüm ekranı boş bırakmasın: kurye sahadayken
@@ -23,7 +23,7 @@ export default function Hata({
     <main className="flex min-h-dvh items-center justify-center bg-yuzey px-6">
       <div className="w-full max-w-sm rounded-[28px] border border-cizgi bg-yuzey p-8 text-center shadow-yuzen">
         <div className="mx-auto mb-5 w-fit">
-          <MarkaIsareti boyut={48} />
+          <SultanAmblem boyut={48} />
         </div>
         <h1 className="text-xl font-extrabold tracking-tight">
           Bir şeyler ters gitti

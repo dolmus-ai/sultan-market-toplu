@@ -9,7 +9,25 @@ yolu hesaplatır ve teslimat durumlarını sahadan günceller.
 - **Supabase** (`sultan-market` projesi) — auth, veri, realtime
 - **motion** ile geçişler
 
-Renk dili: beyaz zemin, kırmızı vurgu (`#e30a17`), siyah derinlik.
+Renk dili: beyaz zemin, kırmızı vurgu (`#e30a17`), lacivert/siyah derinlik —
+mağaza tabelasıyla aynı.
+
+### Marka
+
+Amblem ve tabela yazısı `src/bilesenler/SultanLogo.tsx` içinde tek dosyada,
+inline SVG olarak duruyor: lacivert "S" kıvrımı, tepesinde kırmızı küre,
+altında üç kırmızı damla. **Mağaza tabelasından okunarak yeniden çizildi**;
+elinizde orijinal vektör dosyası varsa bu dosyadaki `path`'leri değiştirmek
+yeterli — üst çubuk, giriş ekranı, hata ekranı ve haritadaki market pini
+hepsi buradan besleniyor.
+
+Giriş ekranında açılış animasyonu var: amblem çizilir, küre düşer, damlalar
+sırayla belirir, tabela yazısı ve kırmızı şerit açılır, ardından giriş kartı
+gelir. Beraberinde `src/lib/jingle.ts` içinde **Web Audio ile sentezlenen**
+kısa bir jingle çalar (ses dosyası taşımaz). Tarayıcı ilk açılışta sesi
+engellerse ilk dokunuşta çalar; sol üstteki hoparlör düğmesiyle kapatılır ve
+tercih `localStorage`'a yazılır — sesli tarifle aynı anahtarı paylaşır.
+İşletim sisteminde "hareketi azalt" açıksa animasyon atlanır.
 
 ---
 

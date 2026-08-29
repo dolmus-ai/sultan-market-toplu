@@ -21,20 +21,10 @@ type Props = {
   kuryeKonumu: Nokta | null;
   onKapat: () => void;
   onDurum: (durum: SiparisDurumu) => void;
+  onNavigasyon: () => void;
   onKonumDuzelt: () => void;
   islemde: boolean;
 };
-
-/** Cihazın kendi harita uygulamasında navigasyonu başlatır. */
-function navigasyonAdresi(lat: number, lng: number, baslik: string) {
-  const iOS =
-    typeof navigator !== "undefined" &&
-    /iPad|iPhone|iPod/.test(navigator.userAgent);
-  if (iOS) {
-    return `maps://?daddr=${lat},${lng}&q=${encodeURIComponent(baslik)}`;
-  }
-  return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`;
-}
 
 const SONRAKI_ADIM: Partial<
   Record<SiparisDurumu, { durum: SiparisDurumu; etiket: string }>
@@ -49,6 +39,7 @@ export default function TeslimatDetay({
   kuryeKonumu,
   onKapat,
   onDurum,
+  onNavigasyon,
   onKonumDuzelt,
   islemde,
 }: Props) {
@@ -123,14 +114,8 @@ export default function TeslimatDetay({
       {/* Eylemler */}
       <div className="flex gap-2">
         {konumVar && (
-          <a
-            href={navigasyonAdresi(
-              adres!.lat!,
-              adres!.lng!,
-              siparis.musteri?.ad ?? "Teslimat",
-            )}
-            target="_blank"
-            rel="noreferrer"
+          <button
+            onClick={onNavigasyon}
             className="flex h-12 flex-1 items-center justify-center gap-2 rounded-hap bg-siyah text-[14px] font-bold text-white active:scale-[0.98]"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
@@ -142,7 +127,7 @@ export default function TeslimatDetay({
               />
             </svg>
             Navigasyon
-          </a>
+          </button>
         )}
         {siparis.musteri?.telefon && (
           <a

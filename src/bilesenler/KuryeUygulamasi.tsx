@@ -8,6 +8,7 @@ import Harita, { type HaritaApi, type Katmanlar } from "./Harita";
 import HaritaKontrolleri from "./HaritaKontrolleri";
 import AltPanel, { type PanelDurumu } from "./AltPanel";
 import TeslimatDetay from "./TeslimatDetay";
+import NavigasyonPaneli, { type NavigasyonDurumu } from "./NavigasyonPaneli";
 import {
   AbonelikSatiri,
   SepetSatiri,
@@ -17,7 +18,13 @@ import {
 import { MarkaIsareti } from "./Marka";
 
 import { tarayiciIstemcisi } from "@/lib/supabase/client";
-import { mesafeYaz, sureYaz } from "@/lib/rota";
+import { haversine, mesafeYaz, sureYaz } from "@/lib/rota";
+import { MARKET } from "@/lib/market";
+import {
+  kalanlar,
+  siradakiAdim,
+  type RotaSecenegi,
+} from "@/lib/navigasyon";
 import { abonelikBugunMu, sepetToplami } from "@/lib/veri";
 import { para } from "@/lib/bicim";
 import type {
@@ -86,6 +93,19 @@ export default function KuryeUygulamasi({
   const [kuryeYonu, setKuryeYonu] = useState<number | null>(null);
   const [konumTakibi, setKonumTakibi] = useState(false);
   const [aci, setAci] = useState({ bearing: -12, pitch: 45 });
+
+  const [navHedef, setNavHedef] = useState<Siparis | null>(null);
+  const [navDurum, setNavDurum] = useState<NavigasyonDurumu>("secim");
+  const [navSecenekler, setNavSecenekler] = useState<RotaSecenegi[]>([]);
+  const [navSeciliId, setNavSeciliId] = useState<string | null>(null);
+  const [navYukleniyor, setNavYukleniyor] = useState(false);
+  const [navAdimIndeks, setNavAdimIndeks] = useState(0);
+
+  // Konum geri çağırımı içinden güncel navigasyon durumuna erişmek için.
+  const navRef = useRef<{ durum: NavigasyonDurumu; secenek: RotaSecenegi | null }>({
+    durum: "secim",
+    secenek: null,
+  });
 
   const [konumDuzeltme, setKonumDuzeltme] = useState<string | null>(null);
   const [islemde, setIslemde] = useState(false);
@@ -170,8 +190,18 @@ export default function KuryeUygulamasi({
           lng: konum.coords.longitude,
         };
         setKuryeKonumu(nokta);
-        if (konum.coords.heading != null && !Number.isNaN(konum.coords.heading))
-          setKuryeYonu(konum.coords.heading);
+        const yon =
+          konum.coords.heading != null && !Number.isNaN(konum.coords.heading)
+            ? konum.coords.heading
+            : null;
+        if (yon != null) setKuryeYonu(yon);
+
+        // Sürüş modunda sıradaki manevraya geç ve kamerayı kuryeye kilitle.
+        const { durum: navD, secenek } = navRef.current;
+        if (navD === "surus" && secenek) {
+          setNavAdimIndeks((o) => siradakiAdim(secenek.adimlar, o, nokta));
+          haritaApi.current?.surusKamerasi(nokta, yon ?? 0);
+        }
 
         const simdi = Date.now();
         if (kurye && simdi - sonYazma > 15_000) {
@@ -210,6 +240,107 @@ export default function KuryeUygulamasi({
     }
   }, [aktifTeslimatlar]);
 
+  /* ------------------------- Navigasyon ------------------------- */
+  const navSecili = useMemo(
+    () => navSecenekler.find((s) => s.id === navSeciliId) ?? navSecenekler[0] ?? null,
+    [navSecenekler, navSeciliId],
+  );
+
+  const navAdim = navSecili?.adimlar[navAdimIndeks] ?? null;
+
+  useEffect(() => {
+    navRef.current = { durum: navDurum, secenek: navSecili };
+  });
+
+  const navHedefNokta = useMemo<Nokta | null>(
+    () =>
+      navHedef?.adres?.lat != null
+        ? { lat: navHedef.adres.lat, lng: navHedef.adres.lng! }
+        : null,
+    [navHedef],
+  );
+
+  const navVardi =
+    !!kuryeKonumu && !!navHedefNokta && haversine(kuryeKonumu, navHedefNokta) < 70;
+
+  const navKalan = useMemo(
+    () =>
+      navSecili
+        ? kalanlar(navSecili, navAdimIndeks, kuryeKonumu)
+        : { mesafeM: 0, sureSn: 0 },
+    [navSecili, navAdimIndeks, kuryeKonumu],
+  );
+
+  const navAdimaKalanM =
+    kuryeKonumu && navAdim ? haversine(kuryeKonumu, navAdim.nokta) : 0;
+
+  async function navigasyonuAc(siparis: Siparis) {
+    if (siparis.adres?.lat == null) {
+      uyar("Bu adresin konumu tanımlı değil.");
+      return;
+    }
+    const hedef = { lat: siparis.adres.lat, lng: siparis.adres.lng! };
+    const baslangic = kuryeKonumu ?? MARKET.nokta;
+
+    setNavHedef(siparis);
+    setNavDurum("secim");
+    setNavAdimIndeks(0);
+    setNavSecenekler([]);
+    setNavSeciliId(null);
+    setNavYukleniyor(true);
+    setPanel("kapali");
+
+    try {
+      const yanit = await fetch("/api/navigasyon", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ baslangic, hedef }),
+      });
+      if (!yanit.ok) throw new Error("navigasyon");
+      const { secenekler } = (await yanit.json()) as {
+        secenekler: RotaSecenegi[];
+      };
+      setNavSecenekler(secenekler);
+      setNavSeciliId(secenekler[0]?.id ?? null);
+      if (secenekler[0]) {
+        haritaApi.current?.geometriyiSigdir(secenekler[0].geometri, 320);
+      }
+    } catch {
+      uyar("Rota alınamadı.");
+      setNavHedef(null);
+    } finally {
+      setNavYukleniyor(false);
+    }
+  }
+
+  function navigasyonuKapat() {
+    setNavHedef(null);
+    setNavSecenekler([]);
+    setNavSeciliId(null);
+    setNavDurum("secim");
+    setNavAdimIndeks(0);
+  }
+
+  function surusuBaslat() {
+    if (!navSecili) return;
+    setNavDurum("surus");
+    setNavAdimIndeks(0);
+    const nokta = kuryeKonumu ?? {
+      lat: navSecili.geometri[0][1],
+      lng: navSecili.geometri[0][0],
+    };
+    haritaApi.current?.surusKamerasi(nokta, kuryeYonu ?? aci.bearing);
+  }
+
+  function hariciNavigasyon() {
+    if (!navHedefNokta) return;
+    const iOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const adres = iOS
+      ? `maps://?daddr=${navHedefNokta.lat},${navHedefNokta.lng}`
+      : `https://www.google.com/maps/dir/?api=1&destination=${navHedefNokta.lat},${navHedefNokta.lng}&travelmode=driving`;
+    window.open(adres, "_blank", "noreferrer");
+  }
+
   /* ------------------------- Etkileşimler ------------------------- */
   function pinSecildi(id: string) {
     if (secimModu) {
@@ -243,7 +374,7 @@ export default function KuryeUygulamasi({
       return;
     }
 
-    const baslangic = kuryeKonumu ?? duraklar[0].nokta;
+    const baslangic = kuryeKonumu ?? MARKET.nokta;
     setRotaHesapla(true);
     try {
       const yanit = await fetch("/api/rota", {
@@ -379,10 +510,13 @@ export default function KuryeUygulamasi({
         secimModu={secimModu}
         secilenler={secilenler}
         rota={rota}
+        navigasyonSecenekleri={navSecenekler}
+        seciliSecenekId={navSeciliId}
         katmanlar={katmanlar}
         kuryeKonumu={kuryeKonumu}
         kuryeYonu={kuryeYonu}
         onSecim={pinSecildi}
+        onSecenekSec={setNavSeciliId}
         onHaritaTikla={konumDuzeltme ? konumuKaydet : undefined}
         onAciDegisti={(bearing, pitch) => setAci({ bearing, pitch })}
         onHazir={haritaHazir}
@@ -567,7 +701,35 @@ export default function KuryeUygulamasi({
         )}
       </AnimatePresence>
 
+      {/* Navigasyon */}
+      <AnimatePresence>
+        {navHedef && (
+          <NavigasyonPaneli
+            key="navigasyon"
+            durum={navDurum}
+            hedef={navHedef}
+            secenekler={navSecenekler}
+            seciliId={navSeciliId}
+            yukleniyor={navYukleniyor}
+            adim={navAdim}
+            adimaKalanM={navAdimaKalanM}
+            kalanMesafeM={navKalan.mesafeM}
+            kalanSureSn={navKalan.sureSn}
+            vardi={navVardi}
+            onSecenek={setNavSeciliId}
+            onBasla={surusuBaslat}
+            onBitir={navigasyonuKapat}
+            onTeslim={() => {
+              void durumDegistir(navHedef.id, "teslim");
+              navigasyonuKapat();
+            }}
+            onHariciAc={hariciNavigasyon}
+          />
+        )}
+      </AnimatePresence>
+
       {/* Alt panel */}
+      {!navHedef && (
       <AltPanel
         durum={panel}
         onDurum={setPanel}
@@ -627,6 +789,7 @@ export default function KuryeUygulamasi({
               islemde={islemde}
               onKapat={() => setSeciliId(null)}
               onDurum={(d) => durumDegistir(secili.id, d)}
+              onNavigasyon={() => navigasyonuAc(secili)}
               onKonumDuzelt={() => {
                 setKonumDuzeltme(secili.id);
                 setPanel("kapali");
@@ -722,6 +885,7 @@ export default function KuryeUygulamasi({
           )}
         </AnimatePresence>
       </AltPanel>
+      )}
     </main>
   );
 }

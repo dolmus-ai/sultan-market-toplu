@@ -21,6 +21,8 @@ import {
   ucBoyutluBinalariGoster,
 } from "@/lib/harita-stili";
 import { DURUM_RENK } from "@/lib/bicim";
+import { MARKET } from "@/lib/market";
+import type { RotaSecenegi } from "@/lib/navigasyon";
 import type { Nokta, RotaSonucu, Siparis, Abonelik } from "@/lib/tipler";
 
 export type Katmanlar = {
@@ -37,6 +39,10 @@ export type HaritaApi = {
   egimDegistir: () => void;
   yakinlastir: (yon: 1 | -1) => void;
   aci: () => { bearing: number; pitch: number };
+  /** Bir rota çizgisinin tamamını ekrana sığdırır. */
+  geometriyiSigdir: (geometri: [number, number][], altBosluk?: number) => void;
+  /** Sürüş kamerası: kuryenin arkasından, eğik ve yakın. */
+  surusKamerasi: (nokta: Nokta, bearing: number) => void;
 };
 
 type Props = {
@@ -47,10 +53,13 @@ type Props = {
   secimModu: boolean;
   secilenler: string[];
   rota: RotaSonucu | null;
+  navigasyonSecenekleri: RotaSecenegi[];
+  seciliSecenekId: string | null;
   katmanlar: Katmanlar;
   kuryeKonumu: Nokta | null;
   kuryeYonu: number | null;
   onSecim: (id: string) => void;
+  onSecenekSec?: (id: string) => void;
   onHaritaTikla?: (nokta: Nokta) => void;
   onAciDegisti?: (bearing: number, pitch: number) => void;
   onHazir?: () => void;
@@ -65,11 +74,37 @@ function noktaVar(a: { lat: number | null; lng: number | null } | null) {
   return !!a && a.lat != null && a.lng != null;
 }
 
+/** Marketi haritaya sabit bir işaretçi olarak koyar. */
+async function marketiIsaretle(harita: MapLibreMap) {
+  const { Marker } = await import("maplibre-gl");
+  const kutu = document.createElement("div");
+  kutu.className = "relative";
+  kutu.innerHTML = `
+    <div style="display:flex;flex-direction:column;align-items:center;gap:3px">
+      <div style="width:34px;height:34px;border-radius:12px;background:#0e0e11;
+                  display:flex;align-items:center;justify-content:center;
+                  box-shadow:0 4px 14px rgba(14,14,17,.35);border:2.5px solid #fff">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+          <path d="M4 8h16l-1 3H5L4 8Z" fill="#e30a17"/>
+          <path d="M5 11h14v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-8Z" fill="#fff"/>
+          <path d="M9 8a3 3 0 0 1 6 0" stroke="#e30a17" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <span style="font:800 10px/1 ui-sans-serif,system-ui;color:#0e0e11;
+                   background:rgba(255,255,255,.9);padding:3px 7px;border-radius:999px;
+                   white-space:nowrap;box-shadow:0 1px 4px rgba(14,14,17,.12)">MARKET</span>
+    </div>`;
+  new Marker({ element: kutu, anchor: "bottom" })
+    .setLngLat([MARKET.nokta.lng, MARKET.nokta.lat])
+    .addTo(harita);
+}
+
 /* ---------------- Kaynak ve katmanlar ---------------- */
 function katmanlariKur(
-harita: MapLibreMap,
-secimRef: RefObject<(id: string) => void>,
-tiklamaRef: RefObject<((nokta: Nokta) => void) | undefined>,
+  harita: MapLibreMap,
+  secimRef: RefObject<(id: string) => void>,
+  tiklamaRef: RefObject<((nokta: Nokta) => void) | undefined>,
+  secenekRef: RefObject<((id: string) => void) | undefined>,
 ) {
   harita.addSource("teslimatlar", {
     type: "geojson",
@@ -81,6 +116,7 @@ tiklamaRef: RefObject<((nokta: Nokta) => void) | undefined>,
   harita.addSource("yogunluk", { type: "geojson", data: BOS_GEOJSON });
   harita.addSource("abonelikler", { type: "geojson", data: BOS_GEOJSON });
   harita.addSource("rota", { type: "geojson", data: BOS_GEOJSON });
+  harita.addSource("navigasyon", { type: "geojson", data: BOS_GEOJSON });
 
   /* Isı haritası — talep yoğunluğu */
   harita.addLayer({
@@ -143,6 +179,57 @@ tiklamaRef: RefObject<((nokta: Nokta) => void) | undefined>,
     paint: {
       "line-color": "#ffffff",
       "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1.6, 17, 3],
+      "line-opacity": 0.9,
+      "line-dasharray": [0, 3.5, 1.5, 3.5],
+    },
+  });
+
+  /* Navigasyon — seçilmeyen alternatifler soluk, seçili olan kırmızı */
+  harita.addLayer({
+    id: "nav-alternatif",
+    type: "line",
+    source: "navigasyon",
+    filter: ["!", ["get", "secili"]],
+    layout: { "line-cap": "round", "line-join": "round" },
+    paint: {
+      "line-color": "#9aa1ab",
+      "line-width": ["interpolate", ["linear"], ["zoom"], 10, 4, 17, 9],
+      "line-opacity": 0.75,
+    },
+  });
+  harita.addLayer({
+    id: "nav-golge",
+    type: "line",
+    source: "navigasyon",
+    filter: ["get", "secili"],
+    layout: { "line-cap": "round", "line-join": "round" },
+    paint: {
+      "line-color": "#0e0e11",
+      "line-width": ["interpolate", ["linear"], ["zoom"], 10, 10, 17, 20],
+      "line-opacity": 0.16,
+      "line-blur": 4,
+    },
+  });
+  harita.addLayer({
+    id: "nav-aktif",
+    type: "line",
+    source: "navigasyon",
+    filter: ["get", "secili"],
+    layout: { "line-cap": "round", "line-join": "round" },
+    paint: {
+      "line-color": "#e30a17",
+      "line-width": ["interpolate", ["linear"], ["zoom"], 10, 5, 17, 11],
+    },
+  });
+  harita.addLayer({
+    id: "nav-akis",
+    type: "line",
+    source: "navigasyon",
+    filter: ["get", "secili"],
+    layout: { "line-cap": "butt", "line-join": "round" },
+    paint: {
+      "line-color": "#ffffff",
+      "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1.8, 17, 3.4],
       "line-opacity": 0.9,
       "line-dasharray": [0, 3.5, 1.5, 3.5],
     },
@@ -319,7 +406,17 @@ tiklamaRef: RefObject<((nokta: Nokta) => void) | undefined>,
       harita.getCanvas().style.cursor = "";
     });
   };
-  ["teslimat-nokta", "kume", "abonelik-halka"].forEach(isaretci);
+  ["teslimat-nokta", "kume", "abonelik-halka", "nav-alternatif"].forEach(
+    isaretci,
+  );
+
+  harita.on("click", "nav-alternatif", (e: MapMouseEvent) => {
+    const ozellik = harita.queryRenderedFeatures(e.point, {
+      layers: ["nav-alternatif"],
+    })[0];
+    const id = ozellik?.properties?.id;
+    if (typeof id === "string") secenekRef.current?.(id);
+  });
 
   harita.on("click", "teslimat-nokta", (e: MapMouseEvent) => {
     const ozellik = harita.queryRenderedFeatures(e.point, {
@@ -399,10 +496,13 @@ export default function Harita({
   secimModu,
   secilenler,
   rota,
+  navigasyonSecenekleri,
+  seciliSecenekId,
   katmanlar,
   kuryeKonumu,
   kuryeYonu,
   onSecim,
+  onSecenekSec,
   onHaritaTikla,
   onAciDegisti,
   onHazir,
@@ -416,9 +516,11 @@ export default function Harita({
   // Güncel geri çağırımları harita olay dinleyicilerine taşımak için.
   const secimRef = useRef(onSecim);
   const tiklamaRef = useRef(onHaritaTikla);
+  const secenekRef = useRef(onSecenekSec);
   useEffect(() => {
     secimRef.current = onSecim;
     tiklamaRef.current = onHaritaTikla;
+    secenekRef.current = onSecenekSec;
   });
 
   /* ---------------- Haritayı kur ---------------- */
@@ -468,7 +570,8 @@ export default function Harita({
         if (iptal || hazirRef.current || !harita.getStyle()?.layers) return;
         markaStiliUygula(harita);
         ucBoyutluBinalarEkle(harita);
-        katmanlariKur(harita, secimRef, tiklamaRef);
+        katmanlariKur(harita, secimRef, tiklamaRef, secenekRef);
+        marketiIsaretle(harita);
         hazirRef.current = true;
         setHazir(true);
         onHazir?.();
@@ -565,6 +668,25 @@ export default function Harita({
         : BOS_GEOJSON,
     );
   }, [hazir, rota]);
+
+  useEffect(() => {
+    const harita = haritaRef.current;
+    if (!harita || !hazirRef.current) return;
+    const kaynak = harita.getSource("navigasyon") as GeoJSONSource | undefined;
+    kaynak?.setData({
+      type: "FeatureCollection",
+      // Seçili olan en sonda çizilsin diye sıralıyoruz.
+      features: [...navigasyonSecenekleri]
+        .sort((a, b) =>
+          Number(a.id === seciliSecenekId) - Number(b.id === seciliSecenekId),
+        )
+        .map((s) => ({
+          type: "Feature",
+          properties: { id: s.id, secili: s.id === seciliSecenekId },
+          geometry: { type: "LineString", coordinates: s.geometri },
+        })),
+    });
+  }, [hazir, navigasyonSecenekleri, seciliSecenekId]);
 
   /* ---------------- Katman görünürlüğü ---------------- */
   useEffect(() => {
@@ -675,6 +797,34 @@ export default function Harita({
         bearing: haritaRef.current?.getBearing() ?? 0,
         pitch: haritaRef.current?.getPitch() ?? 0,
       }),
+      geometriyiSigdir: (geometri, altBosluk = 300) => {
+        const harita = haritaRef.current;
+        if (!harita || geometri.length < 2) return;
+        const enler = geometri.map((k) => k[0]);
+        const boylar = geometri.map((k) => k[1]);
+        harita.fitBounds(
+          [
+            [Math.min(...enler), Math.min(...boylar)],
+            [Math.max(...enler), Math.max(...boylar)],
+          ],
+          {
+            padding: { top: 110, bottom: altBosluk, left: 44, right: 44 },
+            pitch: 0,
+            bearing: 0,
+            duration: 1100,
+          },
+        );
+      },
+      surusKamerasi: (nokta, bearing) => {
+        haritaRef.current?.easeTo({
+          center: [nokta.lng, nokta.lat],
+          zoom: 17.2,
+          pitch: 62,
+          bearing,
+          duration: 900,
+          essential: true,
+        });
+      },
     }),
     [],
   );

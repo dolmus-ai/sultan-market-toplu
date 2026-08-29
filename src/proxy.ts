@@ -31,7 +31,9 @@ export default async function proxy(istek: NextRequest) {
   // /onizleme ve onu besleyen rota servisi yalnızca geliştirme ortamında açık.
   const gelistirmeAcik =
     process.env.NODE_ENV !== "production" &&
-    (yol.startsWith("/onizleme") || yol.startsWith("/api/rota"));
+    (yol.startsWith("/onizleme") ||
+      yol.startsWith("/api/rota") ||
+      yol.startsWith("/api/navigasyon"));
   const acikYol = yol.startsWith("/giris") || gelistirmeAcik;
 
   if (!user && !acikYol) {

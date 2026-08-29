@@ -55,18 +55,18 @@ function kalem(no: number, urunSira: number, miktar: number): Kalem {
 }
 
 const MUSTERILER: [string, string, string, number, number, SiparisDurumu][] = [
-  ["Ayşe Yıldırım", "0532 118 4471", "Caferağa Mah. Sarraf Ali Sok. No 14", 40.98862, 29.02391, "bekliyor"],
-  ["Mehmet Korkmaz", "0533 240 9182", "Dr. Esat Işık Cad. No 61", 40.98741, 29.02598, "yolda"],
-  ["Zeynep Arslan", "0505 771 3320", "Rıhtım Cad. No 22", 40.99118, 29.02233, "bekliyor"],
-  ["Elif Şahin", "0542 663 8814", "Halitağa Cad. No 78", 40.99274, 29.02744, "hazirlaniyor"],
-  ["Burak Demir", "0555 902 1147", "Karakolhane Cad. No 35", 40.99502, 29.02905, "bekliyor"],
-  ["Kerem Öztürk", "0530 815 6674", "Uzunhafız Sok. No 27", 40.99788, 29.02818, "teslim"],
-  ["Hakan Yılmaz", "0538 220 7761", "Moda Cad. No 118", 40.98421, 29.02682, "bekliyor"],
-  ["Selin Tunç", "0553 664 1129", "Ferit Tek Sok. No 8", 40.98198, 29.02514, "bekliyor"],
-  ["Onur Aksoy", "0531 552 8836", "Bağdat Cad. No 16", 40.97964, 29.03388, "bekliyor"],
-  ["Cem Polat", "0535 226 9948", "Fener Kalamış Cad. No 70", 40.97655, 29.03874, "bekliyor"],
-  ["Tolga Şen", "0539 447 6620", "Muhittin Üstündağ Cad. No 108", 41.00184, 29.03296, "bekliyor"],
-  ["Barış Güneş", "0541 336 7702", "Çeçen Sok. No 47", 41.00021, 29.04023, "bekliyor"],
+  ["Ayşe Yıldırım", "0532 118 4471", "Arabacıalanı Mah. Orhangazi Sok. No 14", 40.7825, 30.354, "bekliyor"],
+  ["Mehmet Korkmaz", "0533 240 9182", "Arabacıalanı Mah. Atatürk Cad. No 61", 40.7789, 30.3495, "yolda"],
+  ["Zeynep Arslan", "0505 771 3320", "Arabacıalanı Mah. Şehit Ercan Sok. No 22", 40.7841, 30.3568, "bekliyor"],
+  ["Elif Şahin", "0542 663 8814", "Arabacıalanı Mah. Cumhuriyet Sok. No 78", 40.7772, 30.3551, "hazirlaniyor"],
+  ["Burak Demir", "0555 902 1147", "Bahçelievler Mah. Fatih Cad. No 35", 40.7803, 30.3462, "bekliyor"],
+  ["Kerem Öztürk", "0530 815 6674", "Serdivan Mah. Üniversite Cad. No 27", 40.7856, 30.3502, "teslim"],
+  ["Hakan Yılmaz", "0538 220 7761", "Bahçelievler Mah. Papatya Sok. No 118", 40.7735, 30.3625, "bekliyor"],
+  ["Selin Tunç", "0553 664 1129", "Kemalpaşa Mah. Karaman Cad. No 8", 40.7702, 30.3567, "bekliyor"],
+  ["Onur Aksoy", "0531 552 8836", "Kemalpaşa Mah. Sakarya Cad. No 16", 40.7688, 30.3452, "bekliyor"],
+  ["Cem Polat", "0535 226 9948", "Kemalpaşa Mah. Çark Cad. No 70", 40.7805, 30.4028, "bekliyor"],
+  ["Tolga Şen", "0539 447 6620", "Semerciler Mah. Uzunçarşı Cad. No 108", 40.7842, 30.4055, "bekliyor"],
+  ["Barış Güneş", "0541 336 7702", "Maltepe Mah. Ankara Cad. No 47", 40.7889, 30.3945, "bekliyor"],
 ];
 
 const TESLIMATLAR: Siparis[] = MUSTERILER.map(

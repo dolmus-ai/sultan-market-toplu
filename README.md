@@ -26,8 +26,13 @@ npm install
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase proje adresi |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Publishable key |
 | `NEXT_PUBLIC_HARITA_STILI` | MapLibre stil URL'si (varsayılan OpenFreeMap Liberty) |
-| `NEXT_PUBLIC_MERKEZ_LAT` / `_LNG` / `_ZOOM` | Kurye konumu alınamazsa haritanın açılacağı yer |
-| `OSRM_SUNUCU` | Boşsa rota tamamen yerel hesaplanır (aşağıya bakın) |
+| `NEXT_PUBLIC_MARKET_AD` / `_ADRES` / `_LAT` / `_LNG` | Sultan Market'in konumu — harita başlangıcı, depo pini ve rota çıkış noktası |
+| `NEXT_PUBLIC_MERKEZ_LAT` / `_LNG` / `_ZOOM` | Kurye konumu alınamazsa haritanın açılacağı yer (varsayılan: market) |
+| `OSRM_SUNUCU` | Gerçek yol ağı rotası. Boşsa her şey yerel hesaplanır (aşağıya bakın) |
+
+**Market konumu:** Arabacıalanı Mah. Orhan Gazi Sk. No:19, 54050 Serdivan/Sakarya
+→ `40.78067, 30.35218`. Harita ve tüm demo adresler Serdivan–Adapazarı
+çevresine kuruludur.
 
 ```bash
 npm run dev
@@ -93,7 +98,8 @@ drop policy "muhasebe kilidi" on public.profiles;
 | `/giris` | E-posta + şifre ile giriş |
 | `/harita` | Ana ekran — harita + alt panel |
 | `/onizleme` | **Yalnızca geliştirme.** Giriş ve veritabanı olmadan sahte veriyle tasarımı denemek için |
-| `/api/rota` | Rota optimizasyonu (POST) |
+| `/api/rota` | Toplu teslimat rota optimizasyonu (POST) |
+| `/api/navigasyon` | Tek hedefe navigasyon, alternatifli (POST) |
 
 ### Ana ekranda neler var
 
@@ -103,9 +109,18 @@ drop policy "muhasebe kilidi" on public.profiles;
   yeşil = teslim, gri = iptal. Bekleyen ve yoldaki teslimatlar nabız atar.
 - **Alt panel** (sürüklenebilir, 3 kademeli): Teslimatlar · Abonelikler ·
   Sepetler · Ürünler.
+- **Market pini:** deponun kendisi haritada sabit işaretli; kurye konumu
+  yoksa rotalar buradan başlar.
 - **Teslimat detayı:** sepet kalemleri, tutar, ödeme yöntemi, kapı tarifi,
-  tek dokunuşla arama ve cihazın harita uygulamasında navigasyon, durum
-  ilerletme (hazırlığa aldım → yola çıktım → teslim ettim).
+  tek dokunuşla arama, durum ilerletme (hazırlığa aldım → yola çıktım →
+  teslim ettim).
+- **Uygulama içi navigasyon:** "Navigasyon" butonu harici uygulama açmaz;
+  rotayı kendi haritamıza çizer. 2–3 alternatif sunulur (haritadan veya
+  karttan seçilir), "Başla" ile sürüş moduna geçilir: üstte Türkçe manevra
+  kartı (*"Göbekten 2. çıkış · Mehmet Akif Ersoy Caddesi"*), altta kalan
+  süre/mesafe ve varış saati, kamera kuryenin arkasından eğik takip eder.
+  Hedefe 70 m kala doğrudan "Teslim ettim" çıkar. İsteyen kurye tek
+  dokunuşla harici haritada da açabilir.
 - **Toplu rota:** birden çok teslimat seçilir, "En kısa yolu bul" duraklara
   sıra numarası verir ve rotayı haritaya çizer. "Üstlen" rotayı kaydeder ve
   siparişleri kuryenin üstüne alır.
@@ -116,9 +131,9 @@ drop policy "muhasebe kilidi" on public.profiles;
 
 ---
 
-## Rota optimizasyonu
+## Rota ve navigasyon
 
-`POST /api/rota`
+### Toplu teslimat — `POST /api/rota`
 
 ```json
 {
@@ -139,6 +154,24 @@ drop policy "muhasebe kilidi" on public.profiles;
    konusu olduğu için kendi OSRM sunucunuzu çalıştırmanız önerilir.
 
 Her iki motorda da en fazla 40 durak işlenir.
+
+### Tek hedef navigasyon — `POST /api/navigasyon`
+
+```json
+{ "baslangic": { "lat": 40.78067, "lng": 30.35218 },
+  "hedef":     { "lat": 40.7805,  "lng": 30.4028  } }
+```
+
+OSRM'in `route` servisinden `alternatives=true&steps=true` ile en fazla üç
+seçenek alınır; OSRM manevraları Türkçeye çevrilir (`sola dönün`,
+`göbekten 3. çıkış`, `yolun sonunda sağa`…). OSRM kapalıysa tek bir kuş uçuşu
+seçenek döner ve arayüz bunu "kuş uçuşu tahmin" diye işaretler.
+
+> **Dikkat — dış servis:** `OSRM_SUNUCU` şu an herkese açık demo sunucusuna
+> (`router.project-osrm.org`) ayarlı. Yani **müşteri koordinatları o sunucuya
+> gidiyor.** Üretimde kendi OSRM'inizi çalıştırıp bu değeri değiştirin; ya da
+> boş bırakıp tamamen yerel çalışın (o zaman gerçek yol rotası ve sokak adlı
+> manevra olmaz).
 
 ---
 

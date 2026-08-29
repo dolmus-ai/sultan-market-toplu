@@ -78,6 +78,30 @@ function noktaVar(a: { lat: number | null; lng: number | null } | null) {
   return !!a && a.lat != null && a.lng != null;
 }
 
+/**
+ * fitBounds dolgusu kanvastan büyük olursa MapLibre çerçeveyi hiç
+ * oturtmuyor ("Map cannot fit within canvas") ve kamera olduğu yerde
+ * kalıyor. Kısa ekranlarda olan tam olarak bu; dolguyu kanvasa oranlıyoruz.
+ */
+function guvenliBosluk(
+  harita: MapLibreMap,
+  istenen: { top: number; bottom: number; left: number; right: number },
+) {
+  const kanvas = harita.getCanvas();
+  const en = kanvas.clientWidth || 1;
+  const boy = kanvas.clientHeight || 1;
+
+  const dikeyOran = Math.min(1, (boy * 0.7) / (istenen.top + istenen.bottom));
+  const yatayOran = Math.min(1, (en * 0.7) / (istenen.left + istenen.right));
+
+  return {
+    top: Math.floor(istenen.top * dikeyOran),
+    bottom: Math.floor(istenen.bottom * dikeyOran),
+    left: Math.floor(istenen.left * yatayOran),
+    right: Math.floor(istenen.right * yatayOran),
+  };
+}
+
 /** Marketi haritaya sabit bir işaretçi olarak koyar. */
 async function marketiIsaretle(harita: MapLibreMap) {
   const { Marker } = await import("maplibre-gl");
@@ -391,12 +415,7 @@ function katmanlariKur(
         ["case", ["get", "aktif"], 16, 12],
       ],
       "circle-color": ["get", "renk"],
-      "circle-stroke-color": [
-        "case",
-        ["get", "secili"],
-        "#0e0e11",
-        "#ffffff",
-      ],
+      "circle-stroke-color": ["case", ["get", "secili"], "#0e0e11", "#ffffff"],
       "circle-stroke-width": ["case", ["get", "secili"], 4, 3],
     },
   });
@@ -404,11 +423,7 @@ function katmanlariKur(
     id: "teslimat-sira",
     type: "symbol",
     source: "teslimatlar",
-    filter: [
-      "all",
-      ["!", ["has", "point_count"]],
-      ["!=", ["get", "sira"], ""],
-    ],
+    filter: ["all", ["!", ["has", "point_count"]], ["!=", ["get", "sira"], ""]],
     layout: {
       "text-field": ["get", "sira"],
       "text-font": ["Noto Sans Bold"],
@@ -529,7 +544,6 @@ function katmanlariKur(
   harita.once("remove", () => cancelAnimationFrame(cerceve));
 }
 
-
 export default function Harita({
   ref,
   teslimatlar,
@@ -556,6 +570,8 @@ export default function Harita({
   // Katmanlar kurulduğunda veri efektlerinin yeniden çalışması için state.
   const [hazir, setHazir] = useState(false);
   const kuryeMarkerRef = useRef<Marker | null>(null);
+  // Art arda gelen konum güncellemeleri aynı anda iki imleç oluşturmasın.
+  const kuryeOlusuyorRef = useRef(false);
   // Güncel geri çağırımları harita olay dinleyicilerine taşımak için.
   const secimRef = useRef(onSecim);
   const tiklamaRef = useRef(onHaritaTikla);
@@ -634,6 +650,7 @@ export default function Harita({
       temizle = () => {
         kuryeMarkerRef.current?.remove();
         kuryeMarkerRef.current = null;
+        kuryeOlusuyorRef.current = false;
         harita.remove();
         haritaRef.current = null;
         hazirRef.current = false;
@@ -747,8 +764,9 @@ export default function Harita({
       type: "FeatureCollection",
       // Seçili olan en sonda çizilsin diye sıralıyoruz.
       features: [...navigasyonSecenekleri]
-        .sort((a, b) =>
-          Number(a.id === seciliSecenekId) - Number(b.id === seciliSecenekId),
+        .sort(
+          (a, b) =>
+            Number(a.id === seciliSecenekId) - Number(b.id === seciliSecenekId),
         )
         .map((s) => ({
           type: "Feature",
@@ -825,14 +843,17 @@ export default function Harita({
     let iptal = false;
 
     (async () => {
-      const { Marker: MapLibreMarker } = await import("maplibre-gl");
-      if (iptal || !haritaRef.current) return;
+      if (kuryeOlusuyorRef.current) return;
+      kuryeOlusuyorRef.current = true;
+      try {
+        const { Marker: MapLibreMarker } = await import("maplibre-gl");
+        if (iptal || !haritaRef.current) return;
 
-      if (!kuryeMarkerRef.current) {
-        const kutu = document.createElement("div");
-        kutu.style.cssText = "width:132px;height:132px;position:relative";
-        // Koni ve nokta haritayla birlikte dönsün diye rotationAlignment: map.
-        kutu.innerHTML = `
+        if (!kuryeMarkerRef.current) {
+          const kutu = document.createElement("div");
+          kutu.style.cssText = "width:132px;height:132px;position:relative";
+          // Koni ve nokta haritayla birlikte dönsün diye rotationAlignment: map.
+          kutu.innerHTML = `
           <svg viewBox="-66 -66 132 132" width="132" height="132" style="overflow:visible">
             <defs>
               <radialGradient id="kurye-koni" cx="50%" cy="100%" r="100%">
@@ -848,23 +869,26 @@ export default function Harita({
             <circle cx="0" cy="0" r="7.5" fill="#e30a17"/>
           </svg>`;
 
-        kuryeMarkerRef.current = new MapLibreMarker({
-          element: kutu,
-          rotationAlignment: "map",
-          pitchAlignment: "map",
-        })
-          .setLngLat([kuryeKonumu.lng, kuryeKonumu.lat])
-          .addTo(harita);
-      } else {
-        kuryeMarkerRef.current.setLngLat([kuryeKonumu.lng, kuryeKonumu.lat]);
-      }
+          kuryeMarkerRef.current = new MapLibreMarker({
+            element: kutu,
+            rotationAlignment: "map",
+            pitchAlignment: "map",
+          })
+            .setLngLat([kuryeKonumu.lng, kuryeKonumu.lat])
+            .addTo(harita);
+        } else {
+          kuryeMarkerRef.current.setLngLat([kuryeKonumu.lng, kuryeKonumu.lat]);
+        }
 
-      // Yön bilinmiyorsa koniyi gizle, imleci sade nokta olarak bırak.
-      const koni = kuryeMarkerRef.current
-        ?.getElement()
-        .querySelector<SVGElement>(".kurye-koni");
-      if (koni) koni.style.display = kuryeYonu == null ? "none" : "";
-      kuryeMarkerRef.current?.setRotation(kuryeYonu ?? 0);
+        // Yön bilinmiyorsa koniyi gizle, imleci sade nokta olarak bırak.
+        const koni = kuryeMarkerRef.current
+          ?.getElement()
+          .querySelector<SVGElement>(".kurye-koni");
+        if (koni) koni.style.display = kuryeYonu == null ? "none" : "";
+        kuryeMarkerRef.current?.setRotation(kuryeYonu ?? 0);
+      } finally {
+        kuryeOlusuyorRef.current = false;
+      }
     })();
 
     return () => {
@@ -904,7 +928,15 @@ export default function Harita({
             [Math.min(...enler), Math.min(...boylar)],
             [Math.max(...enler), Math.max(...boylar)],
           ],
-          { padding: { top: 90, bottom: 340, left: 48, right: 48 }, duration: 1200 },
+          {
+            padding: guvenliBosluk(harita, {
+              top: 90,
+              bottom: 340,
+              left: 48,
+              right: 48,
+            }),
+            duration: 1200,
+          },
         );
       },
       pusulaSifirla: () =>
@@ -937,7 +969,12 @@ export default function Harita({
             [Math.max(...enler), Math.max(...boylar)],
           ],
           {
-            padding: { top: 110, bottom: altBosluk, left: 44, right: 44 },
+            padding: guvenliBosluk(harita, {
+              top: 110,
+              bottom: altBosluk,
+              left: 44,
+              right: 44,
+            }),
             pitch: 0,
             bearing: 0,
             duration: 1100,

@@ -52,6 +52,8 @@
   --durum-yolda-yazi: #ffffff;
   --durum-teslim: #16a34a;
   --durum-teslim-yazi: #ffffff;
+  --durum-basarisiz: #b45309;
+  --durum-basarisiz-yazi: #ffffff;
   --durum-iptal: #9ca3af;
   --durum-iptal-yazi: #ffffff;
 }
@@ -77,6 +79,8 @@
   /* Siyah "yolda" rozeti karanlıkta kaybolmasın diye tersine çevrilir. */
   --durum-yolda: #e9ecf1;
   --durum-yolda-yazi: #101216;
+  --durum-basarisiz: #f59e0b;
+  --durum-basarisiz-yazi: #241503;
   --durum-iptal: #6b7280;
 
   --shadow-yumusak: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px -8px rgb(0 0 0 / 0.6);

@@ -24,7 +24,13 @@ import { haritaDurumRengi } from "@/lib/bicim";
 import type { Tema } from "@/lib/harita-stili";
 import { MARKET } from "@/lib/market";
 import type { RotaSecenegi } from "@/lib/navigasyon";
-import type { Nokta, RotaSonucu, Siparis, Abonelik } from "@/lib/tipler";
+import type {
+  Nokta,
+  RotaSonucu,
+  Siparis,
+  Abonelik,
+  KuryeKonumu,
+} from "@/lib/tipler";
 
 export type Katmanlar = {
   abonelikler: boolean;
@@ -60,6 +66,8 @@ type Props = {
   katmanlar: Katmanlar;
   kuryeKonumu: Nokta | null;
   kuryeYonu: number | null;
+  /** Vardiyadaki diğer kuryeler — aynı mahalleye iki kişi gitmesin. */
+  digerKuryeler: (KuryeKonumu & { ad: string })[];
   onSecim: (id: string) => void;
   onSecenekSec?: (id: string) => void;
   /** Kurye haritayı eliyle kaydırdığında — takip kilidini bırakmak için. */
@@ -149,6 +157,7 @@ function katmanlariKur(
   harita.addSource("abonelikler", { type: "geojson", data: BOS_GEOJSON });
   harita.addSource("rota", { type: "geojson", data: BOS_GEOJSON });
   harita.addSource("navigasyon", { type: "geojson", data: BOS_GEOJSON });
+  harita.addSource("kuryeler", { type: "geojson", data: BOS_GEOJSON });
 
   /* Isı haritası — talep yoğunluğu */
   harita.addLayer({
@@ -326,6 +335,47 @@ function katmanlariKur(
     paint: {
       "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, 2, 17, 3.5],
       "circle-color": "#e30a17",
+    },
+  });
+
+  /* Diğer kuryeler — soluk gri, adlarıyla */
+  harita.addLayer({
+    id: "kurye-hale",
+    type: "circle",
+    source: "kuryeler",
+    paint: {
+      "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, 9, 17, 16],
+      "circle-color": "#6b7280",
+      "circle-opacity": 0.22,
+    },
+  });
+  harita.addLayer({
+    id: "kurye-nokta",
+    type: "circle",
+    source: "kuryeler",
+    paint: {
+      "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, 4.5, 17, 7.5],
+      "circle-color": "#6b7280",
+      "circle-stroke-color": "#ffffff",
+      "circle-stroke-width": 2.5,
+    },
+  });
+  harita.addLayer({
+    id: "kurye-etiket",
+    type: "symbol",
+    source: "kuryeler",
+    minzoom: 13,
+    layout: {
+      "text-field": ["get", "ad"],
+      "text-font": ["Noto Sans Bold"],
+      "text-size": 10,
+      "text-offset": [0, -1.5],
+      "text-anchor": "bottom",
+    },
+    paint: {
+      "text-color": "#6b7280",
+      "text-halo-color": "#ffffff",
+      "text-halo-width": 2,
     },
   });
 
@@ -561,6 +611,7 @@ export default function Harita({
   katmanlar,
   kuryeKonumu,
   kuryeYonu,
+  digerKuryeler,
   onSecim,
   onSecenekSec,
   onKullaniciHareketi,
@@ -808,7 +859,19 @@ export default function Harita({
         karanlik ? "#101216" : "#ffffff",
       );
     }
-    for (const katman of ["abonelik-halka", "kume"]) {
+    if (harita.getLayer("kurye-etiket")) {
+      harita.setPaintProperty(
+        "kurye-etiket",
+        "text-color",
+        karanlik ? "#aeb7c2" : "#6b7280",
+      );
+      harita.setPaintProperty(
+        "kurye-etiket",
+        "text-halo-color",
+        karanlik ? "#101216" : "#ffffff",
+      );
+    }
+    for (const katman of ["abonelik-halka", "kume", "kurye-nokta"]) {
       if (harita.getLayer(katman)) {
         harita.setPaintProperty(
           katman,
@@ -825,6 +888,20 @@ export default function Harita({
       );
     }
   }, [hazir, katmanlar.karanlik]);
+
+  useEffect(() => {
+    const harita = haritaRef.current;
+    if (!harita || !hazirRef.current) return;
+    const kaynak = harita.getSource("kuryeler") as GeoJSONSource | undefined;
+    kaynak?.setData({
+      type: "FeatureCollection",
+      features: digerKuryeler.map((k) => ({
+        type: "Feature",
+        properties: { id: k.kurye_id, ad: k.ad },
+        geometry: { type: "Point", coordinates: [k.lng, k.lat] },
+      })),
+    });
+  }, [hazir, digerKuryeler]);
 
   /* ---------------- Katman görünürlüğü ---------------- */
   useEffect(() => {

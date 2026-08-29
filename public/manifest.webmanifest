@@ -1,0 +1,28 @@
+{
+  "name": "Sultan Market · Kurye",
+  "short_name": "Sultan Kurye",
+  "description": "Sultan Market kurye uygulaması — teslimatlar, abonelikler ve rota.",
+  "lang": "tr",
+  "dir": "ltr",
+  "start_url": "/harita",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#16212e",
+  "theme_color": "#e30a17",
+  "categories": ["business", "navigation"],
+  "icons": [
+    {
+      "src": "/ikon/amblem.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/ikon/amblem.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

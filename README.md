@@ -119,6 +119,44 @@ drop policy "muhasebe kilidi" on public.profiles;
 | `/api/rota` | Toplu teslimat rota optimizasyonu (POST) |
 | `/api/navigasyon` | Tek hedefe navigasyon, alternatifli (POST) |
 
+### Sahada çalışması için
+
+- **Teslim edilemedi akışı:** sebep (adreste yok · kapı açılmadı · müşteri
+  teslim almadı · adres yanlış · ödeme yapılmadı · diğer), serbest not ve
+  "yarın tekrar denensin" seçeneği. Deneme sayısı `siparisler.deneme_sayisi`
+  içinde birikir.
+- **Tahsilat ve kasa:** teslim ekranında ödeme yöntemi ve tahsil edilen tutar
+  girilir (eksik/fazla farkı anında gösterilir), üst çubukta kasadaki para
+  canlı görünür. "Vardiyada" rozetine dokununca vardiya özeti açılır: teslim
+  edilen/edilemeyen sayısı, yol, süre, yöntem bazında tahsilat dökümü ve
+  **kasa teslimi** (sayılan nakit ile beklenen arasındaki fark + açıklama).
+  `vardiyalar` ve `tahsilatlar` tablolarında tutulur.
+- **Çevrimdışı kuyruk:** durum değişikliği, tahsilat ve kapı notu önce
+  IndexedDB'ye yazılır; ağ yoksa ya da istek düşerse kuyrukta bekler,
+  sinyal gelince sırayla gönderilir (`src/lib/cevrimdisi.ts`). Üst çubuktaki
+  turuncu rozet bekleyen kayıt sayısını gösterir. Kuyruk 30 saniyede bir ve
+  `online` olayında boşaltılır.
+- **Ana ekrana kurulabilir (PWA):** `manifest.webmanifest` + servis çalışanı.
+  Telefonda "Ana ekrana ekle" ile tam ekran açılır. Servis çalışanı yalnızca
+  uygulama kabuğunu önbelleğe alır; veri yazımının çevrimdışı dayanıklılığı
+  yukarıdaki kuyrukta — iki ayrı doğruluk kaynağı olmasın diye.
+
+### Günlük işi hızlandıranlar
+
+- **WhatsApp'tan haber ver:** teslimat detayındaki yeşil düğme müşteriye
+  hazır "siparişiniz yola çıktı" mesajını açar. `wa.me` derin bağlantısı —
+  SMS sağlayıcısı, API veya ücret yok.
+- **Kapı bilgisi hafızası:** kurye kapı/zil kodunu ve notu ("zil çalışmıyor,
+  arayın") kendi yazar; adres kaydında kalır, sonraki her teslimatta detayın
+  en üstünde kırmızı şeritte çıkar.
+- **Aynı bina rozeti:** aynı sokak+numaradaki (numara yoksa ~11 m yarıçaptaki)
+  açık teslimatlar listede "Aynı bina · 3" rozetiyle işaretlenir.
+- **Gecikme uyarısı:** planlanan saati geçen teslimatlar listede ve detayda
+  kırmızı rozetle ("12 dk geç", "2 sa geç", "dünden geç") öne çıkar; üst
+  çubukta geciken sayısı görünür.
+- **Diğer kuryeler:** vardiyadaki diğer kuryelerin son konumu haritada soluk
+  gri noktalar ve adlarıyla görünür, canlı güncellenir.
+
 ### Ana ekranda neler var
 
 - **Harita:** 3B eğim/döndürme, pusula, akıcı `flyTo` geçişleri, pin kümeleme,
@@ -245,13 +283,37 @@ restart identity cascade;
 
 ---
 
+## Otomatik sipariş üretimi
+
+`public.gunun_siparislerini_uret(date)` aktif aboneliklerden o günün
+siparişlerini üretir — sıklık (günlük / haftalık / iki haftalık / aylık),
+gün listesi ve başlangıç–bitiş aralığı dikkate alınır; aynı abonelik için
+aynı güne ikinci sipariş açılmaz. `pg_cron` ile her sabah **05:00
+(Europe/Istanbul)** çalışır:
+
+```sql
+select cron.schedule('gunun-siparisleri', '0 2 * * *',
+  $$select public.gunun_siparislerini_uret(current_date)$$);
+```
+
+Elle çalıştırmak için (örneğin yarını hazırlamak):
+
+```sql
+select public.gunun_siparislerini_uret(current_date + 1);
+```
+
+---
+
 ## Bilinen sınırlar
 
 - Abonelikler ve sepetler ilk yüklemede gelir; canlı yenileme yalnızca
   `siparisler` tablosunda açıktır.
 - Ürün, abonelik ve müşteri **girişi** bu uygulamada yok — kapsam yalnızca
-  kurye tarafı. Bu kayıtlar Supabase üzerinden veya ileride yazılacak yönetim
-  panelinden girilir.
+  kurye tarafı. Abonelikten doğan siparişler cron ile otomatik üretiliyor;
+  tek seferlik siparişler hâlâ Supabase üzerinden ya da ileride yazılacak
+  kasa/yönetim ekranından girilmeli.
+- Teslimat fotoğrafı, push bildirimi, iade/eksik ürün ve km-yakıt raporu
+  henüz yok (öneri listesindeki 3. kademe).
 - OpenFreeMap'te trafik katmanı ve Street View yoktur. Bunlar gerekiyorsa
   `NEXT_PUBLIC_HARITA_STILI` değiştirilip harita sağlayıcısı Google/Mapbox'a
   taşınabilir; uygulama içindeki harita kodu tek dosyada (`src/bilesenler/Harita.tsx`).

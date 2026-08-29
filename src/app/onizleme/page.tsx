@@ -93,6 +93,9 @@ const TESLIMATLAR: Siparis[] = MUSTERILER.map(
       ],
       tutar: kalemler.reduce((t, k) => t + k.miktar * k.birim_fiyat, 0),
       notlar: i === 0 ? "Kapıda bırakma, zile basmayın" : null,
+      basarisizlik_sebebi: null,
+      basarisizlik_notu: null,
+      deneme_sayisi: 0,
       created_at: new Date().toISOString(),
       musteri: { id: `musteri-${i}`, ad, telefon, notlar: null },
       adres: {
@@ -104,6 +107,8 @@ const TESLIMATLAR: Siparis[] = MUSTERILER.map(
         kat: String(1 + (i % 8)),
         daire: String(2 + i),
         tarif: i % 4 === 0 ? "Beyaz bina, demir kapı" : null,
+        kurye_notu: i === 1 ? "Zil çalışmıyor, arayın" : null,
+        kapi_kodu: i === 3 ? "1204" : null,
         lat,
         lng,
         konum_dogrulandi: true,

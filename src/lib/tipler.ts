@@ -3,7 +3,16 @@ export type SiparisDurumu =
   | "hazirlaniyor"
   | "yolda"
   | "teslim"
+  | "basarisiz"
   | "iptal";
+
+export type BasarisizlikSebebi =
+  | "adreste_yok"
+  | "kapi_acilmadi"
+  | "musteri_reddetti"
+  | "adres_yanlis"
+  | "odeme_yok"
+  | "diger";
 
 export type OdemeYontemi =
   | "nakit"
@@ -35,6 +44,9 @@ export type Adres = {
   kat: string | null;
   daire: string | null;
   tarif: string | null;
+  /** Kuryenin sahadan yazdığı kapı bilgisi — sonraki teslimatta da görünür. */
+  kurye_notu: string | null;
+  kapi_kodu: string | null;
   lat: number | null;
   lng: number | null;
   konum_dogrulandi: boolean;
@@ -70,6 +82,9 @@ export type Siparis = {
   odeme_yontemi: OdemeYontemi | null;
   tutar: number;
   notlar: string | null;
+  basarisizlik_sebebi: BasarisizlikSebebi | null;
+  basarisizlik_notu: string | null;
+  deneme_sayisi: number;
   created_at: string;
   musteri: Musteri | null;
   adres: Adres | null;
@@ -123,6 +138,35 @@ export type Kurye = {
   arac_tipi: "yaya" | "bisiklet" | "motosiklet" | "otomobil" | "kamyonet";
   plaka: string | null;
   vardiyada: boolean;
+};
+
+export type Vardiya = {
+  id: string;
+  kurye_id: string;
+  baslangic: string;
+  bitis: string | null;
+  durum: "acik" | "kapali";
+  teslim_edilen_nakit: number | null;
+  notlar: string | null;
+};
+
+export type Tahsilat = {
+  id: string;
+  siparis_id: string;
+  kurye_id: string;
+  vardiya_id: string | null;
+  tutar: number;
+  yontem: OdemeYontemi;
+  created_at: string;
+};
+
+export type KuryeKonumu = {
+  kurye_id: string;
+  lat: number;
+  lng: number;
+  yon: number | null;
+  hiz: number | null;
+  updated_at: string;
 };
 
 export type Nokta = { lat: number; lng: number };

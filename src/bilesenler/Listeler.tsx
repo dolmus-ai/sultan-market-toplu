@@ -7,6 +7,7 @@ import {
   DURUM_ETIKET,
   DURUM_STIL,
   adresYaz,
+  gecikmeYaz,
   gunlerYaz,
   miktarYaz,
   para,
@@ -25,6 +26,8 @@ export function TeslimatSatiri({
   secili,
   secimModu,
   isaretli,
+  gecikme,
+  binaSayisi,
   onTikla,
 }: {
   siparis: Siparis;
@@ -32,6 +35,10 @@ export function TeslimatSatiri({
   secili: boolean;
   secimModu: boolean;
   isaretli: boolean;
+  /** Planlanan saate göre gecikme (dk); pozitifse gecikmiş. */
+  gecikme?: number | null;
+  /** Aynı binadaki toplam teslimat sayısı (1'den büyükse rozet çıkar). */
+  binaSayisi?: number;
   onTikla: () => void;
 }) {
   const kalemSayisi = siparis.kalemler?.length ?? 0;
@@ -79,6 +86,12 @@ export function TeslimatSatiri({
           </span>
           {siparis.kaynak === "abonelik" && <Etiket>Abonelik</Etiket>}
           {siparis.oncelik > 0 && <Etiket ton="kirmizi">Acil</Etiket>}
+          {gecikme != null && gecikme > 0 && (
+            <Etiket ton="kirmizi">{gecikmeYaz(gecikme)} geç</Etiket>
+          )}
+          {(binaSayisi ?? 0) > 1 && (
+            <Etiket ton="siyah">Aynı bina · {binaSayisi}</Etiket>
+          )}
           {konumYok && <Etiket ton="siyah">Konum yok</Etiket>}
         </span>
         <span className="mt-0.5 block truncate text-[13px] text-gri">

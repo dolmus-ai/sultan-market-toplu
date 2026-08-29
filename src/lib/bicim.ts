@@ -1,4 +1,8 @@
-import type { OdemeYontemi, SiparisDurumu } from "./tipler";
+import type {
+  BasarisizlikSebebi,
+  OdemeYontemi,
+  SiparisDurumu,
+} from "./tipler";
 
 const paraBicimi = new Intl.NumberFormat("tr-TR", {
   style: "currency",
@@ -27,7 +31,17 @@ export const DURUM_ETIKET: Record<SiparisDurumu, string> = {
   hazirlaniyor: "Hazırlanıyor",
   yolda: "Yolda",
   teslim: "Teslim edildi",
+  basarisiz: "Teslim edilemedi",
   iptal: "İptal",
+};
+
+export const SEBEP_ETIKET: Record<BasarisizlikSebebi, string> = {
+  adreste_yok: "Adreste yok",
+  kapi_acilmadi: "Kapı açılmadı",
+  musteri_reddetti: "Müşteri teslim almadı",
+  adres_yanlis: "Adres yanlış",
+  odeme_yok: "Ödeme yapılmadı",
+  diger: "Diğer",
 };
 
 /** Harita pinleri için durum rengi (aydınlık tema). */
@@ -36,6 +50,7 @@ export const DURUM_RENK: Record<SiparisDurumu, string> = {
   hazirlaniyor: "#F59E0B",
   yolda: "#111114",
   teslim: "#16A34A",
+  basarisiz: "#B45309",
   iptal: "#9CA3AF",
 };
 
@@ -71,6 +86,10 @@ export const DURUM_STIL: Record<
     background: "var(--durum-teslim)",
     color: "var(--durum-teslim-yazi)",
   },
+  basarisiz: {
+    background: "var(--durum-basarisiz)",
+    color: "var(--durum-basarisiz-yazi)",
+  },
   iptal: { background: "var(--durum-iptal)", color: "var(--durum-iptal-yazi)" },
 };
 
@@ -103,6 +122,51 @@ export function bugununTarihi(): string {
   const ay = String(t.getMonth() + 1).padStart(2, "0");
   const gun = String(t.getDate()).padStart(2, "0");
   return `${t.getFullYear()}-${ay}-${gun}`;
+}
+
+/**
+ * Planlanan saate göre gecikme (dakika). Negatifse henüz vakti gelmemiş.
+ * Saat tanımsızsa null.
+ */
+export function gecikmeDk(
+  planlananSaat: string | null,
+  tarih: string,
+): number | null {
+  if (!planlananSaat) return null;
+  const bugun = bugununTarihi();
+  if (tarih > bugun) return null;
+  if (tarih < bugun) return 24 * 60;
+
+  const [sa, dk] = planlananSaat.split(":").map(Number);
+  const simdi = new Date();
+  return (simdi.getHours() - sa) * 60 + (simdi.getMinutes() - dk);
+}
+
+/** Gecikmeyi kısa ve okunur yazar: "12 dk", "2 sa", "dün". */
+export function gecikmeYaz(dakika: number): string {
+  if (dakika >= 20 * 60) return "dünden";
+  if (dakika >= 90) return `${Math.round(dakika / 60)} sa`;
+  return `${Math.round(dakika)} dk`;
+}
+
+/**
+ * Aynı binadaki teslimatları bir arada saymak için anahtar.
+ * Kapı numarası varsa sokak+numara; yoksa koordinat ızgarası (~11 m).
+ */
+export function binaAnahtari(
+  a: {
+    adres_metni: string;
+    bina?: string | null;
+    lat?: number | null;
+    lng?: number | null;
+  } | null,
+): string {
+  if (!a) return "";
+  const yol = a.adres_metni.toLocaleLowerCase("tr").replace(/\s+/g, " ").trim();
+  if (a.bina) return `${yol}|${a.bina}`;
+  if (a.lat != null && a.lng != null)
+    return `${a.lat.toFixed(4)}|${a.lng.toFixed(4)}`;
+  return yol;
 }
 
 /** Adresi tek satırda toparlar. */

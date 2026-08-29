@@ -1,11 +1,21 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Abonelik, Kurye, Sepet, Siparis, Urun } from "./tipler";
+import type {
+  Abonelik,
+  Kurye,
+  KuryeKonumu,
+  Sepet,
+  Siparis,
+  Tahsilat,
+  Urun,
+  Vardiya,
+} from "./tipler";
 
 const SIPARIS_ALANLARI = `
   id, musteri_id, adres_id, kaynak, abonelik_id, kurye_id, durum, oncelik,
-  planlanan_tarih, planlanan_saat, teslim_zamani, odeme_yontemi, tutar, notlar, created_at,
+  planlanan_tarih, planlanan_saat, teslim_zamani, odeme_yontemi, tutar, notlar,
+  basarisizlik_sebebi, basarisizlik_notu, deneme_sayisi, created_at,
   musteri:musteriler ( id, ad, telefon, notlar ),
-  adres:adresler ( id, musteri_id, baslik, adres_metni, bina, kat, daire, tarif, lat, lng, konum_dogrulandi ),
+  adres:adresler ( id, musteri_id, baslik, adres_metni, bina, kat, daire, tarif, kurye_notu, kapi_kodu, lat, lng, konum_dogrulandi ),
   kalemler:siparis_kalemleri (
     id, urun_id, miktar, birim_fiyat,
     urun:urunler ( id, ad, birim, emoji, fiyat )
@@ -16,7 +26,7 @@ const ABONELIK_ALANLARI = `
   id, musteri_id, adres_id, baslik, siklik, gunler, teslim_saati,
   baslangic, bitis, durum, notlar,
   musteri:musteriler ( id, ad, telefon, notlar ),
-  adres:adresler ( id, musteri_id, baslik, adres_metni, bina, kat, daire, tarif, lat, lng, konum_dogrulandi ),
+  adres:adresler ( id, musteri_id, baslik, adres_metni, bina, kat, daire, tarif, kurye_notu, kapi_kodu, lat, lng, konum_dogrulandi ),
   kalemler:abonelik_kalemleri (
     id, miktar,
     urun:urunler ( id, ad, birim, emoji, fiyat )
@@ -26,7 +36,7 @@ const ABONELIK_ALANLARI = `
 const SEPET_ALANLARI = `
   id, musteri_id, adres_id, durum, updated_at,
   musteri:musteriler ( id, ad, telefon, notlar ),
-  adres:adresler ( id, musteri_id, baslik, adres_metni, bina, kat, daire, tarif, lat, lng, konum_dogrulandi ),
+  adres:adresler ( id, musteri_id, baslik, adres_metni, bina, kat, daire, tarif, kurye_notu, kapi_kodu, lat, lng, konum_dogrulandi ),
   kalemler:sepet_kalemleri (
     id, miktar,
     urun:urunler ( id, ad, birim, emoji, fiyat )
@@ -127,6 +137,50 @@ export function abonelikBugunMu(abonelik: Abonelik, tarih: Date): boolean {
     default:
       return false;
   }
+}
+
+/** Kuryenin açık vardiyası; yoksa null. */
+export async function acikVardiyaGetir(
+  db: SupabaseClient,
+  kuryeId: string,
+): Promise<Vardiya | null> {
+  const { data } = await db
+    .from("vardiyalar")
+    .select("id, kurye_id, baslangic, bitis, durum, teslim_edilen_nakit, notlar")
+    .eq("kurye_id", kuryeId)
+    .eq("durum", "acik")
+    .order("baslangic", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return (data as Vardiya) ?? null;
+}
+
+export async function vardiyaTahsilatlari(
+  db: SupabaseClient,
+  vardiyaId: string,
+): Promise<Tahsilat[]> {
+  const { data } = await db
+    .from("tahsilatlar")
+    .select("id, siparis_id, kurye_id, vardiya_id, tutar, yontem, created_at")
+    .eq("vardiya_id", vardiyaId)
+    .order("created_at", { ascending: false });
+  return (data ?? []) as Tahsilat[];
+}
+
+/** Vardiyada olan diğer kuryelerin son konumları. */
+export async function kuryeKonumlariGetir(
+  db: SupabaseClient,
+  harici: string,
+): Promise<(KuryeKonumu & { ad: string })[]> {
+  const { data } = await db
+    .from("kurye_konumlari")
+    .select("kurye_id, lat, lng, yon, hiz, updated_at, kurye:kuryeler ( ad, vardiyada )")
+    .neq("kurye_id", harici);
+
+  type Satir = KuryeKonumu & { kurye: { ad: string; vardiyada: boolean } | null };
+  return ((data ?? []) as unknown as Satir[])
+    .filter((k) => k.kurye?.vardiyada)
+    .map((k) => ({ ...k, ad: k.kurye?.ad ?? "Kurye" }));
 }
 
 export function sepetToplami(kalemler: { miktar: number; urun: { fiyat: number } | null }[]) {

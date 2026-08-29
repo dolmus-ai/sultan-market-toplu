@@ -8,6 +8,8 @@ import Harita, { type HaritaApi, type Katmanlar } from "./Harita";
 import HaritaKontrolleri from "./HaritaKontrolleri";
 import AltPanel, { type PanelDurumu } from "./AltPanel";
 import TeslimatDetay from "./TeslimatDetay";
+import TeslimSonucu, { type TeslimSonuc } from "./TeslimSonucu";
+import VardiyaOzeti from "./VardiyaOzeti";
 import NavigasyonPaneli, { type NavigasyonDurumu } from "./NavigasyonPaneli";
 import {
   AbonelikSatiri,
@@ -26,17 +28,27 @@ import {
   type RotaSecenegi,
 } from "@/lib/navigasyon";
 import { adimCumlesi, konus, sesiKes } from "@/lib/ses";
-import { abonelikBugunMu, sepetToplami } from "@/lib/veri";
-import { para } from "@/lib/bicim";
+import {
+  abonelikBugunMu,
+  acikVardiyaGetir,
+  kuryeKonumlariGetir,
+  sepetToplami,
+  vardiyaTahsilatlari,
+} from "@/lib/veri";
+import { binaAnahtari, gecikmeDk, para } from "@/lib/bicim";
+import { bekleyenler, kuyruguIsle, kuyrukVeyaGonder } from "@/lib/cevrimdisi";
 import type {
   Abonelik,
   Kurye,
+  KuryeKonumu,
   Nokta,
   RotaSonucu,
   Sepet,
   Siparis,
   SiparisDurumu,
+  Tahsilat,
   Urun,
+  Vardiya,
 } from "@/lib/tipler";
 
 type Sekme = "teslimatlar" | "abonelikler" | "sepetler" | "urunler";
@@ -134,6 +146,17 @@ export default function KuryeUygulamasi({
   const navAdimRef = useRef(0);
   const sesRef = useRef(true);
 
+  const [vardiya, setVardiya] = useState<Vardiya | null>(null);
+  const [tahsilatlar, setTahsilatlar] = useState<Tahsilat[]>([]);
+  const [vardiyaOzeti, setVardiyaOzeti] = useState(false);
+  const [teslimModu, setTeslimModu] = useState<"teslim" | "basarisiz" | null>(
+    null,
+  );
+  const [bekleyenSayisi, setBekleyenSayisi] = useState(0);
+  const [digerKuryeler, setDigerKuryeler] = useState<
+    (KuryeKonumu & { ad: string })[]
+  >([]);
+
   const [konumDuzeltme, setKonumDuzeltme] = useState<string | null>(null);
   const [islemde, setIslemde] = useState(false);
   const [bildirim, setBildirim] = useState<string | null>(null);
@@ -152,6 +175,31 @@ export default function KuryeUygulamasi({
     () => teslimatlar.filter((s) => AKTIF_DURUMLAR.includes(s.durum)),
     [teslimatlar],
   );
+
+  const kasaToplami = useMemo(
+    () => tahsilatlar.reduce((t, x) => t + x.tutar, 0),
+    [tahsilatlar],
+  );
+
+  const gecikenSayisi = useMemo(
+    () =>
+      aktifTeslimatlar.filter((s) => {
+        const g = gecikmeDk(s.planlanan_saat, s.planlanan_tarih);
+        return g != null && g > 0;
+      }).length,
+    [aktifTeslimatlar],
+  );
+
+  /** Aynı binadaki açık teslimat sayısı. */
+  const binaSayilari = useMemo(() => {
+    const say = new Map<string, number>();
+    for (const s of teslimatlar) {
+      if (s.durum === "teslim" || s.durum === "iptal") continue;
+      const k = binaAnahtari(s.adres);
+      if (k) say.set(k, (say.get(k) ?? 0) + 1);
+    }
+    return say;
+  }, [teslimatlar]);
 
   const rotaSirasi = useMemo(
     () => new Map(rota?.sira.map((id, i) => [id, i + 1]) ?? []),
@@ -189,6 +237,58 @@ export default function KuryeUygulamasi({
     setBildirim(mesaj);
     setTimeout(() => setBildirim(null), 3200);
   }, []);
+
+  /* ------------------------- Çevrimdışı kuyruk ------------------------- */
+  useEffect(() => {
+    void bekleyenler().then((b) => setBekleyenSayisi(b.length));
+
+    // Sinyal geldiğinde ve düzenli aralıkla kuyruğu boşalt.
+    const dene = () => void kuyruguIsle(db).then(setBekleyenSayisi);
+    dene();
+    window.addEventListener("online", dene);
+    const sayac = setInterval(dene, 30_000);
+    return () => {
+      window.removeEventListener("online", dene);
+      clearInterval(sayac);
+    };
+  }, [db]);
+
+  /* ------------------------- Vardiya ------------------------- */
+  useEffect(() => {
+    if (!kurye) return;
+    let iptal = false;
+
+    void acikVardiyaGetir(db, kurye.id).then(async (v) => {
+      if (iptal) return;
+      setVardiya(v);
+      const t = v ? await vardiyaTahsilatlari(db, v.id) : [];
+      if (!iptal) setTahsilatlar(t);
+    });
+
+    return () => {
+      iptal = true;
+    };
+  }, [db, kurye]);
+
+  /* ------------------------- Diğer kuryeler ------------------------- */
+  useEffect(() => {
+    if (!kurye) return;
+    const yukle = () =>
+      void kuryeKonumlariGetir(db, kurye.id).then(setDigerKuryeler);
+    yukle();
+
+    const kanal = db
+      .channel("kurye-konumlari")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "kurye_konumlari" },
+        yukle,
+      )
+      .subscribe();
+    return () => {
+      void db.removeChannel(kanal);
+    };
+  }, [db, kurye]);
 
   /* ------------------------- Veri tazeleme ------------------------- */
   const teslimatlariTazele = useCallback(async () => {
@@ -534,26 +634,161 @@ export default function KuryeUygulamasi({
     }
   }
 
-  async function durumDegistir(id: string, durum: SiparisDurumu) {
+  /** Siparişi hem yerelde hem sunucuda günceller; ağ yoksa kuyruğa yazar. */
+  async function siparisGuncelle(
+    id: string,
+    yama: Record<string, unknown>,
+    yereleUygula: (s: Siparis) => Siparis,
+  ) {
     setIslemde(true);
-    const yama: Record<string, unknown> = { durum };
-    if (durum === "teslim") yama.teslim_zamani = new Date().toISOString();
-    if (kurye) yama.kurye_id = kurye.id;
+    setTeslimatlar((onceki) =>
+      onceki.map((s) => (s.id === id ? yereleUygula(s) : s)),
+    );
 
-    const { error } = await db.from("siparisler").update(yama).eq("id", id);
+    const gonderildi = await kuyrukVeyaGonder(db, {
+      tur: "siparis-guncelle",
+      veri: { siparisId: id, yama },
+    });
+    if (!gonderildi) setBekleyenSayisi((b) => b + 1);
     setIslemde(false);
+    return gonderildi;
+  }
 
-    if (error) {
-      uyar("Durum güncellenemedi.");
+  async function durumDegistir(id: string, durum: SiparisDurumu) {
+    const yama: Record<string, unknown> = { durum };
+    if (kurye) yama.kurye_id = kurye.id;
+    await siparisGuncelle(id, yama, (s) => ({
+      ...s,
+      durum,
+      kurye_id: kurye?.id ?? s.kurye_id,
+    }));
+  }
+
+  /** Teslim ettim / teslim edilemedi akışının sonucu. */
+  async function teslimSonucuUygula(sonuc: TeslimSonuc) {
+    if (!secili) return;
+    const id = secili.id;
+
+    if (sonuc.tur === "teslim") {
+      const zaman = new Date().toISOString();
+      const yama: Record<string, unknown> = {
+        durum: "teslim",
+        teslim_zamani: zaman,
+        kurye_id: kurye?.id ?? null,
+      };
+      if (sonuc.tahsilat) yama.odeme_yontemi = sonuc.tahsilat.yontem;
+
+      await siparisGuncelle(id, yama, (s) => ({
+        ...s,
+        durum: "teslim",
+        teslim_zamani: zaman,
+        odeme_yontemi: sonuc.tahsilat?.yontem ?? s.odeme_yontemi,
+      }));
+
+      if (sonuc.tahsilat && kurye) {
+        const kayit = {
+          siparis_id: id,
+          kurye_id: kurye.id,
+          vardiya_id: vardiya?.id ?? null,
+          tutar: sonuc.tahsilat.tutar,
+          yontem: sonuc.tahsilat.yontem,
+        };
+        const gonderildi = await kuyrukVeyaGonder(db, {
+          tur: "tahsilat-ekle",
+          veri: kayit,
+        });
+        if (!gonderildi) setBekleyenSayisi((b) => b + 1);
+        // Kasa toplamı anında güncellensin.
+        setTahsilatlar((o) => [
+          {
+            ...kayit,
+            id: crypto.randomUUID(),
+            created_at: new Date().toISOString(),
+          } as Tahsilat,
+          ...o,
+        ]);
+      }
+
+      uyar("Teslimat tamamlandı 🎉");
+    } else {
+      const yarin = new Date();
+      yarin.setDate(yarin.getDate() + 1);
+      const yama: Record<string, unknown> = {
+        durum: "basarisiz",
+        basarisizlik_sebebi: sonuc.sebep,
+        basarisizlik_notu: sonuc.not || null,
+        deneme_sayisi: (secili.deneme_sayisi ?? 0) + 1,
+        kurye_id: kurye?.id ?? null,
+      };
+      if (sonuc.yarinTekrar) {
+        yama.durum = "bekliyor";
+        yama.planlanan_tarih = yarin.toISOString().slice(0, 10);
+      }
+
+      await siparisGuncelle(id, yama, (s) => ({
+        ...s,
+        durum: (sonuc.yarinTekrar ? "bekliyor" : "basarisiz") as SiparisDurumu,
+        basarisizlik_sebebi: sonuc.sebep,
+        basarisizlik_notu: sonuc.not || null,
+        deneme_sayisi: (s.deneme_sayisi ?? 0) + 1,
+      }));
+
+      uyar(
+        sonuc.yarinTekrar
+          ? "Kaydedildi · yarına aktarıldı"
+          : "Teslim edilemedi olarak kaydedildi",
+      );
+    }
+
+    setTeslimModu(null);
+    setSeciliId(null);
+  }
+
+  /** Kuryenin kapı bilgisi — adres kaydında kalıcı. */
+  async function kapiBilgisiKaydet(kuryeNotu: string, kapiKodu: string) {
+    const adresId = secili?.adres?.id;
+    if (!adresId) return;
+
+    setIslemde(true);
+    const yama = {
+      kurye_notu: kuryeNotu || null,
+      kapi_kodu: kapiKodu || null,
+    };
+    setTeslimatlar((onceki) =>
+      onceki.map((s) =>
+        s.adres?.id === adresId ? { ...s, adres: { ...s.adres, ...yama } } : s,
+      ),
+    );
+
+    const gonderildi = await kuyrukVeyaGonder(db, {
+      tur: "adres-guncelle",
+      veri: { adresId, yama },
+    });
+    if (!gonderildi) setBekleyenSayisi((b) => b + 1);
+    setIslemde(false);
+    uyar("Kapı bilgisi kaydedildi");
+  }
+
+  /** Müşteriye WhatsApp'tan "yola çıktım" mesajı — ücretsiz derin bağlantı. */
+  function whatsAppGonder(siparis: Siparis) {
+    const telefon = siparis.musteri?.telefon?.replace(/\D/g, "");
+    if (!telefon) {
+      uyar("Müşterinin telefonu kayıtlı değil.");
       return;
     }
-    setTeslimatlar((onceki) =>
-      onceki.map((s) => (s.id === id ? { ...s, ...yama, durum } : s)),
+    const uluslararasi = telefon.startsWith("90")
+      ? telefon
+      : `90${telefon.replace(/^0/, "")}`;
+
+    const mesaj =
+      `Merhaba ${siparis.musteri?.ad ?? ""}, ${MARKET.ad}'ten siparişiniz ` +
+      `yola çıktı. Kısa süre içinde adresinizde olacağız. İyi günler!`;
+
+    window.open(
+      `https://wa.me/${uluslararasi}?text=${encodeURIComponent(mesaj)}`,
+      "_blank",
+      "noreferrer",
     );
-    if (durum === "teslim") {
-      setSeciliId(null);
-      uyar("Teslimat tamamlandı 🎉");
-    }
   }
 
   async function konumuKaydet(nokta: Nokta) {
@@ -589,12 +824,52 @@ export default function KuryeUygulamasi({
     uyar("Konum güncellendi.");
   }
 
+  /** Vardiyaya gir; zaten vardiyadaysa kasa özetini aç. */
   async function vardiyaDegistir() {
     if (!kurye) return;
-    await db
-      .from("kuryeler")
-      .update({ vardiyada: !kurye.vardiyada })
-      .eq("id", kurye.id);
+
+    if (kurye.vardiyada) {
+      setVardiyaOzeti(true);
+      return;
+    }
+
+    setIslemde(true);
+    const { data } = await db
+      .from("vardiyalar")
+      .insert({ kurye_id: kurye.id })
+      .select("id, kurye_id, baslangic, bitis, durum, teslim_edilen_nakit, notlar")
+      .single();
+    await db.from("kuryeler").update({ vardiyada: true }).eq("id", kurye.id);
+    setVardiya((data as Vardiya) ?? null);
+    setTahsilatlar([]);
+    setIslemde(false);
+    uyar("Vardiya başladı");
+    yonlendir.refresh();
+  }
+
+  /** Kasayı teslim et ve vardiyayı kapat. */
+  async function vardiyayiKapat(nakit: number, notlar: string) {
+    if (!kurye) return;
+    setIslemde(true);
+
+    if (vardiya) {
+      await db
+        .from("vardiyalar")
+        .update({
+          bitis: new Date().toISOString(),
+          durum: "kapali",
+          teslim_edilen_nakit: nakit,
+          notlar: notlar || null,
+        })
+        .eq("id", vardiya.id);
+    }
+    await db.from("kuryeler").update({ vardiyada: false }).eq("id", kurye.id);
+
+    setVardiya(null);
+    setTahsilatlar([]);
+    setVardiyaOzeti(false);
+    setIslemde(false);
+    uyar("Vardiya kapandı · kasa teslim edildi");
     yonlendir.refresh();
   }
 
@@ -622,6 +897,7 @@ export default function KuryeUygulamasi({
         katmanlar={katmanlar}
         kuryeKonumu={kuryeKonumu}
         kuryeYonu={kuryeYonu}
+        digerKuryeler={digerKuryeler}
         onSecim={pinSecildi}
         onSecenekSec={setNavSeciliId}
         onKullaniciHareketi={() => {
@@ -650,9 +926,25 @@ export default function KuryeUygulamasi({
               </span>
             </p>
             <p className="truncate text-[11px] font-semibold text-gri">
-              {para(toplamTahsilat)} tahsilat · {bugunAbonelikler.length} abonelik
+              {para(kasaToplami)} kasada · {para(toplamTahsilat)} kalan
+              {gecikenSayisi > 0 && (
+                <span className="text-kirmizi"> · {gecikenSayisi} geciken</span>
+              )}
             </p>
           </div>
+          {bekleyenSayisi > 0 && (
+            <span
+              title="Sinyal gelince gönderilecek"
+              className="flex shrink-0 items-center gap-1 rounded-hap bg-turuncu/15 px-2 py-1 text-[11px] font-black text-turuncu"
+            >
+              <motion.span
+                className="h-1.5 w-1.5 rounded-full bg-turuncu"
+                animate={{ opacity: [1, 0.3, 1] }}
+                transition={{ duration: 1.4, repeat: Infinity }}
+              />
+              {bekleyenSayisi}
+            </span>
+          )}
           <button
             onClick={vardiyaDegistir}
             className={`rounded-hap px-3 py-1.5 text-[11px] font-black uppercase tracking-wide transition-colors ${
@@ -812,6 +1104,40 @@ export default function KuryeUygulamasi({
         )}
       </AnimatePresence>
 
+      {/* Teslim sonucu ve kasa */}
+      <AnimatePresence>
+        {teslimModu && secili && (
+          <TeslimSonucu
+            key="teslim-sonucu"
+            siparis={secili}
+            mod={teslimModu}
+            islemde={islemde}
+            onKapat={() => setTeslimModu(null)}
+            onOnay={teslimSonucuUygula}
+          />
+        )}
+        {vardiyaOzeti && vardiya && (
+          <VardiyaOzeti
+            key="vardiya-ozeti"
+            vardiya={vardiya}
+            tahsilatlar={tahsilatlar}
+            teslimEdilen={
+              teslimatlar.filter((s) => s.durum === "teslim").length
+            }
+            basarisiz={
+              teslimatlar.filter(
+                (s) => s.durum === "basarisiz" || s.deneme_sayisi > 0,
+              ).length
+            }
+            toplamMesafeM={rota?.toplamMesafeM ?? 0}
+            toplamSureSn={rota?.toplamSureSn ?? 0}
+            islemde={islemde}
+            onKapat={() => setVardiyaOzeti(false)}
+            onVardiyayiKapat={vardiyayiKapat}
+          />
+        )}
+      </AnimatePresence>
+
       {/* Navigasyon */}
       <AnimatePresence>
         {navHedef && (
@@ -905,6 +1231,9 @@ export default function KuryeUygulamasi({
               islemde={islemde}
               onKapat={() => setSeciliId(null)}
               onDurum={(d) => durumDegistir(secili.id, d)}
+              onTeslimSonucu={setTeslimModu}
+              onWhatsApp={() => whatsAppGonder(secili)}
+              onNotKaydet={kapiBilgisiKaydet}
               onNavigasyon={() => navigasyonuAc(secili)}
               onKonumDuzelt={() => {
                 setKonumDuzeltme(secili.id);
@@ -930,6 +1259,8 @@ export default function KuryeUygulamasi({
                       secili={seciliId === s.id}
                       secimModu={secimModu}
                       isaretli={secilenler.includes(s.id)}
+                      gecikme={gecikmeDk(s.planlanan_saat, s.planlanan_tarih)}
+                      binaSayisi={binaSayilari.get(binaAnahtari(s.adres))}
                       onTikla={() => pinSecildi(s.id)}
                     />
                   ))}

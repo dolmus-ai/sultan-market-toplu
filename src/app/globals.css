@@ -1,26 +1,154 @@
 @import "tailwindcss";
 
+@theme {
+  /* Marka: beyaz zemin, kırmızı vurgu, siyah derinlik */
+  --color-kirmizi: #e30a17;
+  --color-kirmizi-koyu: #b00611;
+  --color-kirmizi-acik: #ff3b4a;
+  --color-kirmizi-sis: #fff1f2;
+
+  --color-siyah: #0e0e11;
+  --color-kurum: #1b1c21;
+  --color-gri: #6b6f76;
+  --color-cizgi: #e8e8ec;
+  --color-duman: #f6f6f8;
+
+  --color-yesil: #16a34a;
+  --color-turuncu: #f59e0b;
+
+  --font-sans: var(--yazi-tipi), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", sans-serif;
+
+  --radius-kart: 22px;
+  --radius-hap: 999px;
+
+  --shadow-yumusak: 0 1px 2px rgb(14 14 17 / 0.04),
+    0 8px 24px -8px rgb(14 14 17 / 0.12);
+  --shadow-yuzen: 0 2px 6px rgb(14 14 17 / 0.06),
+    0 18px 48px -12px rgb(14 14 17 / 0.24);
+  --shadow-kirmizi: 0 8px 24px -8px rgb(227 10 23 / 0.45);
+
+  --ease-yay: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light;
+  --zemin: #ffffff;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+* {
+  -webkit-tap-highlight-color: transparent;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html,
+body {
+  height: 100%;
+  overscroll-behavior: none;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--zemin);
+  color: var(--color-siyah);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* ---------- Kaydırma çubuğu ---------- */
+.ince-kaydirma {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-cizgi) transparent;
+}
+.ince-kaydirma::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.ince-kaydirma::-webkit-scrollbar-thumb {
+  background: var(--color-cizgi);
+  border-radius: 999px;
+}
+.ince-kaydirma::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ---------- Cam yüzeyler ---------- */
+.cam {
+  background: color-mix(in srgb, #ffffff 82%, transparent);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+}
+.cam-siyah {
+  background: color-mix(in srgb, #0e0e11 78%, transparent);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+}
+
+/* ---------- Animasyonlar ---------- */
+@keyframes nabiz {
+  0% {
+    transform: scale(0.75);
+    opacity: 0.65;
+  }
+  70% {
+    transform: scale(2.1);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(2.1);
+    opacity: 0;
+  }
+}
+.nabiz::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: currentColor;
+  animation: nabiz 2s var(--ease-yay) infinite;
+}
+
+@keyframes parilti {
+  0% {
+    background-position: -220% 0;
+  }
+  100% {
+    background-position: 220% 0;
+  }
+}
+.iskelet {
+  background: linear-gradient(
+    90deg,
+    var(--color-duman) 25%,
+    #ececed 50%,
+    var(--color-duman) 75%
+  );
+  background-size: 220% 100%;
+  animation: parilti 1.4s linear infinite;
+}
+
+@keyframes akan-cizgi {
+  to {
+    stroke-dashoffset: -40;
+  }
+}
+
+/* ---------- MapLibre üzerine marka dokunuşu ---------- */
+.maplibregl-ctrl-attrib {
+  font-size: 10px !important;
+  background: color-mix(in srgb, #ffffff 76%, transparent) !important;
+  backdrop-filter: blur(8px);
+  border-radius: 999px 0 0 0 !important;
+  padding: 2px 8px !important;
+}
+.maplibregl-ctrl-attrib a {
+  color: var(--color-gri) !important;
+}
+.maplibregl-canvas:focus {
+  outline: none;
+}
+
+/* Konum imleci ve pinler tıklanabilir olsun */
+.maplibregl-marker {
+  cursor: pointer;
+  will-change: transform;
 }

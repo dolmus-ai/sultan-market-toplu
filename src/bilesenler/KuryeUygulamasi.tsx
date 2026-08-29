@@ -1,0 +1,736 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { AnimatePresence, motion } from "motion/react";
+
+import Harita, { type HaritaApi, type Katmanlar } from "./Harita";
+import HaritaKontrolleri from "./HaritaKontrolleri";
+import AltPanel, { type PanelDurumu } from "./AltPanel";
+import TeslimatDetay from "./TeslimatDetay";
+import {
+  AbonelikSatiri,
+  SepetSatiri,
+  TeslimatSatiri,
+  UrunListesi,
+} from "./Listeler";
+import { MarkaIsareti } from "./Marka";
+
+import { tarayiciIstemcisi } from "@/lib/supabase/client";
+import { mesafeYaz, sureYaz } from "@/lib/rota";
+import { abonelikBugunMu, sepetToplami } from "@/lib/veri";
+import { para } from "@/lib/bicim";
+import type {
+  Abonelik,
+  Kurye,
+  Nokta,
+  RotaSonucu,
+  Sepet,
+  Siparis,
+  SiparisDurumu,
+  Urun,
+} from "@/lib/tipler";
+
+type Sekme = "teslimatlar" | "abonelikler" | "sepetler" | "urunler";
+
+const SEKMELER: { anahtar: Sekme; ad: string }[] = [
+  { anahtar: "teslimatlar", ad: "Teslimatlar" },
+  { anahtar: "abonelikler", ad: "Abonelikler" },
+  { anahtar: "sepetler", ad: "Sepetler" },
+  { anahtar: "urunler", ad: "Ürünler" },
+];
+
+const AKTIF_DURUMLAR: SiparisDurumu[] = ["bekliyor", "hazirlaniyor", "yolda"];
+
+type Props = {
+  kurye: Kurye | null;
+  baslangicTeslimatlar: Siparis[];
+  baslangicAbonelikler: Abonelik[];
+  baslangicSepetler: Sepet[];
+  urunler: Urun[];
+};
+
+export default function KuryeUygulamasi({
+  kurye,
+  baslangicTeslimatlar,
+  baslangicAbonelikler,
+  baslangicSepetler,
+  urunler,
+}: Props) {
+  const yonlendir = useRouter();
+  const db = useMemo(() => tarayiciIstemcisi(), []);
+  const haritaApi = useRef<HaritaApi>(null);
+
+  const [teslimatlar, setTeslimatlar] = useState(baslangicTeslimatlar);
+  const [abonelikler] = useState(baslangicAbonelikler);
+  const [sepetler] = useState(baslangicSepetler);
+
+  const [sekme, setSekme] = useState<Sekme>("teslimatlar");
+  const [panel, setPanel] = useState<PanelDurumu>("yari");
+  const [seciliId, setSeciliId] = useState<string | null>(null);
+
+  const [secimModu, setSecimModu] = useState(false);
+  const [secilenler, setSecilenler] = useState<string[]>([]);
+  const [rota, setRota] = useState<RotaSonucu | null>(null);
+  const [rotaHesapla, setRotaHesapla] = useState(false);
+
+  const [katmanlar, setKatmanlar] = useState<Katmanlar>({
+    abonelikler: true,
+    teslimEdilenler: false,
+    ucBoyut: true,
+    isiHaritasi: false,
+  });
+  const [katmanPaneli, setKatmanPaneli] = useState(false);
+
+  const [kuryeKonumu, setKuryeKonumu] = useState<Nokta | null>(null);
+  const [kuryeYonu, setKuryeYonu] = useState<number | null>(null);
+  const [konumTakibi, setKonumTakibi] = useState(false);
+  const [aci, setAci] = useState({ bearing: -12, pitch: 45 });
+
+  const [konumDuzeltme, setKonumDuzeltme] = useState<string | null>(null);
+  const [islemde, setIslemde] = useState(false);
+  const [bildirim, setBildirim] = useState<string | null>(null);
+
+  const secili = useMemo(
+    () => teslimatlar.find((s) => s.id === seciliId) ?? null,
+    [teslimatlar, seciliId],
+  );
+
+  const bugunAbonelikler = useMemo(() => {
+    const bugun = new Date();
+    return abonelikler.filter((a) => abonelikBugunMu(a, bugun));
+  }, [abonelikler]);
+
+  const aktifTeslimatlar = useMemo(
+    () => teslimatlar.filter((s) => AKTIF_DURUMLAR.includes(s.durum)),
+    [teslimatlar],
+  );
+
+  const rotaSirasi = useMemo(
+    () => new Map(rota?.sira.map((id, i) => [id, i + 1]) ?? []),
+    [rota],
+  );
+
+  const siraliTeslimatlar = useMemo(() => {
+    const liste = katmanlar.teslimEdilenler
+      ? teslimatlar
+      : teslimatlar.filter((s) => s.durum !== "teslim");
+    if (rotaSirasi.size === 0) return liste;
+    return [...liste].sort(
+      (a, b) =>
+        (rotaSirasi.get(a.id) ?? 999) - (rotaSirasi.get(b.id) ?? 999),
+    );
+  }, [teslimatlar, katmanlar.teslimEdilenler, rotaSirasi]);
+
+  /* ------------------------- Bildirim ------------------------- */
+  const uyar = useCallback((mesaj: string) => {
+    setBildirim(mesaj);
+    setTimeout(() => setBildirim(null), 3200);
+  }, []);
+
+  /* ------------------------- Veri tazeleme ------------------------- */
+  const teslimatlariTazele = useCallback(async () => {
+    const { data } = await db
+      .from("siparisler")
+      .select(
+        `id, musteri_id, adres_id, kaynak, abonelik_id, kurye_id, durum, oncelik,
+         planlanan_tarih, planlanan_saat, teslim_zamani, odeme_yontemi, tutar, notlar, created_at,
+         musteri:musteriler ( id, ad, telefon, notlar ),
+         adres:adresler ( id, musteri_id, baslik, adres_metni, bina, kat, daire, tarif, lat, lng, konum_dogrulandi ),
+         kalemler:siparis_kalemleri ( id, urun_id, miktar, birim_fiyat, urun:urunler ( id, ad, birim, emoji, fiyat ) )`,
+      )
+      .order("oncelik", { ascending: false })
+      .limit(400);
+    if (data) setTeslimatlar(data as unknown as Siparis[]);
+  }, [db]);
+
+  useEffect(() => {
+    const kanal = db
+      .channel("siparis-akisi")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "siparisler" },
+        () => void teslimatlariTazele(),
+      )
+      .subscribe();
+    return () => {
+      void db.removeChannel(kanal);
+    };
+  }, [db, teslimatlariTazele]);
+
+  /* ------------------------- Canlı konum ------------------------- */
+  useEffect(() => {
+    if (!("geolocation" in navigator)) return;
+    let sonYazma = 0;
+
+    const izleyici = navigator.geolocation.watchPosition(
+      (konum) => {
+        const nokta = {
+          lat: konum.coords.latitude,
+          lng: konum.coords.longitude,
+        };
+        setKuryeKonumu(nokta);
+        if (konum.coords.heading != null && !Number.isNaN(konum.coords.heading))
+          setKuryeYonu(konum.coords.heading);
+
+        const simdi = Date.now();
+        if (kurye && simdi - sonYazma > 15_000) {
+          sonYazma = simdi;
+          void db.from("kurye_konumlari").upsert(
+            {
+              kurye_id: kurye.id,
+              lat: nokta.lat,
+              lng: nokta.lng,
+              yon: konum.coords.heading,
+              hiz: konum.coords.speed,
+              dogruluk: konum.coords.accuracy,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "kurye_id" },
+          );
+        }
+      },
+      () => setKonumTakibi(false),
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 20_000 },
+    );
+
+    return () => navigator.geolocation.clearWatch(izleyici);
+  }, [db, kurye]);
+
+  /* İlk açılışta teslimatlara odaklan */
+  const ilkOdakRef = useRef(false);
+  const haritaHazir = useCallback(() => {
+    if (ilkOdakRef.current) return;
+    const noktalar = aktifTeslimatlar
+      .filter((s) => s.adres?.lat != null)
+      .map((s) => ({ lat: s.adres!.lat!, lng: s.adres!.lng! }));
+    if (noktalar.length > 0) {
+      ilkOdakRef.current = true;
+      setTimeout(() => haritaApi.current?.hepsiniSigdir(noktalar), 400);
+    }
+  }, [aktifTeslimatlar]);
+
+  /* ------------------------- Etkileşimler ------------------------- */
+  function pinSecildi(id: string) {
+    if (secimModu) {
+      secimDegistir(id);
+      return;
+    }
+    setSeciliId(id);
+    setPanel("yari");
+    const s = teslimatlar.find((t) => t.id === id);
+    if (s?.adres?.lat != null)
+      haritaApi.current?.ucur({ lat: s.adres.lat, lng: s.adres.lng! });
+  }
+
+  function secimDegistir(id: string) {
+    setSecilenler((onceki) =>
+      onceki.includes(id) ? onceki.filter((x) => x !== id) : [...onceki, id],
+    );
+  }
+
+  async function rotayiOlustur() {
+    const duraklar = secilenler
+      .map((id) => teslimatlar.find((s) => s.id === id))
+      .filter((s): s is Siparis => !!s && s.adres?.lat != null)
+      .map((s) => ({
+        id: s.id,
+        nokta: { lat: s.adres!.lat!, lng: s.adres!.lng! },
+      }));
+
+    if (duraklar.length < 2) {
+      uyar("En az 2 konumu belli teslimat seçin.");
+      return;
+    }
+
+    const baslangic = kuryeKonumu ?? duraklar[0].nokta;
+    setRotaHesapla(true);
+    try {
+      const yanit = await fetch("/api/rota", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ baslangic, duraklar }),
+      });
+      if (!yanit.ok) throw new Error("rota");
+      const sonuc = (await yanit.json()) as RotaSonucu;
+      setRota(sonuc);
+      setSecimModu(false);
+      setPanel("kapali");
+      haritaApi.current?.hepsiniSigdir([baslangic, ...duraklar.map((d) => d.nokta)]);
+    } catch {
+      uyar("Rota hesaplanamadı, tekrar deneyin.");
+    } finally {
+      setRotaHesapla(false);
+    }
+  }
+
+  async function rotayiUstlen() {
+    if (!rota || !kurye) return;
+    setIslemde(true);
+    try {
+      const { data: yeniRota } = await db
+        .from("rotalar")
+        .insert({
+          kurye_id: kurye.id,
+          durum: "basladi",
+          siparis_sirasi: rota.sira,
+          toplam_mesafe_m: Math.round(rota.toplamMesafeM),
+          toplam_sure_sn: Math.round(rota.toplamSureSn),
+          baslangic_lat: kuryeKonumu?.lat ?? null,
+          baslangic_lng: kuryeKonumu?.lng ?? null,
+        })
+        .select("id")
+        .single();
+
+      await db
+        .from("siparisler")
+        .update({ kurye_id: kurye.id, rota_id: yeniRota?.id ?? null })
+        .in("id", rota.sira);
+
+      await teslimatlariTazele();
+      uyar(`${rota.sira.length} teslimat üstlenildi.`);
+    } catch {
+      uyar("Rota kaydedilemedi.");
+    } finally {
+      setIslemde(false);
+    }
+  }
+
+  async function durumDegistir(id: string, durum: SiparisDurumu) {
+    setIslemde(true);
+    const yama: Record<string, unknown> = { durum };
+    if (durum === "teslim") yama.teslim_zamani = new Date().toISOString();
+    if (kurye) yama.kurye_id = kurye.id;
+
+    const { error } = await db.from("siparisler").update(yama).eq("id", id);
+    setIslemde(false);
+
+    if (error) {
+      uyar("Durum güncellenemedi.");
+      return;
+    }
+    setTeslimatlar((onceki) =>
+      onceki.map((s) => (s.id === id ? { ...s, ...yama, durum } : s)),
+    );
+    if (durum === "teslim") {
+      setSeciliId(null);
+      uyar("Teslimat tamamlandı 🎉");
+    }
+  }
+
+  async function konumuKaydet(nokta: Nokta) {
+    if (!konumDuzeltme) return;
+    const hedef = teslimatlar.find((s) => s.id === konumDuzeltme);
+    if (!hedef?.adres) return;
+
+    const { error } = await db
+      .from("adresler")
+      .update({ lat: nokta.lat, lng: nokta.lng, konum_dogrulandi: true })
+      .eq("id", hedef.adres.id);
+
+    if (error) {
+      uyar("Konum kaydedilemedi.");
+      return;
+    }
+    setTeslimatlar((onceki) =>
+      onceki.map((s) =>
+        s.adres?.id === hedef.adres!.id
+          ? {
+              ...s,
+              adres: {
+                ...s.adres,
+                lat: nokta.lat,
+                lng: nokta.lng,
+                konum_dogrulandi: true,
+              },
+            }
+          : s,
+      ),
+    );
+    setKonumDuzeltme(null);
+    uyar("Konum güncellendi.");
+  }
+
+  async function vardiyaDegistir() {
+    if (!kurye) return;
+    await db
+      .from("kuryeler")
+      .update({ vardiyada: !kurye.vardiyada })
+      .eq("id", kurye.id);
+    yonlendir.refresh();
+  }
+
+  async function cikis() {
+    await db.auth.signOut();
+    yonlendir.replace("/giris");
+    yonlendir.refresh();
+  }
+
+  /* ------------------------- Görünüm ------------------------- */
+  const toplamTahsilat = aktifTeslimatlar.reduce((t, s) => t + s.tutar, 0);
+
+  return (
+    <main className="relative h-dvh w-full overflow-hidden bg-duman">
+      <Harita
+        ref={haritaApi}
+        teslimatlar={teslimatlar}
+        abonelikler={bugunAbonelikler}
+        seciliId={seciliId}
+        secimModu={secimModu}
+        secilenler={secilenler}
+        rota={rota}
+        katmanlar={katmanlar}
+        kuryeKonumu={kuryeKonumu}
+        kuryeYonu={kuryeYonu}
+        onSecim={pinSecildi}
+        onHaritaTikla={konumDuzeltme ? konumuKaydet : undefined}
+        onAciDegisti={(bearing, pitch) => setAci({ bearing, pitch })}
+        onHazir={haritaHazir}
+      />
+
+      {/* Üst çubuk */}
+      <motion.header
+        initial={{ y: -24, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ type: "spring", stiffness: 320, damping: 30 }}
+        className="pointer-events-none absolute inset-x-0 top-0 z-20 p-3 pt-[calc(env(safe-area-inset-top)+12px)]"
+      >
+        <div className="pointer-events-auto flex items-center gap-2.5 rounded-[22px] border border-cizgi bg-white/85 p-2 pr-3 shadow-yumusak backdrop-blur-2xl">
+          <MarkaIsareti boyut={38} />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[13px] font-extrabold leading-tight">
+              {kurye?.ad || "Kurye"}
+              <span className="ml-1.5 font-bold text-gri">
+                · {aktifTeslimatlar.length} teslimat
+              </span>
+            </p>
+            <p className="truncate text-[11px] font-semibold text-gri">
+              {para(toplamTahsilat)} tahsilat · {bugunAbonelikler.length} abonelik
+            </p>
+          </div>
+          <button
+            onClick={vardiyaDegistir}
+            className={`rounded-hap px-3 py-1.5 text-[11px] font-black uppercase tracking-wide transition-colors ${
+              kurye?.vardiyada
+                ? "bg-kirmizi text-white"
+                : "bg-duman text-gri hover:bg-cizgi"
+            }`}
+          >
+            {kurye?.vardiyada ? "Vardiyada" : "Mola"}
+          </button>
+          <button
+            onClick={cikis}
+            aria-label="Çıkış"
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-duman text-gri transition-colors hover:bg-cizgi"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+              <path
+                d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3M16 15l4-3-4-3M20 12H10"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+        </div>
+      </motion.header>
+
+      <HaritaKontrolleri
+        bearing={aci.bearing}
+        pitch={aci.pitch}
+        katmanlar={katmanlar}
+        katmanPaneli={katmanPaneli}
+        konumTakibi={konumTakibi}
+        onPusula={() => haritaApi.current?.pusulaSifirla()}
+        onEgim={() => haritaApi.current?.egimDegistir()}
+        onYakinlastir={(yon) => haritaApi.current?.yakinlastir(yon)}
+        onKonum={() => {
+          if (kuryeKonumu) {
+            haritaApi.current?.ucur(kuryeKonumu, 17);
+            setKonumTakibi(true);
+          } else {
+            uyar("Konum alınamadı. Tarayıcı izinlerini kontrol edin.");
+          }
+        }}
+        onKatmanPaneli={setKatmanPaneli}
+        onKatman={(k) => setKatmanlar((o) => ({ ...o, [k]: !o[k] }))}
+      />
+
+      {/* Rota özeti */}
+      <AnimatePresence>
+        {rota && (
+          <motion.div
+            initial={{ y: -20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -20, opacity: 0 }}
+            className="absolute inset-x-3 top-[calc(env(safe-area-inset-top)+80px)] z-20 flex items-center gap-3 rounded-[20px] border border-siyah/10 bg-siyah/92 p-3 text-white shadow-yuzen backdrop-blur-xl"
+          >
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-kirmizi text-sm font-black">
+              {rota.sira.length}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[13px] font-extrabold">
+                {mesafeYaz(rota.toplamMesafeM)} · {sureYaz(rota.toplamSureSn)}
+              </p>
+              <p className="text-[11px] font-semibold text-white/60">
+                {rota.motor === "osrm"
+                  ? "Gerçek yol ağı üzerinde optimize edildi"
+                  : "Kuş uçuşu + 2-opt ile optimize edildi"}
+              </p>
+            </div>
+            <button
+              onClick={rotayiUstlen}
+              disabled={islemde}
+              className="rounded-hap bg-kirmizi px-3.5 py-2 text-[12px] font-black disabled:opacity-60"
+            >
+              Üstlen
+            </button>
+            <button
+              onClick={() => setRota(null)}
+              aria-label="Rotayı kapat"
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white/70"
+            >
+              ×
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Konum düzeltme uyarısı */}
+      <AnimatePresence>
+        {konumDuzeltme && (
+          <motion.div
+            initial={{ y: -16, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -16, opacity: 0 }}
+            className="absolute inset-x-3 top-[calc(env(safe-area-inset-top)+80px)] z-30 flex items-center gap-3 rounded-[20px] bg-kirmizi p-3 text-white shadow-kirmizi"
+          >
+            <span className="text-lg">📍</span>
+            <p className="flex-1 text-[13px] font-bold">
+              Doğru konumu haritada işaretleyin.
+            </p>
+            <button
+              onClick={() => setKonumDuzeltme(null)}
+              className="rounded-hap bg-white/20 px-3 py-1.5 text-[12px] font-black"
+            >
+              Vazgeç
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Toplu seçim eylem çubuğu */}
+      <AnimatePresence>
+        {secimModu && (
+          <motion.div
+            initial={{ y: 60, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 60, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 400, damping: 34 }}
+            className="absolute inset-x-3 bottom-4 z-40 flex items-center gap-2 rounded-[22px] bg-siyah p-2 pl-4 text-white shadow-yuzen"
+          >
+            <p className="flex-1 text-[13px] font-extrabold">
+              {secilenler.length} durak seçildi
+            </p>
+            <button
+              onClick={() => {
+                setSecimModu(false);
+                setSecilenler([]);
+              }}
+              className="rounded-hap bg-white/10 px-3.5 py-2.5 text-[12px] font-bold"
+            >
+              Vazgeç
+            </button>
+            <button
+              onClick={rotayiOlustur}
+              disabled={rotaHesapla || secilenler.length < 2}
+              className="rounded-hap bg-kirmizi px-4 py-2.5 text-[12px] font-black disabled:opacity-50"
+            >
+              {rotaHesapla ? "Hesaplanıyor…" : "En kısa yolu bul"}
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Bildirim */}
+      <AnimatePresence>
+        {bildirim && (
+          <motion.div
+            initial={{ y: 24, opacity: 0, scale: 0.95 }}
+            animate={{ y: 0, opacity: 1, scale: 1 }}
+            exit={{ y: 24, opacity: 0, scale: 0.95 }}
+            className="pointer-events-none absolute inset-x-0 bottom-32 z-50 mx-auto w-fit rounded-hap bg-siyah px-4 py-2.5 text-[13px] font-bold text-white shadow-yuzen"
+          >
+            {bildirim}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Alt panel */}
+      <AltPanel
+        durum={panel}
+        onDurum={setPanel}
+        baslik={
+          <div className="flex items-center gap-2">
+            <div className="ince-kaydirma flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto [mask-image:linear-gradient(to_right,black_88%,transparent)]">
+              {SEKMELER.map((s) => (
+                <button
+                  key={s.anahtar}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSekme(s.anahtar);
+                    setSeciliId(null);
+                    if (panel === "kapali") setPanel("yari");
+                  }}
+                  className={`relative shrink-0 rounded-hap px-3.5 py-2 text-[13px] font-bold transition-colors ${
+                    sekme === s.anahtar ? "text-white" : "text-gri hover:bg-duman"
+                  }`}
+                >
+                  {sekme === s.anahtar && (
+                    <motion.span
+                      layoutId="sekme-arka"
+                      transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                      className="absolute inset-0 rounded-hap bg-siyah"
+                    />
+                  )}
+                  <span className="relative">{s.ad}</span>
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setSecimModu((o) => !o);
+                setSecilenler([]);
+                setSeciliId(null);
+                setSekme("teslimatlar");
+                setPanel("yari");
+              }}
+              className={`shrink-0 rounded-hap px-3 py-2 text-[12px] font-black transition-colors ${
+                secimModu
+                  ? "bg-kirmizi text-white"
+                  : "bg-kirmizi-sis text-kirmizi-koyu"
+              }`}
+            >
+              Toplu rota
+            </button>
+          </div>
+        }
+      >
+        <AnimatePresence mode="wait" initial={false}>
+          {secili && !secimModu ? (
+            <TeslimatDetay
+              key={`detay-${secili.id}`}
+              siparis={secili}
+              kuryeKonumu={kuryeKonumu}
+              islemde={islemde}
+              onKapat={() => setSeciliId(null)}
+              onDurum={(d) => durumDegistir(secili.id, d)}
+              onKonumDuzelt={() => {
+                setKonumDuzeltme(secili.id);
+                setPanel("kapali");
+              }}
+            />
+          ) : (
+            <motion.div
+              key={sekme}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.18 }}
+              className="space-y-2 pb-6 pt-1"
+            >
+              {sekme === "teslimatlar" && (
+                <>
+                  {siraliTeslimatlar.map((s) => (
+                    <TeslimatSatiri
+                      key={s.id}
+                      siparis={s}
+                      sira={rotaSirasi.get(s.id)}
+                      secili={seciliId === s.id}
+                      secimModu={secimModu}
+                      isaretli={secilenler.includes(s.id)}
+                      onTikla={() => pinSecildi(s.id)}
+                    />
+                  ))}
+                  {siraliTeslimatlar.length === 0 && (
+                    <Bos mesaj="Bugün için teslimat yok." />
+                  )}
+                </>
+              )}
+
+              {sekme === "abonelikler" && (
+                <>
+                  {abonelikler.map((a) => (
+                    <AbonelikSatiri
+                      key={a.id}
+                      abonelik={a}
+                      bugun={bugunAbonelikler.some((b) => b.id === a.id)}
+                      onTikla={() => {
+                        if (a.adres?.lat != null) {
+                          haritaApi.current?.ucur({
+                            lat: a.adres.lat,
+                            lng: a.adres.lng!,
+                          });
+                          setPanel("kapali");
+                        }
+                      }}
+                    />
+                  ))}
+                  {abonelikler.length === 0 && (
+                    <Bos mesaj="Aktif abonelik yok." />
+                  )}
+                </>
+              )}
+
+              {sekme === "sepetler" && (
+                <>
+                  {sepetler.map((s) => (
+                    <SepetSatiri
+                      key={s.id}
+                      sepet={s}
+                      onTikla={() => {
+                        if (s.adres?.lat != null) {
+                          haritaApi.current?.ucur({
+                            lat: s.adres.lat,
+                            lng: s.adres.lng!,
+                          });
+                          setPanel("kapali");
+                        }
+                      }}
+                    />
+                  ))}
+                  {sepetler.length === 0 && <Bos mesaj="Açık sepet yok." />}
+                  {sepetler.length > 0 && (
+                    <p className="px-1 pt-2 text-center text-[12px] font-semibold text-gri">
+                      Toplam{" "}
+                      {para(
+                        sepetler.reduce(
+                          (t, s) => t + sepetToplami(s.kalemler ?? []),
+                          0,
+                        ),
+                      )}{" "}
+                      değerinde açık sepet
+                    </p>
+                  )}
+                </>
+              )}
+
+              {sekme === "urunler" && <UrunListesi urunler={urunler} />}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </AltPanel>
+    </main>
+  );
+}
+
+function Bos({ mesaj }: { mesaj: string }) {
+  return (
+    <div className="flex flex-col items-center gap-2 py-14 text-center">
+      <span className="text-3xl opacity-40">🗺️</span>
+      <p className="text-sm font-semibold text-gri">{mesaj}</p>
+    </div>
+  );
+}

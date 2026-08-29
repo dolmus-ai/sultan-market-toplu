@@ -769,28 +769,6 @@ export default function KuryeUygulamasi({
     uyar("Kapı bilgisi kaydedildi");
   }
 
-  /** Müşteriye WhatsApp'tan "yola çıktım" mesajı — ücretsiz derin bağlantı. */
-  function whatsAppGonder(siparis: Siparis) {
-    const telefon = siparis.musteri?.telefon?.replace(/\D/g, "");
-    if (!telefon) {
-      uyar("Müşterinin telefonu kayıtlı değil.");
-      return;
-    }
-    const uluslararasi = telefon.startsWith("90")
-      ? telefon
-      : `90${telefon.replace(/^0/, "")}`;
-
-    const mesaj =
-      `Merhaba ${siparis.musteri?.ad ?? ""}, ${MARKET.ad}'ten siparişiniz ` +
-      `yola çıktı. Kısa süre içinde adresinizde olacağız. İyi günler!`;
-
-    window.open(
-      `https://wa.me/${uluslararasi}?text=${encodeURIComponent(mesaj)}`,
-      "_blank",
-      "noreferrer",
-    );
-  }
-
   async function konumuKaydet(nokta: Nokta) {
     if (!konumDuzeltme) return;
     const hedef = teslimatlar.find((s) => s.id === konumDuzeltme);
@@ -1232,7 +1210,6 @@ export default function KuryeUygulamasi({
               onKapat={() => setSeciliId(null)}
               onDurum={(d) => durumDegistir(secili.id, d)}
               onTeslimSonucu={setTeslimModu}
-              onWhatsApp={() => whatsAppGonder(secili)}
               onNotKaydet={kapiBilgisiKaydet}
               onNavigasyon={() => navigasyonuAc(secili)}
               onKonumDuzelt={() => {

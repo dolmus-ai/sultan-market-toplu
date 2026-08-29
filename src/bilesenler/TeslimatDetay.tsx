@@ -27,7 +27,6 @@ type Props = {
   onTeslimSonucu: (mod: "teslim" | "basarisiz") => void;
   onNavigasyon: () => void;
   onKonumDuzelt: () => void;
-  onWhatsApp: () => void;
   onNotKaydet: (kuryeNotu: string, kapiKodu: string) => void;
 };
 
@@ -40,7 +39,6 @@ export default function TeslimatDetay({
   onTeslimSonucu,
   onNavigasyon,
   onKonumDuzelt,
-  onWhatsApp,
   onNotKaydet,
 }: Props) {
   const adres = siparis.adres;
@@ -162,32 +160,20 @@ export default function TeslimatDetay({
           </button>
         )}
         {siparis.musteri?.telefon && (
-          <>
-            <a
-              href={`tel:${siparis.musteri.telefon.replace(/\s/g, "")}`}
-              className="flex h-12 flex-1 items-center justify-center gap-2 rounded-hap border border-cizgi bg-yuzey text-[14px] font-bold active:scale-[0.98]"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                <path
-                  d="M5 4h3.5l1.5 4-2 1.5a12 12 0 0 0 6.5 6.5L16 14l4 1.5V19a2 2 0 0 1-2.2 2A16 16 0 0 1 3 6.2 2 2 0 0 1 5 4Z"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinejoin="round"
-                />
-              </svg>
-              Ara
-            </a>
-            <button
-              onClick={onWhatsApp}
-              aria-label="WhatsApp'tan haber ver"
-              title="WhatsApp'tan haber ver"
-              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-hap border border-cizgi bg-yuzey text-[#25D366] active:scale-[0.98]"
-            >
-              <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2a10 10 0 0 0-8.6 15l-1.3 4.7 4.8-1.3A10 10 0 1 0 12 2Zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-2.9.8.8-2.8-.2-.3A8.2 8.2 0 1 1 12 20.2Zm4.5-6.1c-.2-.1-1.4-.7-1.7-.8-.2-.1-.4-.1-.5.1l-.7.9c-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.1-.2 0-.4.1-.5l.4-.5c.1-.2.1-.3 0-.5l-.7-1.7c-.2-.4-.4-.4-.5-.4h-.5c-.2 0-.5.1-.7.3-.3.3-.9.9-.9 2.1s.9 2.5 1 2.6c.1.2 1.8 2.8 4.4 3.8 1.6.6 2.2.7 3 .6.5-.1 1.4-.6 1.6-1.2.2-.6.2-1.1.1-1.2 0-.1-.2-.2-.4-.3Z" />
-              </svg>
-            </button>
-          </>
+          <a
+            href={`tel:${siparis.musteri.telefon.replace(/\s/g, "")}`}
+            className="flex h-12 flex-1 items-center justify-center gap-2 rounded-hap border border-cizgi bg-yuzey text-[14px] font-bold active:scale-[0.98]"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path
+                d="M5 4h3.5l1.5 4-2 1.5a12 12 0 0 0 6.5 6.5L16 14l4 1.5V19a2 2 0 0 1-2.2 2A16 16 0 0 1 3 6.2 2 2 0 0 1 5 4Z"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinejoin="round"
+              />
+            </svg>
+            Ara
+          </a>
         )}
       </div>
 

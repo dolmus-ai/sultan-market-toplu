@@ -143,9 +143,6 @@ drop policy "muhasebe kilidi" on public.profiles;
 
 ### Günlük işi hızlandıranlar
 
-- **WhatsApp'tan haber ver:** teslimat detayındaki yeşil düğme müşteriye
-  hazır "siparişiniz yola çıktı" mesajını açar. `wa.me` derin bağlantısı —
-  SMS sağlayıcısı, API veya ücret yok.
 - **Kapı bilgisi hafızası:** kurye kapı/zil kodunu ve notu ("zil çalışmıyor,
   arayın") kendi yazar; adres kaydında kalır, sonraki her teslimatta detayın
   en üstünde kırmızı şeritte çıkar.

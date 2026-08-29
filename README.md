@@ -37,12 +37,52 @@ npm run dev
 
 ## Kurye hesabı açma
 
-Uygulama Supabase Auth kullanır; kendi kaydı yoktur. Bir kurye eklemek için
-**Supabase Dashboard → Authentication → Users → Add user** ile e-posta/şifre
-oluşturun. Kullanıcı ilk girişte otomatik olarak `kuryeler` tablosuna eklenir.
+Uygulama Supabase Auth kullanır; kendi kayıt ekranı yoktur.
 
-Mevcut muhasebe personeli (`profiles` tablosundaki 8 kullanıcı) da doğrudan
-giriş yapabilir — RLS bu iki tabloyu birlikte kabul eder.
+1. **Supabase Dashboard → Authentication → Users → Add user** ile e-posta/şifre
+   oluşturun ve "Auto confirm user" işaretleyin.
+2. Kullanıcı ilk girişte otomatik olarak `kuryeler` tablosuna eklenir.
+3. **Önemli:** `auth.users` üzerinde bir trigger her yeni kullanıcıya
+   `profiles` tablosunda `role='personel'` kaydı açıyor — bu kayıt muhasebe
+   erişimi demek. Kurye yalnızca kurye tarafını görsün istiyorsanız bu satırı
+   silin:
+
+```sql
+delete from public.profiles p
+using auth.users u
+where p.id = u.id and u.email = 'yeni.kurye@ornek.com';
+```
+
+Kuryenin uygulamaya erişimi `kuryeler` kaydından geldiği için profil silinince
+giriş bozulmaz; yalnızca muhasebe kapanır.
+
+Mevcut muhasebe personeli (`profiles` tablosundaki 8 kullanıcı) de giriş
+yapabilir ve her iki tarafı da görür.
+
+### Muhasebe / kurye ayrımı
+
+Muhasebe tabloları (`cariler`, `hareketler`, `marka_esleme`, `profiles`)
+başlangıçta **oturum açan herkese** açıktı — okuma da silme de. Kurye hesapları
+da `authenticated` olduğu için defteri görebiliyordu. Mevcut politikalara
+dokunmadan, üzerlerine kısıtlayıcı (`restrictive`) bir kilit eklendi: erişim
+için ayrıca `profiles` kaydı gerekiyor (`public.muhasebeci_mi()`).
+
+Doğrulandı — RLS altında satır sayıları:
+
+| | cariler | hareketler | siparisler | urunler |
+| --- | --- | --- | --- | --- |
+| sahip | 120 | 1391 | 22 | 44 |
+| personel | 120 | 1391 | 22 | 44 |
+| kurye | **0** | **0** | 22 | 44 |
+
+Geri almak isterseniz:
+
+```sql
+drop policy "muhasebe kilidi" on public.cariler;
+drop policy "muhasebe kilidi" on public.hareketler;
+drop policy "muhasebe kilidi" on public.marka_esleme;
+drop policy "muhasebe kilidi" on public.profiles;
+```
 
 ---
 

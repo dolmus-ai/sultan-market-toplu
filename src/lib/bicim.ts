@@ -1,3 +1,4 @@
+import { acilisDakikasi } from "./market";
 import type {
   BasarisizlikSebebi,
   OdemeYontemi,
@@ -126,7 +127,8 @@ export function bugununTarihi(): string {
 
 /**
  * Planlanan saate göre gecikme (dakika). Negatifse henüz vakti gelmemiş.
- * Saat tanımsızsa null.
+ * Market açılmadan önce hiçbir teslimat gecikmiş sayılmaz — kurye zaten
+ * ürünleri alamaz. Saat tanımsızsa null.
  */
 export function gecikmeDk(
   planlananSaat: string | null,
@@ -135,11 +137,15 @@ export function gecikmeDk(
   if (!planlananSaat) return null;
   const bugun = bugununTarihi();
   if (tarih > bugun) return null;
+
+  const simdi = new Date();
+  const simdiDk = simdi.getHours() * 60 + simdi.getMinutes();
+  if (simdiDk < acilisDakikasi()) return null;
+
   if (tarih < bugun) return 24 * 60;
 
   const [sa, dk] = planlananSaat.split(":").map(Number);
-  const simdi = new Date();
-  return (simdi.getHours() - sa) * 60 + (simdi.getMinutes() - dk);
+  return simdiDk - (sa * 60 + dk);
 }
 
 /** Gecikmeyi kısa ve okunur yazar: "12 dk", "2 sa", "dün". */

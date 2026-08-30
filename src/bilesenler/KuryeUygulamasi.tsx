@@ -21,7 +21,7 @@ import { SultanAmblem } from "./SultanLogo";
 
 import { tarayiciIstemcisi } from "@/lib/supabase/client";
 import { haversine, mesafeYaz, sureYaz } from "@/lib/rota";
-import { MARKET } from "@/lib/market";
+import { MARKET, marketAcikMi } from "@/lib/market";
 import {
   kalanlar,
   siradakiAdim,
@@ -180,6 +180,8 @@ export default function KuryeUygulamasi({
     () => tahsilatlar.reduce((t, x) => t + x.tutar, 0),
     [tahsilatlar],
   );
+
+  const marketAcik = marketAcikMi();
 
   const gecikenSayisi = useMemo(
     () =>
@@ -905,8 +907,18 @@ export default function KuryeUygulamasi({
             </p>
             <p className="truncate text-[11px] font-semibold text-gri">
               {para(kasaToplami)} kasada · {para(toplamTahsilat)} kalan
-              {gecikenSayisi > 0 && (
-                <span className="text-kirmizi"> · {gecikenSayisi} geciken</span>
+              {!marketAcik ? (
+                <span className="text-turuncu">
+                  {" "}
+                  · market {MARKET.acilis}&apos;da açılıyor
+                </span>
+              ) : (
+                gecikenSayisi > 0 && (
+                  <span className="text-kirmizi">
+                    {" "}
+                    · {gecikenSayisi} geciken
+                  </span>
+                )
               )}
             </p>
           </div>

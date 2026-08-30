@@ -45,6 +45,7 @@ npm install
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Publishable key |
 | `NEXT_PUBLIC_HARITA_STILI` | MapLibre stil URL'si (varsayılan OpenFreeMap Liberty) |
 | `NEXT_PUBLIC_MARKET_AD` / `_ADRES` / `_LAT` / `_LNG` | Sultan Market'in konumu — harita başlangıcı, depo pini ve rota çıkış noktası |
+| `NEXT_PUBLIC_MARKET_ACILIS` | Açılış saati (varsayılan `07:30`) — bu saatten önce hiçbir teslimat "gecikti" sayılmaz |
 | `NEXT_PUBLIC_MERKEZ_LAT` / `_LNG` / `_ZOOM` | Kurye konumu alınamazsa haritanın açılacağı yer (varsayılan: market) |
 | `OSRM_SUNUCU` | Gerçek yol ağı rotası. Boşsa her şey yerel hesaplanır (aşağıya bakın) |
 
@@ -150,7 +151,9 @@ drop policy "muhasebe kilidi" on public.profiles;
   açık teslimatlar listede "Aynı bina · 3" rozetiyle işaretlenir.
 - **Gecikme uyarısı:** planlanan saati geçen teslimatlar listede ve detayda
   kırmızı rozetle ("12 dk geç", "2 sa geç", "dünden geç") öne çıkar; üst
-  çubukta geciken sayısı görünür.
+  çubukta geciken sayısı görünür. **Market açılmadan (07:30) hiçbir teslimat
+  gecikmiş sayılmaz** — kurye zaten ürünleri alamaz; o saatlerde üst çubuk
+  "market 07:30'da açılıyor" der.
 - **Diğer kuryeler:** vardiyadaki diğer kuryelerin son konumu haritada soluk
   gri noktalar ve adlarıyla görünür, canlı güncellenir.
 
@@ -285,13 +288,16 @@ restart identity cascade;
 `public.gunun_siparislerini_uret(date)` aktif aboneliklerden o günün
 siparişlerini üretir — sıklık (günlük / haftalık / iki haftalık / aylık),
 gün listesi ve başlangıç–bitiş aralığı dikkate alınır; aynı abonelik için
-aynı güne ikinci sipariş açılmaz. `pg_cron` ile her sabah **05:00
-(Europe/Istanbul)** çalışır:
+aynı güne ikinci sipariş açılmaz. Market **07:30**'da açıldığı için cron
+yarım saat önce, **07:00 (Europe/Istanbul)** çalışır:
 
 ```sql
-select cron.schedule('gunun-siparisleri', '0 2 * * *',
+select cron.schedule('gunun-siparisleri', '0 4 * * *',
   $$select public.gunun_siparislerini_uret(current_date)$$);
 ```
+
+> Sunucu UTC çalışıyor: `0 4 * * *` = 07:00 Europe/Istanbul. Açılış saatini
+> değiştirirseniz hem bu cron'u hem `NEXT_PUBLIC_MARKET_ACILIS`'i güncelleyin.
 
 Elle çalıştırmak için (örneğin yarını hazırlamak):
 

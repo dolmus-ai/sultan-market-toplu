@@ -34,7 +34,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-lg flex-col justify-center px-6">
+    <div className="mx-auto flex min-h-[calc(100dvh-var(--besmele-h))] max-w-lg flex-col justify-center px-6">
       <div className="mb-8 text-center">
         <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-green-700 text-2xl font-bold text-white">
           SM

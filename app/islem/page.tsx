@@ -1,20 +1,35 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Shell from "@/components/Shell";
 import { BuyukHarfGirdi, TutarGirdi } from "@/components/Girdi";
+import KartSecici from "@/components/KartSecici";
 import { supabase } from "@/lib/supabase";
 import {
   bugun,
   buyukHarf,
+  kartliMi,
   para,
   parseTutar,
   tutarYaz,
   TUR_LABEL,
   YONTEM_LABEL,
 } from "@/lib/format";
-import type { Cari, HareketTur, OdemeYontemi } from "@/lib/types";
+import type {
+  Cari,
+  HareketTur,
+  Kart,
+  KartYontemi,
+  OdemeYontemi,
+} from "@/lib/types";
 
 const TURLER: { tur: HareketTur; renk: string }[] = [
   { tur: "gelen_odeme", renk: "bg-green-700" },
@@ -38,6 +53,8 @@ function IslemInner() {
   const [arama, setArama] = useState("");
   const [tutar, setTutar] = useState("");
   const [yontem, setYontem] = useState<OdemeYontemi>("nakit");
+  const [kartId, setKartId] = useState("");
+  const [kartAdi, setKartAdi] = useState("");
   const [tarih, setTarih] = useState(bugun());
   const [aciklama, setAciklama] = useState("");
   const [hata, setHata] = useState("");
@@ -85,6 +102,13 @@ function IslemInner() {
 
   const secili = cariler.find((c) => c.id === cariId);
   const odemeMi = ODEME_TURLERI.includes(tur);
+  // Kartla ödemede hangi kartın kullanıldığı da kaydedilir
+  const kartGerekli = odemeMi && kartliMi(yontem);
+
+  const kartSec = useCallback((id: string, ad: string) => {
+    setKartId(id);
+    setKartAdi(ad);
+  }, []);
 
   // Yazılan isim listede yoksa tek dokunuşla yeni cari aç ve seç
   const hizliEkle = async () => {
@@ -159,6 +183,7 @@ function IslemInner() {
       cari?: string | null;
       tutar?: number | null;
       odeme_yontemi?: string | null;
+      kart?: string | null;
       tarih?: string | null;
       aciklama?: string | null;
     };
@@ -168,8 +193,29 @@ function IslemInner() {
       : tur;
     setTur(yeniTur);
     if (typeof s.tutar === "number" && s.tutar > 0) setTutar(tutarYaz(s.tutar));
-    if (s.odeme_yontemi && s.odeme_yontemi in YONTEM_LABEL)
-      setYontem(s.odeme_yontemi as OdemeYontemi);
+    const yeniYontem =
+      s.odeme_yontemi && s.odeme_yontemi in YONTEM_LABEL
+        ? (s.odeme_yontemi as OdemeYontemi)
+        : yontem;
+    setYontem(yeniYontem);
+
+    // Kartla ödeme söylendiyse söylenen kart adı kayıtlı kartlarla eşleştirilir;
+    // eşleşmezse kart seçimi kullanıcıya bırakılır (kayıt kart olmadan geçmez)
+    kartSec("", "");
+    const kartAd = (s.kart ?? "").trim();
+    if (kartliMi(yeniYontem) && kartAd) {
+      const { data: ks } = await supabase
+        .from("kartlar")
+        .select("*")
+        .eq("tip", yeniYontem)
+        .eq("aktif", true);
+      const adL = kartAd.toLocaleLowerCase("tr");
+      const bulunanKart = ((ks as Kart[]) ?? []).find((k) => {
+        const a = k.ad.toLocaleLowerCase("tr");
+        return a.includes(adL) || adL.includes(a);
+      });
+      if (bulunanKart) kartSec(bulunanKart.id, bulunanKart.ad);
+    }
     if (s.tarih && /^\d{4}-\d{2}-\d{2}$/.test(s.tarih)) setTarih(s.tarih);
     if (s.aciklama) setAciklama(buyukHarf(String(s.aciklama)));
 
@@ -214,6 +260,10 @@ function IslemInner() {
       setHata("Geçerli bir tutar girin.");
       return;
     }
+    if (kartGerekli && !kartId) {
+      setHata("Hangi kartla ödendiğini seçin veya yeni kart ekleyin.");
+      return;
+    }
     setBekliyor(true);
     const { data: kayit, error } = await supabase
       .from("hareketler")
@@ -222,6 +272,7 @@ function IslemInner() {
         tur,
         tutar: t,
         odeme_yontemi: odemeMi ? yontem : null,
+        kart_id: kartGerekli ? kartId : null,
         aciklama: aciklama.trim() || null,
         tarih,
       })
@@ -245,7 +296,10 @@ function IslemInner() {
     }
     setBorcKapandi(kapandi);
     setSonKayitId(kayit.id);
-    setTamam(`${TUR_LABEL[tur]} kaydedildi: ${secili?.unvan} — ${para(t)}`);
+    setTamam(
+      `${TUR_LABEL[tur]} kaydedildi: ${secili?.unvan} — ${para(t)}` +
+        (kartGerekli && kartAdi ? ` (${YONTEM_LABEL[yontem]}: ${kartAdi})` : "")
+    );
   };
 
   const musteriSil = async () => {
@@ -268,6 +322,8 @@ function IslemInner() {
     setTutar("");
     setAciklama("");
     setCariId("");
+    setKartId("");
+    setKartAdi("");
     setHata("Müşteri silindi.");
   };
 
@@ -442,7 +498,11 @@ function IslemInner() {
             {(Object.keys(YONTEM_LABEL) as OdemeYontemi[]).map((y) => (
               <button
                 key={y}
-                onClick={() => setYontem(y)}
+                onClick={() => {
+                  // Yöntem değişince eski kart seçimi taşınmasın
+                  if (y !== yontem) kartSec("", "");
+                  setYontem(y);
+                }}
                 className={`flex-1 rounded-xl py-2.5 text-xs font-bold ${
                   yontem === y
                     ? "bg-green-700 text-white"
@@ -453,6 +513,14 @@ function IslemInner() {
               </button>
             ))}
           </div>
+        )}
+
+        {kartGerekli && (
+          <KartSecici
+            tip={yontem as KartYontemi}
+            kartId={kartId}
+            onSecim={kartSec}
+          />
         )}
 
         <div className="mt-3 flex gap-2">

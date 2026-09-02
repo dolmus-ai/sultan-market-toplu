@@ -1,4 +1,4 @@
-import type { CariTip, HareketTur, OdemeYontemi } from "./types";
+import type { CariTip, HareketTur, KartYontemi, OdemeYontemi } from "./types";
 
 export const para = (n: number) =>
   new Intl.NumberFormat("tr-TR", {
@@ -41,6 +41,12 @@ export const YONTEM_LABEL: Record<OdemeYontemi, string> = {
   kredi_karti: "Kredi Kartı",
   yemek_karti: "Yemek Kartı",
 };
+
+// Kartla ödemede hangi kartın kullanıldığı sorulur (nakitte sorulmaz)
+export const KART_YONTEMLERI: KartYontemi[] = ["kredi_karti", "yemek_karti"];
+
+export const kartliMi = (y: OdemeYontemi): y is KartYontemi =>
+  (KART_YONTEMLERI as OdemeYontemi[]).includes(y);
 
 // Cari tipine göre "giriş" (borçlandıran) ve "ödeme" hareket türleri
 export const girisTuru = (tip: CariTip): HareketTur =>

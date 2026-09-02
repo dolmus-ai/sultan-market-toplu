@@ -36,11 +36,7 @@ const ABONELIK_ALANLARI = `
 const SEPET_ALANLARI = `
   id, musteri_id, adres_id, durum, updated_at,
   musteri:musteriler ( id, ad, telefon, notlar ),
-  adres:adresler ( id, musteri_id, baslik, adres_metni, bina, kat, daire, tarif, kurye_notu, kapi_kodu, lat, lng, konum_dogrulandi ),
-  kalemler:sepet_kalemleri (
-    id, miktar,
-    urun:urunler ( id, ad, birim, emoji, fiyat )
-  )
+  adres:adresler ( id, musteri_id, baslik, adres_metni, bina, kat, daire, tarif, kurye_notu, kapi_kodu, lat, lng, konum_dogrulandi )
 `;
 
 /** Bugünün ve devam eden tüm teslimatları. */

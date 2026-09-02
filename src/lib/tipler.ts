@@ -114,12 +114,6 @@ export type Abonelik = {
   kalemler: AbonelikKalemi[];
 };
 
-export type SepetKalemi = {
-  id: string;
-  miktar: number;
-  urun: Pick<Urun, "id" | "ad" | "birim" | "emoji" | "fiyat"> | null;
-};
-
 export type Sepet = {
   id: string;
   musteri_id: string;
@@ -128,7 +122,6 @@ export type Sepet = {
   updated_at: string;
   musteri: Musteri | null;
   adres: Adres | null;
-  kalemler: SepetKalemi[];
 };
 
 export type Kurye = {

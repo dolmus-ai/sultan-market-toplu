@@ -31,7 +31,6 @@ import {
   abonelikBugunMu,
   acikVardiyaGetir,
   kuryeKonumlariGetir,
-  sepetToplami,
   vardiyaTahsilatlari,
 } from "@/lib/veri";
 import { binaAnahtari, gecikmeDk, para } from "@/lib/bicim";
@@ -1296,18 +1295,6 @@ export default function KuryeUygulamasi({
                     />
                   ))}
                   {sepetler.length === 0 && <Bos mesaj="Açık sepet yok." />}
-                  {sepetler.length > 0 && (
-                    <p className="px-1 pt-2 text-center text-[12px] font-semibold text-gri">
-                      Toplam{" "}
-                      {para(
-                        sepetler.reduce(
-                          (t, s) => t + sepetToplami(s.kalemler ?? []),
-                          0,
-                        ),
-                      )}{" "}
-                      değerinde açık sepet
-                    </p>
-                  )}
                 </>
               )}
 

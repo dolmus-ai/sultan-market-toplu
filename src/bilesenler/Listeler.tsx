@@ -181,41 +181,17 @@ export function SepetSatiri({
   sepet: Sepet;
   onTikla: () => void;
 }) {
-  const tutar = sepetToplami(sepet.kalemler ?? []);
   return (
     <motion.button
       layout
       onClick={onTikla}
       whileTap={{ scale: 0.985 }}
-      className="w-full rounded-[20px] border border-cizgi bg-yuzey p-3 text-left hover:bg-yuzey2"
+      className="flex w-full items-center gap-3 rounded-[20px] border border-cizgi bg-yuzey p-3 text-left hover:bg-yuzey2"
     >
-      <span className="flex items-center gap-2">
-        <span className="truncate text-[15px] font-bold">
-          {sepet.musteri?.ad ?? "Müşteri"}
-        </span>
-        <Etiket>Açık sepet</Etiket>
-        <span className="ml-auto text-[15px] font-black">{para(tutar)}</span>
+      <span className="min-w-0 flex-1 truncate text-[15px] font-bold">
+        {sepet.musteri?.ad ?? "Müşteri"}
       </span>
-      <span className="mt-2 flex flex-wrap gap-1.5">
-        {(sepet.kalemler ?? []).slice(0, 8).map((k) => (
-          <span
-            key={k.id}
-            className="rounded-hap bg-yuzey2 px-2.5 py-1 text-[12px] font-semibold"
-          >
-            {k.urun?.emoji ? `${k.urun.emoji} ` : ""}
-            {k.urun?.ad ?? "Ürün"}
-            <span className="text-gri">
-              {" "}
-              ×{k.miktar % 1 === 0 ? k.miktar : k.miktar.toFixed(1)}
-            </span>
-          </span>
-        ))}
-        {(sepet.kalemler?.length ?? 0) > 8 && (
-          <span className="rounded-hap bg-yuzey2 px-2.5 py-1 text-[12px] font-semibold text-gri">
-            +{(sepet.kalemler?.length ?? 0) - 8}
-          </span>
-        )}
-      </span>
+      <Etiket>Açık sepet</Etiket>
     </motion.button>
   );
 }

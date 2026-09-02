@@ -1,7 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { AnimatePresence, motion } from "motion/react";
+import { motion } from "motion/react";
 
 import {
   DURUM_ETIKET,
@@ -14,7 +13,7 @@ import {
   saat,
 } from "@/lib/bicim";
 import { sepetToplami } from "@/lib/veri";
-import type { Abonelik, Sepet, Siparis, Urun } from "@/lib/tipler";
+import type { Abonelik, Sepet, Siparis } from "@/lib/tipler";
 
 /* ------------------------------------------------------------------ */
 /* Teslimat satırı                                                     */
@@ -222,99 +221,6 @@ export function SepetSatiri({
 }
 
 /* ------------------------------------------------------------------ */
-/* Ürün listesi                                                        */
-/* ------------------------------------------------------------------ */
-
-export function UrunListesi({ urunler }: { urunler: Urun[] }) {
-  const [arama, setArama] = useState("");
-  const [kategori, setKategori] = useState<string | null>(null);
-
-  const kategoriler = useMemo(
-    () => [...new Set(urunler.map((u) => u.kategori))].sort(),
-    [urunler],
-  );
-
-  const suzulmus = useMemo(() => {
-    const a = arama.trim().toLocaleLowerCase("tr");
-    return urunler.filter(
-      (u) =>
-        (!kategori || u.kategori === kategori) &&
-        (!a || u.ad.toLocaleLowerCase("tr").includes(a)),
-    );
-  }, [urunler, arama, kategori]);
-
-  return (
-    <div className="space-y-3">
-      <div className="sticky top-0 z-10 -mx-1 bg-yuzey/85 px-1 pb-2 pt-1 backdrop-blur-xl">
-        <input
-          value={arama}
-          onChange={(e) => setArama(e.target.value)}
-          placeholder="Ürün ara…"
-          className="h-11 w-full rounded-hap border border-cizgi bg-yuzey2 px-4 text-sm font-medium outline-none transition-all placeholder:text-gri/70 focus:border-kirmizi focus:bg-yuzey focus:ring-4 focus:ring-kirmizi/12"
-        />
-        <div className="ince-kaydirma -mx-1 mt-2 flex gap-1.5 overflow-x-auto px-1 pb-1">
-          <Cip aktif={!kategori} onClick={() => setKategori(null)}>
-            Tümü
-          </Cip>
-          {kategoriler.map((k) => (
-            <Cip
-              key={k}
-              aktif={kategori === k}
-              onClick={() => setKategori(kategori === k ? null : k)}
-            >
-              {k}
-            </Cip>
-          ))}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-2 pb-4">
-        <AnimatePresence initial={false}>
-          {suzulmus.map((u) => (
-            <motion.div
-              key={u.id}
-              layout
-              initial={{ opacity: 0, scale: 0.94 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.94 }}
-              transition={{ duration: 0.18 }}
-              className="rounded-[20px] border border-cizgi bg-yuzey p-3"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <span className="text-2xl leading-none">{u.emoji ?? "🛒"}</span>
-                <span
-                  className={`rounded-hap px-2 py-0.5 text-[10px] font-black uppercase tracking-wide ${
-                    u.stok > 0
-                      ? "bg-yuzey2 text-gri"
-                      : "bg-kirmizi-sis text-kirmizi-koyu"
-                  }`}
-                >
-                  {u.stok > 0 ? `${u.stok} ${u.birim}` : "Tükendi"}
-                </span>
-              </div>
-              <p className="mt-2 line-clamp-2 text-[13px] font-bold leading-snug">
-                {u.ad}
-              </p>
-              <p className="mt-1 text-[15px] font-black text-kirmizi">
-                {para(u.fiyat)}
-                <span className="text-[11px] font-bold text-gri">
-                  {" "}
-                  /{u.birim}
-                </span>
-              </p>
-            </motion.div>
-          ))}
-        </AnimatePresence>
-      </div>
-
-      {suzulmus.length === 0 && (
-        <p className="py-10 text-center text-sm text-gri">Ürün bulunamadı.</p>
-      )}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
 /* Ortak küçük parçalar                                                */
 /* ------------------------------------------------------------------ */
 
@@ -336,27 +242,6 @@ export function Etiket({
     >
       {children}
     </span>
-  );
-}
-
-function Cip({
-  children,
-  aktif,
-  onClick,
-}: {
-  children: React.ReactNode;
-  aktif: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`shrink-0 rounded-hap px-3.5 py-1.5 text-[13px] font-bold transition-colors ${
-        aktif ? "bg-kontrast text-white" : "bg-yuzey2 text-gri hover:bg-cizgi"
-      }`}
-    >
-      {children}
-    </button>
   );
 }
 

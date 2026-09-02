@@ -172,7 +172,6 @@ export default function OnizlemeSayfasi() {
       baslangicTeslimatlar={TESLIMATLAR}
       baslangicAbonelikler={ABONELIKLER}
       baslangicSepetler={SEPETLER}
-      urunler={URUNLER}
     />
   );
 }

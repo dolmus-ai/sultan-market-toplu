@@ -15,7 +15,6 @@ import {
   AbonelikSatiri,
   SepetSatiri,
   TeslimatSatiri,
-  UrunListesi,
 } from "./Listeler";
 import { SultanAmblem } from "./SultanLogo";
 
@@ -47,17 +46,15 @@ import type {
   Siparis,
   SiparisDurumu,
   Tahsilat,
-  Urun,
   Vardiya,
 } from "@/lib/tipler";
 
-type Sekme = "teslimatlar" | "abonelikler" | "sepetler" | "urunler";
+type Sekme = "teslimatlar" | "abonelikler" | "sepetler";
 
 const SEKMELER: { anahtar: Sekme; ad: string }[] = [
   { anahtar: "teslimatlar", ad: "Teslimatlar" },
   { anahtar: "abonelikler", ad: "Abonelikler" },
   { anahtar: "sepetler", ad: "Sepetler" },
-  { anahtar: "urunler", ad: "Ürünler" },
 ];
 
 const AKTIF_DURUMLAR: SiparisDurumu[] = ["bekliyor", "hazirlaniyor", "yolda"];
@@ -82,7 +79,6 @@ type Props = {
   baslangicTeslimatlar: Siparis[];
   baslangicAbonelikler: Abonelik[];
   baslangicSepetler: Sepet[];
-  urunler: Urun[];
 };
 
 export default function KuryeUygulamasi({
@@ -90,7 +86,6 @@ export default function KuryeUygulamasi({
   baslangicTeslimatlar,
   baslangicAbonelikler,
   baslangicSepetler,
-  urunler,
 }: Props) {
   const yonlendir = useRouter();
   const db = useMemo(() => tarayiciIstemcisi(), []);
@@ -1316,7 +1311,6 @@ export default function KuryeUygulamasi({
                 </>
               )}
 
-              {sekme === "urunler" && <UrunListesi urunler={urunler} />}
             </motion.div>
           )}
         </AnimatePresence>

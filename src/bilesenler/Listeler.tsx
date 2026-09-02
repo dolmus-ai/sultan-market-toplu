@@ -192,6 +192,9 @@ export function SepetSatiri({
         {sepet.musteri?.ad ?? "Müşteri"}
       </span>
       <Etiket>Açık sepet</Etiket>
+      <span className="shrink-0 text-[15px] font-black">
+        {para(sepetToplami(sepet.kalemler ?? []))}
+      </span>
     </motion.button>
   );
 }

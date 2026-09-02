@@ -149,6 +149,11 @@ const SEPETLER: Sepet[] = [1, 4, 7].map((i) => ({
   updated_at: new Date().toISOString(),
   musteri: TESLIMATLAR[i].musteri,
   adres: TESLIMATLAR[i].adres,
+  kalemler: TESLIMATLAR[i].kalemler.map((k) => ({
+    id: `s-${k.id}`,
+    miktar: k.miktar,
+    urun: { fiyat: k.urun!.fiyat },
+  })),
 }));
 
 export default function OnizlemeSayfasi() {

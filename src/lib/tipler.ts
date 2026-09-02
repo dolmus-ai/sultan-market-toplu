@@ -114,6 +114,13 @@ export type Abonelik = {
   kalemler: AbonelikKalemi[];
 };
 
+/** Sepet satırında yalnızca tutar gösterildiği için asgari alanlar. */
+export type SepetKalemi = {
+  id: string;
+  miktar: number;
+  urun: { fiyat: number } | null;
+};
+
 export type Sepet = {
   id: string;
   musteri_id: string;
@@ -122,6 +129,7 @@ export type Sepet = {
   updated_at: string;
   musteri: Musteri | null;
   adres: Adres | null;
+  kalemler: SepetKalemi[];
 };
 
 export type Kurye = {

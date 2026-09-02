@@ -177,8 +177,8 @@ drop policy "muhasebe kilidi" on public.profiles;
 - **Pin renkleri:** kırmızı = bekliyor, turuncu = hazırlanıyor, siyah = yolda,
   yeşil = teslim, gri = iptal. Bekleyen ve yoldaki teslimatlar nabız atar.
 - **Alt panel** (sürüklenebilir, 3 kademeli): Teslimatlar · Abonelikler ·
-  Sepetler. Sepetler sekmesi yalnızca açık sepeti olan müşterilerin adını
-  listeler — kuryenin ihtiyacı sadece kimin sipariş verdiğini bilmek.
+  Sepetler. Sepetler sekmesi açık sepeti olan müşterinin adını ve sepet
+  tutarını listeler; ürün dökümü gösterilmez.
 - **Market pini:** deponun kendisi haritada sabit işaretli; kurye konumu
   yoksa rotalar buradan başlar.
 - **Teslimat detayı:** sepet kalemleri, tutar, ödeme yöntemi, kapı tarifi,

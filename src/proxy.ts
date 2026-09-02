@@ -58,6 +58,6 @@ export default async function proxy(istek: NextRequest) {
 export const config = {
   matcher: [
     // Statik varlıklar ve MapLibre worker dosyaları oturum kontrolünden muaf.
-    "/((?!_next/static|_next/image|maplibre/|favicon.ico|.*\.(?:svg|png|jpg|jpeg|webp|ico|mjs|js|css|map|webmanifest)$).*)",
+    "/((?!_next/static|_next/image|maplibre/|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|webp|ico|mjs|js|css|map|webmanifest)$).*)",
   ],
 };

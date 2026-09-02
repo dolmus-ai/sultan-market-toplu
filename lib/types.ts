@@ -1,11 +1,21 @@
 export type CariTip = "alici" | "satici";
 export type HareketTur = "fatura" | "veresiye" | "yapilan_odeme" | "gelen_odeme";
 export type OdemeYontemi = "nakit" | "kredi_karti" | "yemek_karti";
+// Kart adı sorulan ödeme yöntemleri
+export type KartYontemi = Exclude<OdemeYontemi, "nakit">;
 
 export type Profile = {
   id: string;
   full_name: string;
   role: "sahip" | "personel";
+  aktif: boolean;
+  created_at: string;
+};
+
+export type Kart = {
+  id: string;
+  ad: string;
+  tip: KartYontemi;
   aktif: boolean;
   created_at: string;
 };
@@ -33,11 +43,13 @@ export type Hareket = {
   tur: HareketTur;
   tutar: number;
   odeme_yontemi: OdemeYontemi | null;
+  kart_id: string | null;
   aciklama: string | null;
   tarih: string;
   belge_yolu: string | null;
   created_by: string | null;
   created_at: string;
   cariler?: { unvan: string; tip: CariTip } | null;
+  kartlar?: { ad: string } | null;
   profiles?: { full_name: string } | null;
 };

@@ -26,7 +26,7 @@ export default function AnaSayfa() {
         supabase.from("cari_ozet").select("tip,kalan_bakiye").eq("aktif", true),
         supabase
           .from("hareketler")
-          .select("*, cariler(unvan,tip), profiles(full_name)")
+          .select("*, cariler(unvan,tip), profiles(full_name), kartlar(ad)")
           .order("created_at", { ascending: false })
           .limit(5),
       ]);
@@ -93,12 +93,20 @@ export default function AnaSayfa() {
         ))}
       </div>
 
-      <Link
-        href="/fatura-tara"
-        className="mt-2 flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-green-700 bg-white py-3.5 font-bold text-green-800 shadow-sm active:scale-95"
-      >
-        📷 Fiş / Fatura Tara
-      </Link>
+      <div className="mt-2 flex gap-2">
+        <Link
+          href="/fatura-tara"
+          className="flex flex-[2] items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-green-700 bg-white py-3.5 font-bold text-green-800 shadow-sm active:scale-95"
+        >
+          📷 Fiş / Fatura Tara
+        </Link>
+        <Link
+          href="/kartlar"
+          className="flex flex-1 items-center justify-center gap-1 rounded-2xl bg-white py-3.5 text-sm font-bold text-stone-600 shadow-sm active:scale-95"
+        >
+          💳 Kartlar
+        </Link>
+      </div>
 
       <div className="mt-4 grid grid-cols-2 gap-2">
         <div className="rounded-2xl bg-white p-4 shadow-sm">
@@ -152,8 +160,9 @@ export default function AnaSayfa() {
                   {h.cariler?.unvan}
                 </div>
                 <div className="text-xs text-stone-400">
-                  {TUR_LABEL[h.tur]} · {h.profiles?.full_name} ·{" "}
-                  {saatFmt(h.created_at)}
+                  {TUR_LABEL[h.tur]}
+                  {h.kartlar?.ad ? ` · 💳 ${h.kartlar.ad}` : ""} ·{" "}
+                  {h.profiles?.full_name} · {saatFmt(h.created_at)}
                 </div>
               </div>
               <div className="flex items-center gap-2">

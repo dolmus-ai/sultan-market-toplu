@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Shell from "@/components/Shell";
 import { supabase } from "@/lib/supabase";
-import { para, saatFmt, TUR_LABEL, YONTEM_LABEL } from "@/lib/format";
+import { kartliMi, para, saatFmt, TUR_LABEL, YONTEM_LABEL } from "@/lib/format";
 import type { CariOzet, Hareket, OdemeYontemi } from "@/lib/types";
 
 type Donem = "gun" | "hafta" | "ay";
@@ -27,7 +27,7 @@ export default function RaporlarPage() {
   useEffect(() => {
     supabase
       .from("hareketler")
-      .select("*")
+      .select("*, kartlar(ad)")
       .gte("tarih", baslangic(donem))
       .then(({ data }) => setHareketler((data as Hareket[]) ?? []));
   }, [donem]);
@@ -42,7 +42,7 @@ export default function RaporlarPage() {
       .then(({ data }) => setBakiyeler((data as CariOzet[]) ?? []));
     supabase
       .from("hareketler")
-      .select("*, cariler(unvan,tip), profiles(full_name)")
+      .select("*, cariler(unvan,tip), profiles(full_name), kartlar(ad)")
       .order("created_at", { ascending: false })
       .limit(20)
       .then(({ data }) => setAudit((data as Hareket[]) ?? []));
@@ -55,12 +55,27 @@ export default function RaporlarPage() {
       kredi_karti: 0,
       yemek_karti: 0,
     };
+    // Kartla yapılan ödemelerin kart adına göre dökümü (gelen / yapılan ayrı)
+    const kartGelen = new Map<string, number>();
+    const kartYapilan = new Map<string, number>();
     for (const h of hareketler) {
       t[h.tur] += Number(h.tutar);
       if (h.tur === "gelen_odeme" && h.odeme_yontemi)
         yontemler[h.odeme_yontemi] += Number(h.tutar);
+      if (h.odeme_yontemi && kartliMi(h.odeme_yontemi)) {
+        const hedef = h.tur === "gelen_odeme" ? kartGelen : kartYapilan;
+        const ad = h.kartlar?.ad ?? "KART BELİRTİLMEMİŞ";
+        hedef.set(ad, (hedef.get(ad) ?? 0) + Number(h.tutar));
+      }
     }
-    return { t, yontemler };
+    const sirala = (m: Map<string, number>) =>
+      [...m.entries()].sort((a, b) => b[1] - a[1]);
+    return {
+      t,
+      yontemler,
+      kartGelen: sirala(kartGelen),
+      kartYapilan: sirala(kartYapilan),
+    };
   }, [hareketler]);
 
   const borcluMusteriler = bakiyeler.filter((c) => c.tip === "alici").slice(0, 5);
@@ -117,6 +132,32 @@ export default function RaporlarPage() {
             ))}
           </div>
         </div>
+        {(
+          [
+            ["Kart Dağılımı — Gelen Ödeme", toplamlar.kartGelen],
+            ["Kart Dağılımı — Yapılan Ödeme", toplamlar.kartYapilan],
+          ] as const
+        ).map(
+          ([baslik, satirlar]) =>
+            satirlar.length > 0 && (
+              <div
+                key={baslik}
+                className="mt-3 border-t border-stone-100 pt-2"
+              >
+                <div className="mb-1 text-xs font-bold text-stone-400">
+                  {baslik}
+                </div>
+                <ul className="text-sm">
+                  {satirlar.map(([ad, tutar]) => (
+                    <li key={ad} className="flex justify-between py-0.5">
+                      <span className="text-stone-500">💳 {ad}</span>
+                      <span className="font-semibold">{para(tutar)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )
+        )}
       </div>
 
       <div className="mt-3 grid grid-cols-1 gap-3">
@@ -175,6 +216,9 @@ export default function RaporlarPage() {
                 </span>{" "}
                 {h.cariler?.unvan}: {TUR_LABEL[h.tur]}{" "}
                 <span className="font-bold">{para(Number(h.tutar))}</span>
+                {h.kartlar?.ad && (
+                  <span className="text-stone-400"> · 💳 {h.kartlar.ad}</span>
+                )}
               </li>
             ))}
           </ul>

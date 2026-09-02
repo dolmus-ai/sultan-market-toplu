@@ -4,6 +4,23 @@ html {
   -webkit-tap-highlight-color: transparent;
 }
 
+:root {
+  /* Üstteki besmele şeridinin yüksekliği; tam ekran hesapları bunu düşer */
+  --besmele-h: 2.25rem;
+}
+
+.besmele-serit {
+  height: var(--besmele-h);
+}
+
+/* El yazısı (kaligrafi) besmele — okunaklı kalsın diye küçük ama net */
+.besmele-yazi {
+  font-family: var(--font-el-yazisi), "Segoe Script", cursive;
+  font-size: 1.35rem;
+  line-height: 1;
+  letter-spacing: 0.01em;
+}
+
 input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button {
   -webkit-appearance: none;

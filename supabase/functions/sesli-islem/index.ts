@@ -100,6 +100,7 @@ Deno.serve(async (req: Request) => {
               '{"tur": "gelen_odeme"|"veresiye"|"yapilan_odeme"|"fatura"|null, ' +
               '"cari": string|null, "tutar": number|null, ' +
               '"odeme_yontemi": "nakit"|"kredi_karti"|"yemek_karti"|null, ' +
+              '"kart": string|null, ' +
               '"tarih": "YYYY-MM-DD"|null, "aciklama": string|null}. ' +
               "Kurallar: müşteriden ödeme/para alındıysa gelen_odeme; " +
               "müşteriye veresiye/borç yazıldıysa veresiye; " +
@@ -109,7 +110,9 @@ Deno.serve(async (req: Request) => {
               "(örn. 1234.56 — binlik ayracı yok, ondalık nokta). " +
               "tarih: yalnızca komutta geçiyorsa ('dün', '15 Temmuz' gibi ifadeleri " +
               "bugüne göre çevir); geçmiyorsa null. " +
-              "aciklama: tür/cari/tutar dışında kalan anlamlı not; yoksa null.",
+              "kart: kartla ödendiyse söylenen kart adı (örn. 'garanti pos', " +
+              "'sodexo'); geçmiyorsa null. " +
+              "aciklama: tür/cari/tutar/kart dışında kalan anlamlı not; yoksa null.",
           },
         ],
       }),

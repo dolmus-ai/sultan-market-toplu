@@ -30,14 +30,14 @@ export default function Shell({
 
   if (loading || !session) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-stone-400">
+      <div className="flex min-h-[calc(100dvh-var(--besmele-h))] items-center justify-center text-stone-400">
         Yükleniyor…
       </div>
     );
   }
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-lg flex-col">
+    <div className="mx-auto flex min-h-[calc(100dvh-var(--besmele-h))] max-w-lg flex-col">
       <header className="sticky top-0 z-20 flex items-center justify-between bg-green-800 px-4 py-3 text-white shadow">
         <div>
           <div className="text-xs text-green-200">Sultan Market</div>

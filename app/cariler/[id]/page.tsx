@@ -34,7 +34,7 @@ export default function CariDetay() {
       supabase.from("cari_ozet").select("*").eq("id", id).single(),
       supabase
         .from("hareketler")
-        .select("*, profiles(full_name)")
+        .select("*, profiles(full_name), kartlar(ad)")
         .eq("cari_id", id)
         .order("tarih", { ascending: false })
         .order("created_at", { ascending: false }),
@@ -287,7 +287,8 @@ export default function CariDetay() {
                     {TUR_LABEL[h.tur]}
                     {h.odeme_yontemi && (
                       <span className="ml-1 text-xs font-normal text-stone-400">
-                        ({YONTEM_LABEL[h.odeme_yontemi]})
+                        ({YONTEM_LABEL[h.odeme_yontemi]}
+                        {h.kartlar?.ad ? ` · ${h.kartlar.ad}` : ""})
                       </span>
                     )}
                   </div>

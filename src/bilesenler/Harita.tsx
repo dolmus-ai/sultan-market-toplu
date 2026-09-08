@@ -23,6 +23,7 @@ import {
 import { haritaDurumRengi } from "@/lib/bicim";
 import type { Tema } from "@/lib/harita-stili";
 import { MARKET } from "@/lib/market";
+import { HARITA_STILI, MERKEZ } from "@/lib/ortam";
 import type { RotaSecenegi } from "@/lib/navigasyon";
 import type {
   Nokta,
@@ -598,14 +599,6 @@ function katmanlariKur(
   harita.once("remove", () => cancelAnimationFrame(cerceve));
 }
 
-/**
- * Harita stilinin adresi. Vercel depodaki `.env` dosyasını okumadığı için
- * değişken tanımsız kalabiliyor; varsayılan bu yüzden burada duruyor.
- */
-const STIL_ADRESI =
-  process.env.NEXT_PUBLIC_HARITA_STILI ??
-  "https://tiles.openfreemap.org/styles/liberty";
-
 export default function Harita({
   ref,
   teslimatlar,
@@ -661,12 +654,9 @@ export default function Harita({
 
       const harita = new MapLibre({
         container: kapsayiciRef.current,
-        style: STIL_ADRESI,
-        center: [
-          Number(process.env.NEXT_PUBLIC_MERKEZ_LNG ?? 29.027),
-          Number(process.env.NEXT_PUBLIC_MERKEZ_LAT ?? 40.9903),
-        ],
-        zoom: Number(process.env.NEXT_PUBLIC_MERKEZ_ZOOM ?? 14),
+        style: HARITA_STILI,
+        center: [MERKEZ.lng, MERKEZ.lat],
+        zoom: MERKEZ.zoom,
         pitch: 45,
         bearing: -12,
         attributionControl: { compact: true },
@@ -1100,7 +1090,7 @@ export default function Harita({
     setYuklenemedi(false);
     hazirRef.current = false;
     setHazir(false);
-    harita.setStyle(STIL_ADRESI);
+    harita.setStyle(HARITA_STILI);
     if (sayacRef.current) window.clearTimeout(sayacRef.current);
     sayacRef.current = window.setTimeout(() => {
       if (!hazirRef.current) setYuklenemedi(true);

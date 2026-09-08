@@ -313,6 +313,30 @@ select public.gunun_siparislerini_uret(current_date + 1);
 
 ---
 
+## Vercel'e alma
+
+İki tuzak var, ikisi de sessizce 500'e yol açıyor:
+
+**1. Ortam değişkenleri.** Vercel depodaki `.env` dosyasını okumaz; yalnızca
+panelde tanımlı değişkenleri build'e geçirir. Bu yüzden Supabase adresi ve
+publishable anahtarı için `src/lib/ortam.ts` içinde varsayılan tutuluyor —
+panelde hiçbir şey tanımlı olmasa da uygulama ayağa kalkar. Farklı bir Supabase
+projesine bağlanacaksanız Settings → Environment Variables altında aynı adlarla
+tanımlayın, koddaki varsayılanı ezer.
+
+**2. Commit yazarı.** Depo private ve Vercel hesabı Hobby planındaysa, deploy
+yalnızca repo sahibinin yazdığı commit'ler için çalışır. Başka bir e-postayla
+atılan commit "Blocked — the commit author did not have contributing access"
+diyerek deploy edilmez. Bu depoda çalışırken git kimliğini repo sahibine
+sabitleyin:
+
+```bash
+git config user.name "dolmus-ai"
+git config user.email "214736703+dolmus-ai@users.noreply.github.com"
+```
+
+(Depoya özel ayardır, diğer projelerinizdeki genel kimliğe dokunmaz.)
+
 ## Bilinen sınırlar
 
 - Abonelikler ve sepetler ilk yüklemede gelir; canlı yenileme yalnızca

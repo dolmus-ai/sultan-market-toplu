@@ -598,6 +598,14 @@ function katmanlariKur(
   harita.once("remove", () => cancelAnimationFrame(cerceve));
 }
 
+/**
+ * Harita stilinin adresi. Vercel depodaki `.env` dosyasını okumadığı için
+ * değişken tanımsız kalabiliyor; varsayılan bu yüzden burada duruyor.
+ */
+const STIL_ADRESI =
+  process.env.NEXT_PUBLIC_HARITA_STILI ??
+  "https://tiles.openfreemap.org/styles/liberty";
+
 export default function Harita({
   ref,
   teslimatlar,
@@ -624,6 +632,8 @@ export default function Harita({
   const hazirRef = useRef(false);
   // Katmanlar kurulduğunda veri efektlerinin yeniden çalışması için state.
   const [hazir, setHazir] = useState(false);
+  const [yuklenemedi, setYuklenemedi] = useState(false);
+  const sayacRef = useRef<number | null>(null);
   const kuryeMarkerRef = useRef<Marker | null>(null);
   // Art arda gelen konum güncellemeleri aynı anda iki imleç oluşturmasın.
   const kuryeOlusuyorRef = useRef(false);
@@ -651,9 +661,7 @@ export default function Harita({
 
       const harita = new MapLibre({
         container: kapsayiciRef.current,
-        style:
-          process.env.NEXT_PUBLIC_HARITA_STILI ??
-          "https://tiles.openfreemap.org/styles/liberty",
+        style: STIL_ADRESI,
         center: [
           Number(process.env.NEXT_PUBLIC_MERKEZ_LNG ?? 29.027),
           Number(process.env.NEXT_PUBLIC_MERKEZ_LAT ?? 40.9903),
@@ -667,12 +675,12 @@ export default function Harita({
         maxPitch: 75,
       });
       haritaRef.current = harita;
-      if (process.env.NODE_ENV !== "production") {
-        (window as unknown as { __harita?: MapLibreMap }).__harita = harita;
-        harita.on("error", (e) =>
-          console.error("[harita]", e.error?.message ?? e),
-        );
-      }
+      // Hata kaydı üretimde de açık: stil ya da karo sunucusuna
+      // ulaşılamadığında ekran sessizce boş kalmasın, konsolda sebebi olsun.
+      (window as unknown as { __harita?: MapLibreMap }).__harita = harita;
+      harita.on("error", (e) =>
+        console.error("[harita]", e.error?.message ?? e),
+      );
 
       for (const olay of ["dragstart", "zoomstart", "rotatestart"] as const) {
         harita.on(olay, (e: { originalEvent?: unknown }) => {
@@ -698,11 +706,21 @@ export default function Harita({
         marketiIsaretle(harita);
         hazirRef.current = true;
         setHazir(true);
+        setYuklenemedi(false);
+        if (sayacRef.current) window.clearTimeout(sayacRef.current);
         onHazir?.();
       };
       harita.on("styledata", kur);
 
+      // Stil inmezse MapLibre hiçbir katman kuramaz ve ekran bomboş kalır;
+      // sebebi ağ engeli de olabilir, sunucu arızası da. Belirli bir süre
+      // sonra hazır değilsek kullanıcıya söyleyip yeniden deneme veriyoruz.
+      sayacRef.current = window.setTimeout(() => {
+        if (!hazirRef.current) setYuklenemedi(true);
+      }, 8000);
+
       temizle = () => {
+        if (sayacRef.current) window.clearTimeout(sayacRef.current);
         kuryeMarkerRef.current?.remove();
         kuryeMarkerRef.current = null;
         kuryeOlusuyorRef.current = false;
@@ -1076,14 +1094,46 @@ export default function Harita({
     [],
   );
 
+  function stiliYenidenYukle() {
+    const harita = haritaRef.current;
+    if (!harita) return;
+    setYuklenemedi(false);
+    hazirRef.current = false;
+    setHazir(false);
+    harita.setStyle(STIL_ADRESI);
+    if (sayacRef.current) window.clearTimeout(sayacRef.current);
+    sayacRef.current = window.setTimeout(() => {
+      if (!hazirRef.current) setYuklenemedi(true);
+    }, 8000);
+  }
+
   return (
-    <div
-      ref={kapsayiciRef}
-      // maplibre-gl.css katmansız yüklendiği için Tailwind'in `absolute`
-      // utility'sini ezip konteyneri sıfır yükseklikte bırakıyor; bu yüzden
-      // konumlandırma satır içi stille veriliyor.
-      style={{ position: "absolute", inset: 0 }}
-      data-secim-modu={secimModu ? "acik" : "kapali"}
-    />
+    <>
+      <div
+        ref={kapsayiciRef}
+        // maplibre-gl.css katmansız yüklendiği için Tailwind'in `absolute`
+        // utility'sini ezip konteyneri sıfır yükseklikte bırakıyor; bu yüzden
+        // konumlandırma satır içi stille veriliyor.
+        style={{ position: "absolute", inset: 0 }}
+        data-secim-modu={secimModu ? "acik" : "kapali"}
+      />
+      {yuklenemedi && (
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center p-6">
+          <div className="pointer-events-auto max-w-sm rounded-[22px] border border-cizgi bg-yuzey p-5 text-center shadow-lg">
+            <p className="text-[15px] font-black">Harita yüklenemedi</p>
+            <p className="mt-1 text-[13px] text-gri">
+              Harita sunucusuna ulaşılamıyor. Teslimat listesi çalışmaya devam
+              ediyor; bağlantını kontrol edip yeniden deneyebilirsin.
+            </p>
+            <button
+              onClick={stiliYenidenYukle}
+              className="mt-4 w-full rounded-hap bg-kirmizi px-4 py-2.5 text-[14px] font-black text-white"
+            >
+              Yeniden dene
+            </button>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

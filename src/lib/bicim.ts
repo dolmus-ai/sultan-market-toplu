@@ -1,4 +1,4 @@
-import { acilisDakikasi } from "./market";
+import { MARKET, acilisDakikasi } from "./market";
 import type {
   BasarisizlikSebebi,
   OdemeYontemi,
@@ -118,11 +118,17 @@ export function haftaninGunu(tarih = new Date()): number {
   return ((tarih.getDay() + 6) % 7) + 1;
 }
 
+/** "en-CA" biçimi zaten YYYY-MM-DD veriyor. */
+const gunBicimi = new Intl.DateTimeFormat("en-CA", {
+  timeZone: MARKET.saatDilimi,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+/** Marketin saat dilimine göre bugünün tarihi — sunucuda da doğru sonuç verir. */
 export function bugununTarihi(): string {
-  const t = new Date();
-  const ay = String(t.getMonth() + 1).padStart(2, "0");
-  const gun = String(t.getDate()).padStart(2, "0");
-  return `${t.getFullYear()}-${ay}-${gun}`;
+  return gunBicimi.format(new Date());
 }
 
 /**

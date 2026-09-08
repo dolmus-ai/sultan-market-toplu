@@ -12,6 +12,12 @@ export const MARKET = {
   } as Nokta,
   /** "07:30" — market açılmadan hiçbir teslimat gecikmiş sayılmaz. */
   acilis: process.env.NEXT_PUBLIC_MARKET_ACILIS ?? "07:30",
+  /**
+   * Marketin saat dilimi. Sunucu Vercel'de UTC çalıştığı için "bugün"ün
+   * hangi gün olduğu buradan hesaplanıyor; yoksa gece yarısı ile sabah 03:00
+   * arasında kuryeye bir önceki günün siparişleri düşerdi.
+   */
+  saatDilimi: process.env.NEXT_PUBLIC_MARKET_SAAT_DILIMI ?? "Europe/Istanbul",
 };
 
 /** Açılış saati gün içinde kaçıncı dakika. */

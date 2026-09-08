@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 
@@ -155,15 +162,38 @@ export default function KuryeUygulamasi({
   const [islemde, setIslemde] = useState(false);
   const [bildirim, setBildirim] = useState<string | null>(null);
 
+  /**
+   * Saate bağlı her şey yalnızca istemcide hesaplanır.
+   *
+   * Sunucu Vercel'de UTC, tarayıcı ise yerel saatte (UTC+3) çalışıyor; gecikme
+   * rozetleri ve "geciken" sayacı iki tarafta farklı metin üretince React
+   * hidrasyonu bozuluyordu (#418). Hidrasyon bozulunca React ağacı baştan
+   * kuruyor, MapLibre'ın canvas'ı sayfadan kopuyor ve harita bomboş kalıyordu.
+   * Bu yüzden ilk render'da saat bilgisi yok; bağlandıktan sonra doluyor ve
+   * 30 saniyede bir tazeleniyor.
+   */
+  const simdi = useSyncExternalStore(
+    (bildir) => {
+      const sayac = setInterval(bildir, 30_000);
+      return () => clearInterval(sayac);
+    },
+    // 30 saniyelik kovaya yuvarlanıyor; aynı render turunda aynı değeri
+    // döndürmesi gerekiyor.
+    () => Math.floor(Date.now() / 30_000) * 30_000,
+    () => null,
+  );
+  const saatHazir = simdi != null;
+
   const secili = useMemo(
     () => teslimatlar.find((s) => s.id === seciliId) ?? null,
     [teslimatlar, seciliId],
   );
 
   const bugunAbonelikler = useMemo(() => {
+    if (!saatHazir) return [];
     const bugun = new Date();
     return abonelikler.filter((a) => abonelikBugunMu(a, bugun));
-  }, [abonelikler]);
+  }, [abonelikler, saatHazir]);
 
   const aktifTeslimatlar = useMemo(
     () => teslimatlar.filter((s) => AKTIF_DURUMLAR.includes(s.durum)),
@@ -175,15 +205,17 @@ export default function KuryeUygulamasi({
     [tahsilatlar],
   );
 
-  const marketAcik = marketAcikMi();
+  const marketAcik = saatHazir ? marketAcikMi() : true;
 
   const gecikenSayisi = useMemo(
     () =>
-      aktifTeslimatlar.filter((s) => {
-        const g = gecikmeDk(s.planlanan_saat, s.planlanan_tarih);
-        return g != null && g > 0;
-      }).length,
-    [aktifTeslimatlar],
+      simdi == null
+        ? 0
+        : aktifTeslimatlar.filter((s) => {
+            const g = gecikmeDk(s.planlanan_saat, s.planlanan_tarih);
+            return g != null && g > 0;
+          }).length,
+    [aktifTeslimatlar, simdi],
   );
 
   /** Aynı binadaki açık teslimat sayısı. */
@@ -1242,7 +1274,11 @@ export default function KuryeUygulamasi({
                       secili={seciliId === s.id}
                       secimModu={secimModu}
                       isaretli={secilenler.includes(s.id)}
-                      gecikme={gecikmeDk(s.planlanan_saat, s.planlanan_tarih)}
+                      gecikme={
+                        saatHazir
+                          ? gecikmeDk(s.planlanan_saat, s.planlanan_tarih)
+                          : null
+                      }
                       binaSayisi={binaSayilari.get(binaAnahtari(s.adres))}
                       onTikla={() => pinSecildi(s.id)}
                     />

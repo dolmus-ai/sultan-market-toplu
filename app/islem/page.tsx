@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  Suspense,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Shell from "@/components/Shell";
 import { BuyukHarfGirdi, TutarGirdi } from "@/components/Girdi";
@@ -15,21 +8,13 @@ import KartSecici from "@/components/KartSecici";
 import { supabase } from "@/lib/supabase";
 import {
   bugun,
-  buyukHarf,
   kartliMi,
   para,
   parseTutar,
-  tutarYaz,
   TUR_LABEL,
   YONTEM_LABEL,
 } from "@/lib/format";
-import type {
-  Cari,
-  HareketTur,
-  Kart,
-  KartYontemi,
-  OdemeYontemi,
-} from "@/lib/types";
+import type { Cari, HareketTur, KartYontemi, OdemeYontemi } from "@/lib/types";
 
 const TURLER: { tur: HareketTur; renk: string }[] = [
   { tur: "gelen_odeme", renk: "bg-green-700" },
@@ -62,15 +47,6 @@ function IslemInner() {
   const [tamam, setTamam] = useState<string | null>(null);
   const [sonKayitId, setSonKayitId] = useState<string | null>(null);
   const [borcKapandi, setBorcKapandi] = useState(false);
-
-  // Sesli işlem: kayıt → yazıya çevirme → alanları doldurma (kayıt yine
-  // kullanıcının onayıyla, Kaydet düğmesiyle yapılır)
-  const [sesDurum, setSesDurum] = useState<"hazir" | "kayit" | "cozum">(
-    "hazir"
-  );
-  const [sesMesaj, setSesMesaj] = useState("");
-  const kayitci = useRef<MediaRecorder | null>(null);
-  const parcalar = useRef<Blob[]>([]);
 
   const gerekliTip =
     tur === "gelen_odeme" || tur === "veresiye" ? "alici" : "satici";
@@ -130,123 +106,6 @@ function IslemInner() {
     );
     setCariId(data.id);
     setArama("");
-  };
-
-  const sesliBaslat = async () => {
-    setHata("");
-    setSesMesaj("");
-    try {
-      const akis = await navigator.mediaDevices.getUserMedia({ audio: true });
-      // iOS Safari webm desteklemez; mp4/aac üretir
-      const mime = MediaRecorder.isTypeSupported("audio/webm")
-        ? "audio/webm"
-        : "audio/mp4";
-      const mr = new MediaRecorder(akis, { mimeType: mime });
-      parcalar.current = [];
-      mr.ondataavailable = (e) => {
-        if (e.data.size) parcalar.current.push(e.data);
-      };
-      mr.onstop = () => {
-        akis.getTracks().forEach((t) => t.stop());
-        sesCozumle(new Blob(parcalar.current, { type: mime }), mime);
-      };
-      kayitci.current = mr;
-      mr.start();
-      setSesDurum("kayit");
-    } catch {
-      setHata("Mikrofona erişilemedi. Tarayıcı izinlerini kontrol edin.");
-    }
-  };
-
-  const sesliDurdur = () => {
-    kayitci.current?.stop();
-    setSesDurum("cozum");
-  };
-
-  const sesCozumle = async (blob: Blob, mime: string) => {
-    const b64 = await new Promise<string>((resolve, reject) => {
-      const r = new FileReader();
-      r.onload = () => resolve(String(r.result).split(",")[1] ?? "");
-      r.onerror = reject;
-      r.readAsDataURL(blob);
-    });
-    const { data, error } = await supabase.functions.invoke("sesli-islem", {
-      body: { audio: b64, mime },
-    });
-    setSesDurum("hazir");
-    if (error || data?.error || !data?.sonuc) {
-      setHata("Ses anlaşılamadı. Tekrar deneyin veya elle girin.");
-      return;
-    }
-    const s = data.sonuc as {
-      tur?: string | null;
-      cari?: string | null;
-      tutar?: number | null;
-      odeme_yontemi?: string | null;
-      kart?: string | null;
-      tarih?: string | null;
-      aciklama?: string | null;
-    };
-
-    const yeniTur: HareketTur = TURLER.some((t) => t.tur === s.tur)
-      ? (s.tur as HareketTur)
-      : tur;
-    setTur(yeniTur);
-    if (typeof s.tutar === "number" && s.tutar > 0) setTutar(tutarYaz(s.tutar));
-    const yeniYontem =
-      s.odeme_yontemi && s.odeme_yontemi in YONTEM_LABEL
-        ? (s.odeme_yontemi as OdemeYontemi)
-        : yontem;
-    setYontem(yeniYontem);
-
-    // Kartla ödeme söylendiyse söylenen kart adı kayıtlı kartlarla eşleştirilir;
-    // eşleşmezse kart seçimi kullanıcıya bırakılır (kayıt kart olmadan geçmez)
-    kartSec("", "");
-    const kartAd = (s.kart ?? "").trim();
-    if (kartliMi(yeniYontem) && kartAd) {
-      const { data: ks } = await supabase
-        .from("kartlar")
-        .select("*")
-        .eq("tip", yeniYontem)
-        .eq("aktif", true);
-      const adL = kartAd.toLocaleLowerCase("tr");
-      const bulunanKart = ((ks as Kart[]) ?? []).find((k) => {
-        const a = k.ad.toLocaleLowerCase("tr");
-        return a.includes(adL) || adL.includes(a);
-      });
-      if (bulunanKart) kartSec(bulunanKart.id, bulunanKart.ad);
-    }
-    if (s.tarih && /^\d{4}-\d{2}-\d{2}$/.test(s.tarih)) setTarih(s.tarih);
-    if (s.aciklama) setAciklama(buyukHarf(String(s.aciklama)));
-
-    // Cari, söylenen türe uygun tipin taze listesinde aranır (tür değişince
-    // eldeki liste eski tipte kalabiliyor; liste de birlikte güncellenir ki
-    // "yanlış tip" temizliği seçimi silmesin)
-    const tip =
-      yeniTur === "gelen_odeme" || yeniTur === "veresiye" ? "alici" : "satici";
-    const ad = (s.cari ?? "").trim();
-    if (ad) {
-      const { data: cs } = await supabase
-        .from("cariler")
-        .select("*")
-        .eq("tip", tip)
-        .eq("aktif", true)
-        .order("unvan");
-      const liste = (cs as Cari[]) ?? [];
-      setCariler(liste);
-      const adL = ad.toLocaleLowerCase("tr");
-      const bulunan = liste.find((c) => {
-        const u = c.unvan.toLocaleLowerCase("tr");
-        return u.includes(adL) || adL.includes(u);
-      });
-      if (bulunan) {
-        setCariId(bulunan.id);
-      } else {
-        setCariId("");
-        setArama(buyukHarf(ad));
-      }
-    }
-    setSesMesaj(`🎤 "${data.metin}" — bilgileri kontrol edip kaydedin.`);
   };
 
   const kaydet = async () => {
@@ -392,26 +251,6 @@ function IslemInner() {
 
   return (
     <Shell title="İşlem Girişi">
-      <button
-        onClick={sesDurum === "kayit" ? sesliDurdur : sesliBaslat}
-        disabled={sesDurum === "cozum"}
-        className={`mb-3 w-full rounded-xl py-3 text-sm font-bold ${
-          sesDurum === "kayit"
-            ? "animate-pulse bg-red-600 text-white"
-            : "bg-white text-stone-700 shadow-sm"
-        } disabled:opacity-60`}
-      >
-        {sesDurum === "kayit"
-          ? "⏹ Dinliyorum… bitirmek için dokunun"
-          : sesDurum === "cozum"
-            ? "Çözümleniyor…"
-            : "🎤 Sesli İşlem — konuşarak doldurun"}
-      </button>
-      {sesMesaj && (
-        <p className="mb-3 rounded-lg bg-sky-50 px-3 py-2 text-sm text-sky-800">
-          {sesMesaj}
-        </p>
-      )}
       <div className="grid grid-cols-2 gap-2">
         {TURLER.map((t) => (
           <button

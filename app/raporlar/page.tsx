@@ -1,36 +1,119 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Shell from "@/components/Shell";
 import { supabase } from "@/lib/supabase";
-import { kartliMi, para, saatFmt, TUR_LABEL, YONTEM_LABEL } from "@/lib/format";
+import {
+  ayOnce,
+  bugun,
+  gunOnce,
+  kartliMi,
+  para,
+  saatFmt,
+  tarihFmt,
+  TUR_LABEL,
+  YONTEM_LABEL,
+} from "@/lib/format";
 import type { CariOzet, Hareket, OdemeYontemi } from "@/lib/types";
 
-type Donem = "gun" | "hafta" | "ay";
+// Özet toplamları için hareketin yalnızca bu alanları okunur
+type OzetHareket = Pick<Hareket, "tur" | "tutar" | "odeme_yontemi"> & {
+  kartlar?: { ad: string } | null;
+};
+
+type Donem = "gun" | "hafta" | "ay" | "alti_ay";
+
+const DONEMLER: [Donem, string][] = [
+  ["gun", "Bugün"],
+  ["hafta", "Son 7 Gün"],
+  ["ay", "Bu Ay"],
+  ["alti_ay", "Son 6 Ay"],
+];
 
 const baslangic = (d: Donem) => {
-  const t = new Date();
-  if (d === "hafta") t.setDate(t.getDate() - 6);
-  if (d === "ay") t.setDate(1);
-  const ay = String(t.getMonth() + 1).padStart(2, "0");
-  const gun = String(t.getDate()).padStart(2, "0");
-  return `${t.getFullYear()}-${ay}-${gun}`;
+  if (d === "hafta") return gunOnce(6);
+  if (d === "alti_ay") return ayOnce(6);
+  if (d === "ay") {
+    const t = new Date();
+    t.setDate(1);
+    const ay = String(t.getMonth() + 1).padStart(2, "0");
+    return `${t.getFullYear()}-${ay}-01`;
+  }
+  return bugun();
 };
+
+// İşlem geçmişi tek seferde bu kadar satır getirir; "Daha Fazla" ile artar
+const SAYFA = 50;
+
+// Özet toplamları sayfa sayfa çekilir: 6 aylık aralıkta sunucunun satır
+// sınırına takılıp toplamlar eksik hesaplanmasın
+const PARCA = 1000;
 
 export default function RaporlarPage() {
   const [donem, setDonem] = useState<Donem>("gun");
-  const [hareketler, setHareketler] = useState<Hareket[]>([]);
+  // Tarihe göre arama: doldurulan alanlar dönem düğmelerinin yerine geçer
+  const [ozelBas, setOzelBas] = useState("");
+  const [ozelBit, setOzelBit] = useState("");
+  const [hareketler, setHareketler] = useState<OzetHareket[]>([]);
   const [bakiyeler, setBakiyeler] = useState<CariOzet[]>([]);
   const [audit, setAudit] = useState<Hareket[]>([]);
+  const [limit, setLimit] = useState(SAYFA);
+  const [devamVar, setDevamVar] = useState(false);
+
+  const ozelMi = Boolean(ozelBas || ozelBit);
+  const bas = ozelMi ? ozelBas : baslangic(donem);
+  const bit = ozelMi ? ozelBit : "";
+
+  // Seçili aralık (dönem düğmesi veya tarih araması) tüm listelere uygulanır
+  const araliktaSorgula = useCallback(
+    (secim: string) => {
+      let q = supabase.from("hareketler").select(secim);
+      if (bas) q = q.gte("tarih", bas);
+      if (bit) q = q.lte("tarih", bit);
+      return q;
+    },
+    [bas, bit]
+  );
 
   useEffect(() => {
-    supabase
-      .from("hareketler")
-      .select("*, kartlar(ad)")
-      .gte("tarih", baslangic(donem))
-      .then(({ data }) => setHareketler((data as Hareket[]) ?? []));
-  }, [donem]);
+    let iptal = false;
+    (async () => {
+      const hepsi: OzetHareket[] = [];
+      for (let bastan = 0; ; bastan += PARCA) {
+        const { data, error } = await araliktaSorgula(
+          "tur,tutar,odeme_yontemi,kartlar(ad)"
+        )
+          .order("tarih", { ascending: true })
+          .order("id", { ascending: true })
+          .range(bastan, bastan + PARCA - 1);
+        const parca = (data as unknown as OzetHareket[]) ?? [];
+        hepsi.push(...parca);
+        if (error || parca.length < PARCA) break;
+      }
+      if (!iptal) setHareketler(hepsi);
+    })();
+    return () => {
+      iptal = true;
+    };
+  }, [araliktaSorgula]);
+
+  // Aralık değişince işlem geçmişi baştan başlar
+  useEffect(() => {
+    setLimit(SAYFA);
+  }, [araliktaSorgula]);
+
+  useEffect(() => {
+    araliktaSorgula("*, cariler(unvan,tip), profiles(full_name), kartlar(ad)")
+      .order("created_at", { ascending: false })
+      // Bir fazlasını isteyip "devamı var mı" sorusunu tek sorguda yanıtlarız
+      .limit(limit + 1)
+      .then(({ data }) => {
+        const liste = (data as unknown as Hareket[]) ?? [];
+        setDevamVar(liste.length > limit);
+        setAudit(liste.slice(0, limit));
+      });
+  }, [araliktaSorgula, limit]);
 
   useEffect(() => {
     supabase
@@ -40,12 +123,6 @@ export default function RaporlarPage() {
       .gt("kalan_bakiye", 0)
       .order("kalan_bakiye", { ascending: false })
       .then(({ data }) => setBakiyeler((data as CariOzet[]) ?? []));
-    supabase
-      .from("hareketler")
-      .select("*, cariler(unvan,tip), profiles(full_name), kartlar(ad)")
-      .order("created_at", { ascending: false })
-      .limit(20)
-      .then(({ data }) => setAudit((data as Hareket[]) ?? []));
   }, []);
 
   const toplamlar = useMemo(() => {
@@ -85,19 +162,17 @@ export default function RaporlarPage() {
 
   return (
     <Shell title="Raporlar">
-      <div className="flex gap-2">
-        {(
-          [
-            ["gun", "Bugün"],
-            ["hafta", "Son 7 Gün"],
-            ["ay", "Bu Ay"],
-          ] as const
-        ).map(([d, l]) => (
+      <div className="grid grid-cols-4 gap-2">
+        {DONEMLER.map(([d, l]) => (
           <button
             key={d}
-            onClick={() => setDonem(d)}
-            className={`flex-1 rounded-xl py-2.5 text-sm font-bold ${
-              donem === d
+            onClick={() => {
+              setDonem(d);
+              setOzelBas("");
+              setOzelBit("");
+            }}
+            className={`rounded-xl px-1 py-2.5 text-xs font-bold ${
+              !ozelMi && donem === d
                 ? "bg-green-700 text-white"
                 : "bg-white text-stone-600 shadow-sm"
             }`}
@@ -105,6 +180,55 @@ export default function RaporlarPage() {
             {l}
           </button>
         ))}
+      </div>
+
+      {/* Tarihe göre arama: aralık girilince dönem düğmeleri devre dışı kalır */}
+      <div className="mt-2 rounded-2xl bg-white p-3 shadow-sm">
+        <div className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-400">
+          Tarihe Göre Ara
+        </div>
+        <div className="flex items-end gap-2">
+          <label className="flex-1 text-[11px] text-stone-400">
+            Başlangıç
+            <input
+              type="date"
+              value={ozelBas}
+              max={ozelBit || undefined}
+              onChange={(e) => setOzelBas(e.target.value)}
+              className="mt-1 w-full rounded-xl border border-stone-200 px-2 py-2 text-sm text-stone-800"
+            />
+          </label>
+          <label className="flex-1 text-[11px] text-stone-400">
+            Bitiş
+            <input
+              type="date"
+              value={ozelBit}
+              min={ozelBas || undefined}
+              onChange={(e) => setOzelBit(e.target.value)}
+              className="mt-1 w-full rounded-xl border border-stone-200 px-2 py-2 text-sm text-stone-800"
+            />
+          </label>
+          {ozelMi && (
+            <button
+              onClick={() => {
+                setOzelBas("");
+                setOzelBit("");
+              }}
+              className="rounded-xl bg-stone-100 px-3 py-2 text-xs font-bold text-stone-600"
+            >
+              Temizle
+            </button>
+          )}
+        </div>
+        <p className="mt-2 text-[11px] text-stone-400">
+          {ozelMi
+            ? `Aralık: ${bas ? tarihFmt(bas) : "en baştan"} — ${
+                bit ? tarihFmt(bit) : "bugüne kadar"
+              }`
+            : `Seçili dönem: ${
+                DONEMLER.find(([d]) => d === donem)?.[1]
+              } (${tarihFmt(bas)} sonrası)`}
+        </p>
       </div>
 
       <div className="mt-3 rounded-2xl bg-white p-4 shadow-sm">
@@ -204,9 +328,19 @@ export default function RaporlarPage() {
         </div>
 
         <div className="rounded-2xl bg-white p-4 shadow-sm">
-          <div className="mb-2 text-sm font-bold text-stone-700">
-            İşlem Geçmişi (kim, ne zaman, ne girdi)
+          <div className="mb-2 flex items-baseline justify-between gap-2">
+            <div className="text-sm font-bold text-stone-700">
+              İşlem Geçmişi (kim, ne zaman, ne girdi)
+            </div>
+            <span className="shrink-0 text-xs text-stone-400">
+              {audit.length} kayıt
+            </span>
           </div>
+          {audit.length === 0 && (
+            <p className="text-xs text-stone-400">
+              Seçili tarih aralığında işlem yok.
+            </p>
+          )}
           <ul className="divide-y divide-stone-100">
             {audit.map((h) => (
               <li key={h.id} className="py-2 text-xs">
@@ -222,6 +356,15 @@ export default function RaporlarPage() {
               </li>
             ))}
           </ul>
+          {/* Liste sayfa sayfa uzar: geçmiş aşağıya doğru açılır */}
+          {devamVar && (
+            <button
+              onClick={() => setLimit((n) => n + SAYFA)}
+              className="mt-3 w-full rounded-xl bg-stone-100 py-3 text-sm font-bold text-stone-600"
+            >
+              ↓ Daha Fazla Göster
+            </button>
+          )}
         </div>
       </div>
     </Shell>

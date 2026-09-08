@@ -11,6 +11,9 @@ const MIN_OLCEK = 1;
 const MAX_OLCEK = 6;
 const CIFT_DOKUNUS_OLCEK = 2.5;
 
+// İmzalı adresin sorgu parametrelerini atlayarak PDF olup olmadığına bakar
+const pdfMu = (url: string) => /\.pdf(\?|#|$)/i.test(url);
+
 export default function BelgeGoruntuleyici({
   url,
   onKapat,
@@ -126,7 +129,9 @@ export default function BelgeGoruntuleyici({
           ⬇️ İndir
         </a>
         <span className="text-[11px] text-white/50">
-          İki parmakla veya çift dokunuşla yakınlaştırın
+          {pdfMu(url)
+            ? "PDF belge — açılmazsa İndir ile görüntüleyin"
+            : "İki parmakla veya çift dokunuşla yakınlaştırın"}
         </span>
         <button
           onClick={onKapat}
@@ -135,6 +140,14 @@ export default function BelgeGoruntuleyici({
           ✕ Kapat
         </button>
       </div>
+      {pdfMu(url) ? (
+        // PDF'te yakınlaştırma tarayıcının kendi görüntüleyicisine bırakılır
+        <iframe
+          src={url}
+          title="Taranan belge"
+          className="flex-1 border-0 bg-white"
+        />
+      ) : (
       <div
         ref={kutuRef}
         className="relative flex-1 select-none overflow-hidden"
@@ -160,6 +173,7 @@ export default function BelgeGoruntuleyici({
           />
         </div>
       </div>
+      )}
     </div>
   );
 }

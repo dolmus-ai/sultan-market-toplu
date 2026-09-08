@@ -4,6 +4,7 @@ import {
   useLayoutEffect,
   useRef,
   type ChangeEvent,
+  type FocusEvent,
   type InputHTMLAttributes,
   type TextareaHTMLAttributes,
 } from "react";
@@ -59,12 +60,26 @@ const tutarDonustur = (ham: string, imlec: number): [string, number] => {
   return [yeni, yeni.length];
 };
 
+// Alana dokununca içindeki metnin tamamını seçer: fişten okunan ad/tutar tek
+// yazışta değiştirilebilsin diye. Mobil tarayıcılar odak anında imleci kendi
+// koyduğu için seçim bir kare sonraya bırakılır.
+const tumunuSecOdakta = <T extends HTMLInputElement | HTMLTextAreaElement>(
+  e: FocusEvent<T>
+) => {
+  const el = e.currentTarget;
+  requestAnimationFrame(() => {
+    if (document.activeElement === el) el.select();
+  });
+};
+
 type GirdiProps = Omit<
   InputHTMLAttributes<HTMLInputElement>,
   "value" | "onChange"
 > & {
   value: string;
   onValueChange: (deger: string) => void;
+  // true: alana tıklayınca/dokununca içindeki metnin tamamı seçilir
+  tumunuSec?: boolean;
 };
 
 type MetinAlaniProps = Omit<
@@ -78,16 +93,35 @@ type MetinAlaniProps = Omit<
 export function BuyukHarfGirdi({
   value,
   onValueChange,
+  tumunuSec,
+  onFocus,
   ...rest
 }: GirdiProps) {
   const { ref, onChange } = useImlecKoruma<HTMLInputElement>(
     buyukHarfDonustur,
     onValueChange
   );
-  return <input {...rest} ref={ref} value={value} onChange={onChange} />;
+  return (
+    <input
+      {...rest}
+      ref={ref}
+      value={value}
+      onChange={onChange}
+      onFocus={(e) => {
+        if (tumunuSec) tumunuSecOdakta(e);
+        onFocus?.(e);
+      }}
+    />
+  );
 }
 
-export function TutarGirdi({ value, onValueChange, ...rest }: GirdiProps) {
+export function TutarGirdi({
+  value,
+  onValueChange,
+  tumunuSec,
+  onFocus,
+  ...rest
+}: GirdiProps) {
   const { ref, onChange } = useImlecKoruma<HTMLInputElement>(
     tutarDonustur,
     onValueChange
@@ -99,6 +133,10 @@ export function TutarGirdi({ value, onValueChange, ...rest }: GirdiProps) {
       ref={ref}
       value={value}
       onChange={onChange}
+      onFocus={(e) => {
+        if (tumunuSec) tumunuSecOdakta(e);
+        onFocus?.(e);
+      }}
     />
   );
 }

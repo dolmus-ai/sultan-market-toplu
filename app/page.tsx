@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import Shell from "@/components/Shell";
 import { supabase } from "@/lib/supabase";
-import { bugun, para, saatFmt, TUR_LABEL } from "@/lib/format";
+import { bugun, gunBasiISO, para, saatFmt, TUR_LABEL } from "@/lib/format";
 import type { Hareket } from "@/lib/types";
 
 type Ozet = {
@@ -24,11 +24,13 @@ export default function AnaSayfa() {
       const [gunluk, bakiyeler, son] = await Promise.all([
         supabase.from("hareketler").select("tur,tutar").eq("tarih", bugun()),
         supabase.from("cari_ozet").select("tip,kalan_bakiye").eq("aktif", true),
+        // Son işlemler: bugün + dün (2 günlük) — liste uzun tutulur
         supabase
           .from("hareketler")
           .select("*, cariler(unvan,tip), profiles(full_name), kartlar(ad)")
+          .gte("created_at", gunBasiISO(1))
           .order("created_at", { ascending: false })
-          .limit(5),
+          .limit(200),
       ]);
 
       const g = { gelen_odeme: 0, yapilan_odeme: 0, veresiye: 0, fatura: 0 };
@@ -146,13 +148,16 @@ export default function AnaSayfa() {
       </div>
 
       <div className="mt-4 rounded-2xl bg-white p-4 shadow-sm">
-        <div className="mb-2 text-sm font-bold text-stone-700">
-          Son İşlemler
+        <div className="mb-2 flex items-baseline justify-between">
+          <div className="text-sm font-bold text-stone-700">Son İşlemler</div>
+          <div className="text-xs text-stone-400">
+            Son 2 gün{sonIslemler.length ? ` · ${sonIslemler.length} kayıt` : ""}
+          </div>
         </div>
         {sonIslemler.length === 0 && (
-          <p className="text-sm text-stone-400">Henüz işlem yok.</p>
+          <p className="text-sm text-stone-400">Son 2 günde işlem yok.</p>
         )}
-        <ul className="divide-y divide-stone-100">
+        <ul className="max-h-[28rem] divide-y divide-stone-100 overflow-y-auto">
           {sonIslemler.map((h) => (
             <li key={h.id} className="flex items-center justify-between py-2">
               <div>

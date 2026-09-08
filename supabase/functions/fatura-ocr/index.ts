@@ -45,9 +45,23 @@ Deno.serve(async (req: Request) => {
     if (dlErr || !file) return json({ error: "belge_bulunamadi" }, 404);
 
     const b64 = encodeBase64(new Uint8Array(await file.arrayBuffer()));
-    const mime = path.toLowerCase().endsWith(".png")
-      ? "image/png"
-      : "image/jpeg";
+    const yol = path.toLowerCase();
+    // Bazı toptancılar faturayı PDF gönderiyor: PDF'ler modele dosya olarak,
+    // fotoğraflar görsel olarak iletilir.
+    const pdfMi = yol.endsWith(".pdf");
+    const mime = yol.endsWith(".png") ? "image/png" : "image/jpeg";
+    const belgePart = pdfMi
+      ? {
+          type: "file",
+          file: {
+            filename: "belge.pdf",
+            file_data: `data:application/pdf;base64,${b64}`,
+          },
+        }
+      : {
+          type: "image_url",
+          image_url: { url: `data:${mime};base64,${b64}` },
+        };
 
     const { data: apiKey } = await admin.rpc("get_secret", {
       secret_name: "OPENAI_API_KEY",
@@ -69,7 +83,7 @@ Deno.serve(async (req: Request) => {
             role: "system",
             content:
               "Türkiye'deki perakende fişlerini ve e-Arşiv faturaları okuyan bir asistansın. " +
-              "Görseldeki bilgileri dikkatle çıkar. Emin olamadığın alanlara null yaz, uydurma.",
+              "Belgedeki bilgileri dikkatle çıkar. Emin olamadığın alanlara null yaz, uydurma.",
           },
           {
             role: "user",
@@ -84,7 +98,7 @@ Deno.serve(async (req: Request) => {
                     "yalnızca el yazısını ver, fişin basılı/matbu metnini bu alana yazma; el yazısı yoksa null. " +
                     "tarih ve toplam: fişin basılı kısmındaki tarih ve genel toplam tutar. " +
                     "Tutarları sayı olarak ver (örn. 1234.56 — binlik ayracı yok, ondalık nokta)."
-                  : "Bu fiş/fatura görselinden bilgileri çıkar ve YALNIZCA şu JSON ile yanıt ver: " +
+                  : `Bu fiş/fatura ${pdfMi ? "belgesinden" : "görselinden"} bilgileri çıkar ve YALNIZCA şu JSON ile yanıt ver: ` +
                     '{"tedarikci": string|null, "tarih": "YYYY-MM-DD"|null, "toplam": number|null, ' +
                     '"kdv": number|null, "fatura_no": string|null, ' +
                     '"markalar": [{"marka": string, "tutar": number}]|null}. ' +
@@ -100,10 +114,7 @@ Deno.serve(async (req: Request) => {
                     "Ürünlerden net bir marka çıkaramıyorsan markalar alanına null yaz, tahmin uydurma. " +
                     "Tutarları sayı olarak ver (örn. 1234.56 — binlik ayracı yok, ondalık nokta).",
               },
-              {
-                type: "image_url",
-                image_url: { url: `data:${mime};base64,${b64}` },
-              },
+              belgePart,
             ],
           },
         ],

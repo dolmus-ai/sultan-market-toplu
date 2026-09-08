@@ -64,10 +64,13 @@ export default function CariSecici({
 
   return (
     <>
+      {/* Şirket adı elle girilir; alana dokununca (fişten okunan) metnin
+          tamamı seçilir, üzerine tek seferde yazılabilir. */}
       <BuyukHarfGirdi
+        tumunuSec
         value={aramaAd}
         onValueChange={onAramaAd}
-        placeholder={`${etiket} ara veya yeni ad yaz…`}
+        placeholder={`${etiket} adını yazın veya listeden seçin…`}
         className="mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm outline-none focus:border-green-600"
       />
       <div className="mt-1 max-h-40 space-y-0.5 overflow-y-auto">

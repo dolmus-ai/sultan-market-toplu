@@ -22,11 +22,35 @@ export const saatFmt = (d: string) =>
     minute: "2-digit",
   });
 
-export const bugun = () => {
-  const d = new Date();
+const gunYaz = (d: Date) => {
   const ay = String(d.getMonth() + 1).padStart(2, "0");
   const gun = String(d.getDate()).padStart(2, "0");
   return `${d.getFullYear()}-${ay}-${gun}`;
+};
+
+export const bugun = () => gunYaz(new Date());
+
+// n gün önceki tarih ("YYYY-MM-DD"). 0 = bugün.
+export const gunOnce = (n: number) => {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return gunYaz(d);
+};
+
+// n ay önceki tarih ("YYYY-MM-DD")
+export const ayOnce = (n: number) => {
+  const d = new Date();
+  d.setMonth(d.getMonth() - n);
+  return gunYaz(d);
+};
+
+// n gün öncesinin yerel gece yarısı — created_at (timestamptz) filtrelerinde
+// kullanılır: gunBasiISO(1) "dün 00:00'dan beri" demektir.
+export const gunBasiISO = (n: number) => {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString();
 };
 
 export const TUR_LABEL: Record<HareketTur, string> = {
@@ -83,5 +107,5 @@ export const tutarFormatla = (ham: string) => {
   return ondalik === undefined ? gruplu : `${gruplu},${ondalik.slice(0, 2)}`;
 };
 
-// Sayıyı tutar alanına yazılabilir biçimde verir (OCR/ses sonuçları için)
+// Sayıyı tutar alanına yazılabilir biçimde verir (OCR sonuçları için)
 export const tutarYaz = (n: number) => tutarFormatla(String(n).replace(".", ","));

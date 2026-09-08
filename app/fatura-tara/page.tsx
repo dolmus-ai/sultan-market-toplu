@@ -65,9 +65,43 @@ const MOD_META: Record<
   },
 };
 
+// Yüklenen belgenin küçük önizlemesi: fotoğrafta görsel, PDF'te dosya adı
+function Onizleme({
+  onizleme,
+  pdfAdi,
+  boy,
+}: {
+  onizleme: string;
+  pdfAdi: string;
+  boy: string;
+}) {
+  if (pdfAdi) {
+    return (
+      <div className="mx-auto flex items-center justify-center gap-2 rounded-lg bg-stone-50 px-3 py-4">
+        <span className="text-3xl">📄</span>
+        <span className="truncate text-sm font-semibold text-stone-600">
+          {pdfAdi}
+        </span>
+      </div>
+    );
+  }
+  if (!onizleme) return null;
+  return (
+    /* eslint-disable-next-line @next/next/no-img-element */
+    <img
+      src={onizleme}
+      alt="Belge önizleme"
+      className={`mx-auto ${boy} rounded-lg object-contain`}
+    />
+  );
+}
+
 export default function FaturaTaraPage() {
   const router = useRouter();
-  const fileRef = useRef<HTMLInputElement>(null);
+  // Üç kaynak: kamera, galeri ve PDF (bazı toptancılar faturayı PDF gönderiyor)
+  const kameraRef = useRef<HTMLInputElement>(null);
+  const galeriRef = useRef<HTMLInputElement>(null);
+  const pdfRef = useRef<HTMLInputElement>(null);
   const [mod, setMod] = useState<Mod>("fatura");
   const [asama, setAsama] = useState<"sec" | "isleniyor" | "onay" | "tamam">(
     "sec"
@@ -75,6 +109,8 @@ export default function FaturaTaraPage() {
   const [hata, setHata] = useState("");
   const [belgeYolu, setBelgeYolu] = useState("");
   const [onizleme, setOnizleme] = useState("");
+  // PDF yüklendiyse görsel önizleme yerine dosya adı gösterilir
+  const [pdfAdi, setPdfAdi] = useState("");
   const [cariListe, setCariListe] = useState<Cari[]>([]);
 
   const [kalemler, setKalemler] = useState<Kalem[]>([bosKalem()]);
@@ -123,15 +159,25 @@ export default function FaturaTaraPage() {
   const dosyaSecildi = async (f: File) => {
     setHata("");
     setAsama("isleniyor");
-    setOnizleme(URL.createObjectURL(f));
+    const pdfMi =
+      f.type === "application/pdf" || /\.pdf$/i.test(f.name);
+    setPdfAdi(pdfMi ? f.name : "");
+    setOnizleme(pdfMi ? "" : URL.createObjectURL(f));
 
-    const kucukGorsel = await kucult(f);
-    const yol = `${crypto.randomUUID()}.jpg`;
+    // PDF olduğu gibi yüklenir; fotoğraf yüklemeden önce küçültülür
+    const govde = pdfMi ? f : await kucult(f);
+    const yol = `${crypto.randomUUID()}.${pdfMi ? "pdf" : "jpg"}`;
     const { error: upErr } = await supabase.storage
       .from("belgeler")
-      .upload(yol, kucukGorsel, { contentType: "image/jpeg" });
+      .upload(yol, govde, {
+        contentType: pdfMi ? "application/pdf" : "image/jpeg",
+      });
     if (upErr) {
-      setHata("Görsel yüklenemedi. Tekrar deneyin.");
+      setHata(
+        pdfMi
+          ? "PDF yüklenemedi. Tekrar deneyin."
+          : "Görsel yüklenemedi. Tekrar deneyin."
+      );
       setAsama("sec");
       return;
     }
@@ -150,7 +196,7 @@ export default function FaturaTaraPage() {
     setCariListe(liste);
 
     if (ocr.error || ocr.data?.error) {
-      setHata("Görsel okunamadı — bilgileri elle tamamlayabilirsiniz.");
+      setHata("Belge okunamadı — bilgileri elle tamamlayabilirsiniz.");
     }
     const s: OcrSonuc = ocr.data?.sonuc ?? {};
     if (s.tarih && /^\d{4}-\d{2}-\d{2}$/.test(s.tarih)) setTarih(s.tarih);
@@ -159,25 +205,17 @@ export default function FaturaTaraPage() {
     const tutarStr = (n: number | null | undefined) =>
       typeof n === "number" && n > 0 ? tutarYaz(n) : "";
 
-    // Ad üzerinden gevşek cari eşleştirme (iki yönlü "içeriyor" kontrolü)
-    const esle = (ad: string) => {
-      const a = ad.toLocaleLowerCase("tr");
-      return liste.find((c) => {
-        const u = c.unvan.toLocaleLowerCase("tr");
-        return u.includes(a) || a.includes(u);
-      });
-    };
-
     // Markalar yalnızca not olarak taşınır; fiş markaya göre bölünmez.
     if (mod === "fatura") setMarkaNotu(buyukHarf(markaListesi(s.markalar)));
 
-    // Fatura tek cariye yazılır: okunan firma adı (veresiyede el yazısı)
+    // Şirket/cari kendiliğinden seçilmez: okunan ad yalnızca öneri olarak
+    // alana yazılır, kullanıcı listeden seçer ya da üstüne yazar (alana
+    // dokununca metnin tamamı seçili gelir). OCR yanlış firmaya yazmasın.
     const okunanAd = (mod === "fatura" ? s.tedarikci : s.el_yazisi) ?? "";
-    const eslesen = okunanAd ? esle(okunanAd) : undefined;
     setKalemler([
       {
-        cariId: eslesen?.id ?? "",
-        yeniCariAd: eslesen ? "" : buyukHarf(okunanAd),
+        cariId: "",
+        yeniCariAd: buyukHarf(okunanAd),
         tutar: tutarStr(s.toplam),
       },
     ]);
@@ -284,6 +322,7 @@ export default function FaturaTaraPage() {
     setHata(mesaj);
     setBelgeYolu("");
     setOnizleme("");
+    setPdfAdi("");
     setCariListe([]);
     setKalemler([bosKalem()]);
     setTarih(bugun());
@@ -346,45 +385,66 @@ export default function FaturaTaraPage() {
           <div className="mt-5 text-5xl">📷</div>
           <p className="mt-3 text-sm text-stone-500">
             {mod === "fatura"
-              ? "Fatura veya fişin fotoğrafını çekin; tedarikçi, tarih ve tutarı otomatik okuyalım. Fatura tek toptancıya yazılır; fişteki markalar sadece not olarak eklenir. Bayiliklere ayırmak isterseniz kalem ekleyip fişi kendiniz bölebilirsiniz."
-              : "Üzerine müşterinin adresi (veya adı) el yazısıyla yazılmış fişin fotoğrafını çekin; el yazısını, tarihi ve tutarı otomatik okuyalım. El yazısı müşteri adı olarak kaydedilir."}
+              ? "Faturanın fotoğrafını çekin, galeriden seçin veya PDF olarak yükleyin; tarih ve tutarı otomatik okuyalım. Firmayı siz seçersiniz. Fatura tek toptancıya yazılır; fişteki markalar sadece not olarak eklenir. Bayiliklere ayırmak isterseniz kalem ekleyip fişi kendiniz bölebilirsiniz."
+              : "Üzerine müşterinin adresi (veya adı) el yazısıyla yazılmış fişin fotoğrafını çekin veya galeriden seçin; el yazısını, tarihi ve tutarı otomatik okuyalım. Müşteriyi siz seçer ya da adını kendiniz yazarsınız."}
           </p>
           {hata && (
             <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">
               {hata}
             </p>
           )}
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) dosyaSecildi(f);
-              e.target.value = "";
-            }}
-          />
+          {/* Kamera / galeri / PDF için ayrı gizli dosya alanları */}
+          {(
+            [
+              [kameraRef, "image/*", true],
+              [galeriRef, "image/*", false],
+              [pdfRef, "application/pdf", false],
+            ] as const
+          ).map(([ref, kabul, kamera], i) => (
+            <input
+              key={i}
+              ref={ref}
+              type="file"
+              accept={kabul}
+              {...(kamera ? { capture: "environment" as const } : {})}
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) dosyaSecildi(f);
+                e.target.value = "";
+              }}
+            />
+          ))}
           <button
-            onClick={() => fileRef.current?.click()}
+            onClick={() => kameraRef.current?.click()}
             className="mt-5 w-full rounded-xl bg-green-700 py-4 text-lg font-bold text-white"
           >
-            Fotoğraf Çek / Seç
+            📷 Fotoğraf Çek
           </button>
+          <div className="mt-2 flex gap-2">
+            <button
+              onClick={() => galeriRef.current?.click()}
+              className="flex-1 rounded-xl bg-stone-100 py-3.5 text-sm font-bold text-stone-700"
+            >
+              🖼️ Galeriden Yükle
+            </button>
+            <button
+              onClick={() => pdfRef.current?.click()}
+              className="flex-1 rounded-xl bg-stone-100 py-3.5 text-sm font-bold text-stone-700"
+            >
+              📄 PDF Yükle
+            </button>
+          </div>
+          <p className="mt-2 text-[11px] text-stone-400">
+            Satıcı faturayı fotoğraf olarak gönderdiyse galeriden, PDF olarak
+            gönderdiyse PDF yükleyin.
+          </p>
         </div>
       )}
 
       {asama === "isleniyor" && (
         <div className="mt-10 rounded-2xl bg-white p-8 text-center shadow-sm">
-          {onizleme && (
-            /* eslint-disable-next-line @next/next/no-img-element */
-            <img
-              src={onizleme}
-              alt="Fiş önizleme"
-              className="mx-auto max-h-48 rounded-lg object-contain"
-            />
-          )}
+          <Onizleme onizleme={onizleme} pdfAdi={pdfAdi} boy="max-h-48" />
           <p className="mt-4 animate-pulse font-bold text-stone-600">
             Okunuyor…
           </p>
@@ -393,14 +453,7 @@ export default function FaturaTaraPage() {
 
       {asama === "onay" && (
         <div className="rounded-2xl bg-white p-4 shadow-sm">
-          {onizleme && (
-            /* eslint-disable-next-line @next/next/no-img-element */
-            <img
-              src={onizleme}
-              alt="Fiş önizleme"
-              className="mx-auto max-h-40 rounded-lg object-contain"
-            />
-          )}
+          <Onizleme onizleme={onizleme} pdfAdi={pdfAdi} boy="max-h-40" />
           <p className="mt-2 text-center text-xs text-stone-400">
             {kalemler.length > 1
               ? "Fişi kalemlere böldünüz. Her kalemin carisini ve tutarını kontrol edin."

@@ -12,8 +12,13 @@ Mobil öncelikli web uygulaması (PWA) — telefona "ana ekrana ekle" ile kurulu
   Ödeme yöntemi: Nakit / Kredi Kartı / Yemek Kartı. Bakiye otomatik güncellenir.
 - **Kart Takibi:** Kartla ödemede hangi kartla ödendiği de kaydedilir. Kart adlarını
   kullanıcı kendisi verir; işlem sırasında listede yoksa oracıkta eklenir.
-  Kart yönetimi (ad değiştirme, pasife alma) `Kartlar` ekranından yapılır.
-- **Raporlar:** Günlük/haftalık/aylık özet, en borçlu cariler, işlem geçmişi (kim, ne zaman, ne girdi).
+  Kart listesi açılıp kapanır ve isimle aranır. Kart yönetimi (ad değiştirme,
+  pasife alma) `Kartlar` ekranından yapılır.
+- **Raporlar:** Günlük/haftalık/aylık/6 aylık özet, tarih aralığına göre arama,
+  en borçlu cariler, sayfa sayfa uzayan işlem geçmişi (kim, ne zaman, ne girdi).
+- **Fiş/Fatura Tarama:** Fotoğraf çekerek, galeriden seçerek veya PDF yükleyerek
+  (satıcılar faturayı kimi zaman fotoğraf, kimi zaman PDF gönderiyor) belge eklenir;
+  tarih ve tutar otomatik okunur, firma/müşteri kullanıcı tarafından seçilir.
 - **Kullanıcılar:** Her personel kendi hesabıyla girer; her kaydın üstünde işlemi yapan görünür.
 
 ## Teknoloji

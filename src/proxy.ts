@@ -1,12 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
+import { SUPABASE_ANON_KEY, SUPABASE_URL } from "@/lib/ortam";
+
 export default async function proxy(istek: NextRequest) {
   let yanit = NextResponse.next({ request: istek });
 
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    SUPABASE_URL,
+    SUPABASE_ANON_KEY,
     {
       cookies: {
         getAll: () => istek.cookies.getAll(),
@@ -23,9 +25,16 @@ export default async function proxy(istek: NextRequest) {
     },
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Supabase'e ulaşılamazsa tüm site 500 vermesin: oturumsuz sayıp giriş
+  // sayfasına yönlendiriyoruz — kapalı tarafa düşen güvenli davranış.
+  let user = null;
+  try {
+    ({
+      data: { user },
+    } = await supabase.auth.getUser());
+  } catch (hata) {
+    console.error("[proxy] oturum okunamadı", hata);
+  }
 
   const yol = istek.nextUrl.pathname;
   // /onizleme ve onu besleyen rota servisi yalnızca geliştirme ortamında açık.

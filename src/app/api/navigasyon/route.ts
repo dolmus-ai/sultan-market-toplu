@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { OSRM_SUNUCU } from "@/lib/ortam";
 import { haversine } from "@/lib/rota";
 import { manevrayiCevir, type Adim, type RotaSecenegi } from "@/lib/navigasyon";
 import type { Nokta } from "@/lib/tipler";
@@ -130,7 +131,7 @@ export async function POST(istek: Request) {
     );
   }
 
-  const osrm = process.env.OSRM_SUNUCU?.trim();
+  const osrm = OSRM_SUNUCU;
   if (osrm) {
     try {
       const secenekler = await osrmIleCoz(osrm, govde.baslangic, govde.hedef);

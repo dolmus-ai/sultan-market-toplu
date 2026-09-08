@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { OSRM_SUNUCU } from "@/lib/ortam";
 import { yerelRotaCoz } from "@/lib/rota";
 import type { Nokta, RotaSonucu } from "@/lib/tipler";
 
@@ -87,7 +88,7 @@ export async function POST(istek: Request) {
     return NextResponse.json({ hata: "En az bir durak gerekli" }, { status: 400 });
   }
 
-  const osrm = process.env.OSRM_SUNUCU?.trim();
+  const osrm = OSRM_SUNUCU;
   if (osrm) {
     try {
       const sonuc = await osrmIleCoz(osrm, govde.baslangic, duraklar);

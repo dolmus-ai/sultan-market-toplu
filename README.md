@@ -35,9 +35,14 @@ tercih `localStorage`'a yazılır — sesli tarifle aynı anahtarı paylaşır.
 
 ```bash
 npm install
+npm run dev
 ```
 
-`.env.local` zaten dolu. Örneği `.env.example` içinde:
+Ortam değişkenleri `.env` içinde ve **repoya dahil** — taze bir klonda ek
+ayar yapmadan çalışır. Değerlerin hepsi herkese açık: Supabase publishable
+key istemciye zaten gönderiliyor ve RLS ile korunuyor, harita/OSRM adresleri
+ve market konumu gizli değil. Yerelde farklı bir değer denemek isterseniz
+`.env.local` açın (git'e girmez, `.env`'i ezer).
 
 | Değişken | Açıklama |
 | --- | --- |

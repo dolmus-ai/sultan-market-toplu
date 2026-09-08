@@ -157,10 +157,8 @@ export function AbonelikSatiri({
           {abonelik.baslik} · {gunlerYaz(abonelik.gunler)} ·{" "}
           {saat(abonelik.teslim_saati)}
         </span>
-        <span className="mt-1 block truncate text-[12px] font-semibold text-gri">
-          {(abonelik.kalemler ?? [])
-            .map((k) => `${k.urun?.emoji ?? ""} ${k.urun?.ad ?? ""}`.trim())
-            .join(", ") || "Kalem yok"}
+        <span className="mt-1 block text-[12px] font-semibold text-gri">
+          {(abonelik.kalemler ?? []).length} kalem
         </span>
       </span>
       <span className="shrink-0 text-right text-[15px] font-black">
@@ -226,20 +224,36 @@ export function Etiket({
 
 /**
  * Sipariş kalemleri. Kuryenin ürün bilgisine ihtiyacı yok — kapıda teslim
- * ederken önemli olan kaç birim taşıdığı; bu yüzden yalnızca miktar duruyor.
+ * ederken önemli olan kaç birim taşıdığı ve satırın tutarı.
  */
 export function KalemListesi({
   kalemler,
 }: {
-  kalemler: { id: string; miktar: number; urun: { birim: string } | null }[];
+  kalemler: {
+    id: string;
+    miktar: number;
+    birim_fiyat?: number;
+    urun: { birim: string; fiyat: number } | null;
+  }[];
 }) {
   return (
     <ul className="divide-y divide-cizgi overflow-hidden rounded-[20px] border border-cizgi bg-yuzey">
-      {kalemler.map((k) => (
-        <li key={k.id} className="px-3.5 py-3 text-[14px] font-bold">
-          {miktarYaz(k.miktar, k.urun?.birim ?? "adet")}
-        </li>
-      ))}
+      {kalemler.map((k) => {
+        const fiyat = k.birim_fiyat ?? k.urun?.fiyat ?? 0;
+        return (
+          <li
+            key={k.id}
+            className="flex items-center justify-between gap-3 px-3.5 py-3"
+          >
+            <span className="text-[14px] font-bold">
+              {miktarYaz(k.miktar, k.urun?.birim ?? "adet")}
+            </span>
+            <span className="text-[14px] font-black">
+              {para(k.miktar * fiyat)}
+            </span>
+          </li>
+        );
+      })}
       {kalemler.length === 0 && (
         <li className="px-4 py-6 text-center text-sm text-gri">Kalem yok.</li>
       )}

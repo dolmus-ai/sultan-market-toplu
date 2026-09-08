@@ -211,9 +211,25 @@ export function ucBoyutluBinaKatmani(harita: MapLibreMap): string | null {
   return bulunan?.id ?? null;
 }
 
-/** Stilde 3B bina katmanı yoksa ekler. */
+/** Stilde 3B bina katmanı yoksa ekler; varsa yükseklik ifadelerini sağlamlaştırır. */
 export function ucBoyutluBinalarEkle(harita: MapLibreMap) {
-  if (ucBoyutluBinaKatmani(harita)) return;
+  const mevcut = ucBoyutluBinaKatmani(harita);
+  if (mevcut) {
+    // Liberty'nin kendi katmanı yüksekliği doğrudan `["get", ...]` ile
+    // okuyor. Özelliği olmayan binalarda null gelince MapLibre her karo
+    // için "Expected value to be of type number" uyarısı basıyor.
+    guvenliBoya(harita, mevcut, "fill-extrusion-height", [
+      "coalesce",
+      ["get", "render_height"],
+      6,
+    ]);
+    guvenliBoya(harita, mevcut, "fill-extrusion-base", [
+      "coalesce",
+      ["get", "render_min_height"],
+      0,
+    ]);
+    return;
+  }
 
   const stil = harita.getStyle();
   const binaKatmani = (stil?.layers as LayerSpecification[] | undefined)?.find(

@@ -665,6 +665,14 @@ export default function Harita({
         maxPitch: 75,
       });
       haritaRef.current = harita;
+      // Liberty stili, sprite'ında bulunmayan POI ikonlarına atıf yapıyor
+      // (atm, office, gate…). MapLibre her biri için uyarı basıyor; boş bir
+      // görsel verip susturuyoruz — o ikonlar zaten çizilemiyor.
+      const bosGorsel = { width: 1, height: 1, data: new Uint8Array(4) };
+      harita.on("styleimagemissing", (olay) => {
+        if (!harita.hasImage(olay.id)) harita.addImage(olay.id, bosGorsel);
+      });
+
       // Hata kaydı üretimde de açık: stil ya da karo sunucusuna
       // ulaşılamadığında ekran sessizce boş kalmasın, konsolda sebebi olsun.
       (window as unknown as { __harita?: MapLibreMap }).__harita = harita;

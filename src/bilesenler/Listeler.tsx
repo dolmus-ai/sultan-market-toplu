@@ -224,37 +224,22 @@ export function Etiket({
   );
 }
 
+/**
+ * Sipariş kalemleri. Kuryenin ürün bilgisine ihtiyacı yok — kapıda teslim
+ * ederken önemli olan kaç birim taşıdığı; bu yüzden yalnızca miktar duruyor.
+ */
 export function KalemListesi({
   kalemler,
 }: {
-  kalemler: {
-    id: string;
-    miktar: number;
-    birim_fiyat?: number;
-    urun: { ad: string; birim: string; emoji: string | null; fiyat: number } | null;
-  }[];
+  kalemler: { id: string; miktar: number; urun: { birim: string } | null }[];
 }) {
   return (
     <ul className="divide-y divide-cizgi overflow-hidden rounded-[20px] border border-cizgi bg-yuzey">
-      {kalemler.map((k) => {
-        const fiyat = k.birim_fiyat ?? k.urun?.fiyat ?? 0;
-        return (
-          <li key={k.id} className="flex items-center gap-3 px-3.5 py-3">
-            <span className="text-xl leading-none">{k.urun?.emoji ?? "🛒"}</span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-[14px] font-bold">
-                {k.urun?.ad ?? "Ürün"}
-              </span>
-              <span className="text-[12px] font-semibold text-gri">
-                {miktarYaz(k.miktar, k.urun?.birim ?? "adet")} × {para(fiyat)}
-              </span>
-            </span>
-            <span className="shrink-0 text-[14px] font-black">
-              {para(k.miktar * fiyat)}
-            </span>
-          </li>
-        );
-      })}
+      {kalemler.map((k) => (
+        <li key={k.id} className="px-3.5 py-3 text-[14px] font-bold">
+          {miktarYaz(k.miktar, k.urun?.birim ?? "adet")}
+        </li>
+      ))}
       {kalemler.length === 0 && (
         <li className="px-4 py-6 text-center text-sm text-gri">Kalem yok.</li>
       )}

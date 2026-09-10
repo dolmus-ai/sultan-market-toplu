@@ -288,10 +288,15 @@ menüsünde.
 ### Uzun basış
 
 Haritada bir pine basılı tutmak (mobilde uzun dokunuş, masaüstünde fareyi
-basılı tutma) teslimatı **teslim edildi** olarak işaretler; pin yeşile döner ve
-bildirimde 6 saniyelik **Geri al** çıkar. Abonelik pininde o günün siparişi
-işaretlenir. Teslim edilenler katmanı kapalıysa kendiliğinden açılır, yoksa
-yeşile dönen pin gözden kaybolurdu.
+basılı tutma) teslimatı **teslim edildi** olarak işaretler ve pin yeşile döner.
+Parmağı çekip **aynı pine tekrar uzun basmak işareti kaldırır**: sipariş eski
+durumuna, pin de eski rengine (çoğunlukla kırmızı "bekliyor") döner. Bildirimde
+ayrıca 6 saniyelik **Geri al** çıkar. Abonelik pininde o günün siparişi
+işaretlenir.
+
+Teslim edilenler katmanı kapalıysa kendiliğinden açılır; yoksa yeşile dönen pin
+gözden kaybolur ve tekrar basıp geri almak mümkün olmazdı. Katmanı istediğin
+zaman katman panelinden kapatabilirsin.
 
 Parmak 8 pikselden fazla kayarsa bu bir sürüklemedir, uzun basış iptal olur.
 Uzun basıştan sonra gelen `click` yutulur; yoksa hem teslim işaretlenir hem

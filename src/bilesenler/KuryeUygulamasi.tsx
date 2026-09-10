@@ -130,6 +130,13 @@ export default function KuryeUygulamasi({
   const [teslimBaslangic, setTeslimBaslangic] = useState<"alindi" | "alinmadi">(
     "alindi",
   );
+  /**
+   * Haritadan teslim işaretlenenler: kimlik → önceki durum. Aynı pine tekrar
+   * uzun basıldığında bu durumuna (çoğunlukla kırmızı "bekliyor") dönüyor.
+   */
+  const [sonTeslimler, setSonTeslimler] = useState<
+    Record<string, SiparisDurumu>
+  >({});
   /** Haritada açık balon — kayıt listeden tazelensin diye yalnızca kimlik tutuluyor. */
   const [balonSecim, setBalonSecim] = useState<{
     tur: "teslimat" | "abonelik" | "sepet";
@@ -1042,12 +1049,17 @@ export default function KuryeUygulamasi({
 
   /* ---------------- Haritadan hızlı işlemler ---------------- */
 
-  /** Uzun basışla teslim işaretleme — geri alınabilir. */
+  /**
+   * Uzun basışla teslim işaretleme. Pin yeşile dönüyor ve öyle kalıyor;
+   * aynı pine tekrar uzun basılırsa eski durumuna (kırmızı) dönüyor.
+   */
   async function teslimIsaretle(siparis: Siparis) {
     const oncekiDurum = siparis.durum;
     const zaman = new Date().toISOString();
 
-    // Teslim edilenler katmanı kapalıysa yeşile dönen pin gözden kaybolurdu.
+    setSonTeslimler((o) => ({ ...o, [siparis.id]: oncekiDurum }));
+    // Teslim edilenler katmanı kapalıysa yeşile dönen pin gözden kaybolur;
+    // tekrar basıp geri alabilmek için katmanı açıyoruz.
     setKatmanlar((k) =>
       k.teslimEdilenler ? k : { ...k, teslimEdilenler: true },
     );
@@ -1061,14 +1073,25 @@ export default function KuryeUygulamasi({
 
     uyar("Teslim edildi", {
       etiket: "Geri al",
-      calistir: () => {
-        void siparisGuncelle(
-          siparis.id,
-          { durum: oncekiDurum, teslim_zamani: null },
-          (s) => ({ ...s, durum: oncekiDurum, teslim_zamani: null }),
-        );
-      },
+      calistir: () => void teslimGeriAl(siparis.id),
     });
+  }
+
+  /** Teslim işaretini geri alır: pin eski rengine döner. */
+  async function teslimGeriAl(id: string) {
+    const durum = sonTeslimler[id] ?? "bekliyor";
+    setSonTeslimler((o) => {
+      const kalan = { ...o };
+      delete kalan[id];
+      return kalan;
+    });
+    setBalonSecim(null);
+    await siparisGuncelle(
+      id,
+      { durum, teslim_zamani: null },
+      (s) => ({ ...s, durum, teslim_zamani: null }),
+    );
+    uyar("Teslim işareti kaldırıldı");
   }
 
   function uzunBasis(
@@ -1104,7 +1127,8 @@ export default function KuryeUygulamasi({
           })();
 
     if (!siparis) return uyar("Bugün için teslimat yok");
-    if (siparis.durum === "teslim") return uyar("Bu teslimat zaten kapalı");
+    // Yeşile dönmüş pine tekrar uzun basmak işareti kaldırıyor.
+    if (siparis.durum === "teslim") return void teslimGeriAl(siparis.id);
     void teslimIsaretle(siparis);
   }
 

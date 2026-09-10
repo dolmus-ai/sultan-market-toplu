@@ -23,51 +23,56 @@ type Palet = {
 };
 
 /**
- * OpenFreeMap "liberty" stilini Sultan Market paletine boyar.
- * Aydınlık: beyaz zemin, sıcak gri araziler, siyah tipografi.
- * Karanlık: gece sürüşü için düşük parlaklık, kırmızı yalnızca bize ait.
+ * OpenFreeMap "liberty" stilini Yandex Haritalar'ın görünümüne yaklaştırır.
+ *
+ * Yandex'in kendi karo sunucusu üçüncü parti harita kütüphanelerinde
+ * kullanılamıyor (kullanım şartları buna izin vermiyor, anahtarsız erişim de
+ * kapalı). Bu yüzden veri kaynağı OpenStreetMap/OpenFreeMap olarak kalıyor;
+ * değişen yalnızca renk paleti: Yandex'in sıcak bej zemini, doygun mavi
+ * suyu, canlı yeşil parkları ve sarı ana yolları. Kırmızı hep bize ait.
  */
 const PALETLER: Record<Tema, Palet> = {
-  // Gündüz: sıcak kırık beyaz zemin, yumuşak mavi su, okunur yeşil parklar.
+  // Gündüz: Yandex'in sıcak bej zemini, doygun mavi su, canlı yeşil parklar.
   aydinlik: {
-    zemin: "#f7f6f3",
-    su: "#c5deef",
-    yesil: "#d8e9cf",
-    arazi: "#efeeea",
-    bina: "#e9e7e2",
-    binaCizgi: "#dcd9d3",
+    zemin: "#f3f0ea",
+    su: "#a9cdec",
+    yesil: "#c8e3ae",
+    arazi: "#eae6dd",
+    bina: "#e4ded2",
+    binaCizgi: "#d6cfc0",
     yolBeyaz: "#ffffff",
-    yolIkincil: "#fbfaf8",
-    yolKenar: "#dfdcd6",
-    otoyol: "#ffffff",
-    otoyolKenar: "#cfcabf",
-    demiryolu: "#cfcbc4",
-    sinir: "#cdc9c2",
-    yazi: "#39404a",
-    yaziSonuk: "#7d8792",
+    yolIkincil: "#fdfbf6",
+    yolKenar: "#ddd6c8",
+    // Yandex ana yolları sarıya çalar; şehirde yön bulmayı kolaylaştırıyor.
+    otoyol: "#fbe08a",
+    otoyolKenar: "#e8c65f",
+    demiryolu: "#c6bfb2",
+    sinir: "#cac2b4",
+    yazi: "#33383d",
+    yaziSonuk: "#767d85",
     hale: "#ffffff",
-    bina3b: ["#eeece7", "#e3e0d9", "#d5d1c9"],
+    bina3b: ["#e8e2d6", "#ddd6c8", "#cfc7b6"],
   },
-  // Gece: arduvaz-mavi arazi, arazi'den KOYU yollar — Apple'ın gece
-  // navigasyonundaki okunaklılığı veren şey bu ters kontrast.
+  // Gece: Yandex'in gece modundaki lacivert-arduvaz zemin; yollar zeminden
+  // daha açık, ana yollar soluk amber.
   karanlik: {
-    zemin: "#4a5663",
-    su: "#33414f",
-    yesil: "#465a4e",
-    arazi: "#4e5a67",
-    bina: "#414d5a",
-    binaCizgi: "#3a4552",
-    yolBeyaz: "#333d48",
-    yolIkincil: "#3a4450",
-    yolKenar: "#2a323b",
-    otoyol: "#2e3843",
-    otoyolKenar: "#222932",
-    demiryolu: "#5d6874",
-    sinir: "#616c79",
-    yazi: "#f4f7fa",
-    yaziSonuk: "#cbd4dd",
-    hale: "#2b333c",
-    bina3b: ["#4d5a69", "#45515f", "#3d4855"],
+    zemin: "#232c38",
+    su: "#16202c",
+    yesil: "#2a3a30",
+    arazi: "#28313d",
+    bina: "#2e3845",
+    binaCizgi: "#39434f",
+    yolBeyaz: "#3d4855",
+    yolIkincil: "#39434f",
+    yolKenar: "#2a333e",
+    otoyol: "#6a5c3c",
+    otoyolKenar: "#4d442d",
+    demiryolu: "#4a545f",
+    sinir: "#59636f",
+    yazi: "#e8edf3",
+    yaziSonuk: "#a9b3bd",
+    hale: "#1a222c",
+    bina3b: ["#39434f", "#323b47", "#2b333e"],
   },
 };
 

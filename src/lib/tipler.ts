@@ -14,12 +14,20 @@ export type BasarisizlikSebebi =
   | "odeme_yok"
   | "diger";
 
-export type OdemeYontemi =
-  | "nakit"
-  | "kredi_karti"
-  | "yemek_karti"
-  | "veresiye"
-  | "online";
+/**
+ * Ödeme yöntemi kodu. Artık sabit bir liste değil: `odeme_yontemleri`
+ * tablosundan geliyor, markette yeni yöntem açılabiliyor.
+ */
+export type OdemeYontemi = string;
+
+export type OdemeYontemiTanimi = {
+  kod: string;
+  ad: string;
+  /** Kurye elden para alıyor mu — vardiya kasası buna göre hesaplanır. */
+  para_alinir: boolean;
+  sira: number;
+  aktif: boolean;
+};
 
 export type AbonelikSikligi = "gunluk" | "haftalik" | "iki_haftalik" | "aylik";
 
@@ -85,6 +93,11 @@ export type Siparis = {
   basarisizlik_sebebi: BasarisizlikSebebi | null;
   basarisizlik_notu: string | null;
   deneme_sayisi: number;
+  /** Teslimatta ödeme alındı mı: null henüz kapatılmadı. */
+  odeme_alindi: boolean | null;
+  /** Ödeme alınamadıysa kapıdaki/borçlu kişi. */
+  odeme_alinmayan_kisi: string | null;
+  odeme_notu: string | null;
   created_at: string;
   musteri: Musteri | null;
   adres: Adres | null;
@@ -108,6 +121,8 @@ export type Abonelik = {
   baslangic: string;
   bitis: string | null;
   durum: "aktif" | "duraklatildi" | "iptal";
+  /** Kalem girilmediğinde kullanılan sabit tutar. */
+  tutar: number;
   notlar: string | null;
   musteri: Musteri | null;
   adres: Adres | null;
@@ -126,6 +141,8 @@ export type Sepet = {
   musteri_id: string;
   adres_id: string | null;
   durum: "acik" | "siparise_donustu" | "terk_edildi";
+  /** Kalem girilmediğinde kullanılan tutar. */
+  tutar: number;
   updated_at: string;
   musteri: Musteri | null;
   adres: Adres | null;

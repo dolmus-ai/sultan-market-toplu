@@ -206,6 +206,49 @@ drop policy "muhasebe kilidi" on public.profiles;
 
 ---
 
+## Ödeme ve tahsilat
+
+Teslimat kapatılırken kurye önce **ödeme alındı / alınamadı** kararını verir.
+
+- **Alındı** → yöntem seçilir, tahsil edilen tutar girilir, `tahsilatlar` tablosuna
+  kayıt düşer ve vardiya kasası artar. Sipariş tutarıyla fark varsa ekranda
+  "eksik/fazla" olarak gösterilir.
+- **Alınamadı** → kapıdaki kişinin adı ve açıklama istenir. Teslimat yine
+  tamamlanır, ama kasaya hiçbir şey işlenmez; borç `siparisler.odeme_alindi`,
+  `odeme_alinmayan_kisi` ve `odeme_notu` alanlarında durur ve hem listede hem
+  teslimat detayında turuncu olarak görünür.
+
+Ödeme yöntemleri sabit değildir: `odeme_yontemleri` tablosundan gelir, kurye
+ekranındaki **Düzenle** ile yenisi eklenir ya da listeden kaldırılır (kayıt
+silinmez, `aktif=false` olur — geçmiş tahsilatlar bozulmasın diye). Varsayılan
+olarak Nakit ve Kredi kartı açıktır. `para_alinir=false` işaretli bir yöntemde
+kasa hareket etmez.
+
+## Kayıt açma
+
+Alt paneldeki **+** düğmesi iki yol sunar:
+
+**Yeni kayıt** — dört adımlı, animasyonlu akış: müşteri (kayıtlıyı ara ya da
+yenisini aç) → adres (mevcut adreslerden seç ya da yeni gir; "Kapıdayım"
+düğmesi kuryenin GPS konumunu adrese işler) → kayıt türü → detay.
+
+- **Teslimat**: tutar, tarih, saat, ödeme yöntemi, acil işareti, not.
+- **Abonelik**: başlık, sıklık, günler, teslim saati, tutar. Gece çalışan
+  `gunun_siparislerini_uret` bu abonelikten her gün siparişi kendi üretir.
+- **Sepet**: müşteri toplamaya devam ederken açık duran kayıt.
+
+Kurye ürün listesi görmediği için tutar elle giriliyor; abonelik ve sepette
+kalem varsa tutar yine kalemlerden hesaplanır, yoksa `tutar` alanı kullanılır.
+
+**Excel'den toplu yükle** — .xlsx ya da .csv dosyasından müşteri + adres aktarır.
+İlk satır başlık olmalı; en az `Ad` ve `Adres` sütunu gerekir. Telefon, Bina,
+Kat, Daire, Tarif, Lat, Lng ve Not isteğe bağlıdır ve başlıklar Türkçe karakter,
+boşluk ve büyük/küçük harf farkını yok sayarak eşleşir ("Ad Soyad", "Cep",
+"Açık Adres", "Enlem"/"Boylam" hepsi tanınır). Dosya sunucuda çözümlenir
+(`src/lib/toplu.ts`), kayıt istemciden kuryenin kendi oturumuyla atılır.
+Yükleme öncesi kaç satırın geçerli, kaçının atlanacağı gösterilir. Ekrandaki
+"Örnek dosyayı indir" doğru başlıklara sahip bir CSV verir.
+
 ## Rota ve navigasyon
 
 ### Toplu teslimat — `POST /api/rota`
@@ -347,6 +390,11 @@ git config user.email "214736703+dolmus-ai@users.noreply.github.com"
   kasa/yönetim ekranından girilmeli.
 - Teslimat fotoğrafı, push bildirimi, iade/eksik ürün ve km-yakıt raporu
   henüz yok (öneri listesindeki 3. kademe).
+- Harita görünümü Yandex Haritalar'a benzetildi (sıcak bej zemin, doygun mavi
+  su, sarı ana yollar; gece modunda lacivert arduvaz). Karoların kendisi yine
+  OpenStreetMap/OpenFreeMap'ten geliyor: Yandex'in karo sunucusu üçüncü parti
+  harita kütüphanelerinde kullanılamıyor. Palet `src/lib/harita-stili.ts`
+  içinde tek yerde duruyor.
 - OpenFreeMap'te trafik katmanı ve Street View yoktur. Bunlar gerekiyorsa
   `NEXT_PUBLIC_HARITA_STILI` değiştirilip harita sağlayıcısı Google/Mapbox'a
   taşınabilir; uygulama içindeki harita kodu tek dosyada (`src/bilesenler/Harita.tsx`).

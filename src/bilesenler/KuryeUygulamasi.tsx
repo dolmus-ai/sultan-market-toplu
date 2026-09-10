@@ -16,6 +16,8 @@ import HaritaKontrolleri from "./HaritaKontrolleri";
 import AltPanel, { type PanelDurumu } from "./AltPanel";
 import TeslimatDetay from "./TeslimatDetay";
 import TeslimSonucu, { type TeslimSonuc } from "./TeslimSonucu";
+import KayitEkle, { type EklenenKayit } from "./KayitEkle";
+import TopluYukleme from "./TopluYukleme";
 import VardiyaOzeti from "./VardiyaOzeti";
 import NavigasyonPaneli, { type NavigasyonDurumu } from "./NavigasyonPaneli";
 import {
@@ -36,6 +38,8 @@ import {
 import { adimCumlesi, konus, sesiKes } from "@/lib/ses";
 import {
   abonelikBugunMu,
+  odemeYontemiEkle,
+  odemeYontemiKaldir,
   acikVardiyaGetir,
   kuryeKonumlariGetir,
   vardiyaTahsilatlari,
@@ -48,6 +52,7 @@ import type {
   KuryeKonumu,
   Nokta,
   RotaSonucu,
+  OdemeYontemiTanimi,
   Sepet,
   Siparis,
   SiparisDurumu,
@@ -85,6 +90,8 @@ type Props = {
   baslangicTeslimatlar: Siparis[];
   baslangicAbonelikler: Abonelik[];
   baslangicSepetler: Sepet[];
+  /** Listede gösterilecek aktif ödeme yöntemleri. */
+  baslangicYontemler: OdemeYontemiTanimi[];
 };
 
 export default function KuryeUygulamasi({
@@ -92,14 +99,20 @@ export default function KuryeUygulamasi({
   baslangicTeslimatlar,
   baslangicAbonelikler,
   baslangicSepetler,
+  baslangicYontemler,
 }: Props) {
   const yonlendir = useRouter();
   const db = useMemo(() => tarayiciIstemcisi(), []);
   const haritaApi = useRef<HaritaApi>(null);
 
   const [teslimatlar, setTeslimatlar] = useState(baslangicTeslimatlar);
-  const [abonelikler] = useState(baslangicAbonelikler);
-  const [sepetler] = useState(baslangicSepetler);
+  const [abonelikler, setAbonelikler] = useState(baslangicAbonelikler);
+  const [sepetler, setSepetler] = useState(baslangicSepetler);
+  const [yontemler, setYontemler] = useState(baslangicYontemler);
+
+  const [ekleMenu, setEkleMenu] = useState(false);
+  const [kayitEkle, setKayitEkle] = useState(false);
+  const [topluYukleme, setTopluYukleme] = useState(false);
 
   const [sekme, setSekme] = useState<Sekme>("teslimatlar");
   const [panel, setPanel] = useState<PanelDurumu>("yari");
@@ -699,21 +712,29 @@ export default function KuryeUygulamasi({
 
     if (sonuc.tur === "teslim") {
       const zaman = new Date().toISOString();
+      const alindi = sonuc.odemeAlindi;
       const yama: Record<string, unknown> = {
         durum: "teslim",
         teslim_zamani: zaman,
         kurye_id: kurye?.id ?? null,
+        odeme_alindi: alindi,
+        odeme_alinmayan_kisi: alindi ? null : sonuc.alinmayanKisi,
+        odeme_notu: alindi ? null : sonuc.not || null,
       };
-      if (sonuc.tahsilat) yama.odeme_yontemi = sonuc.tahsilat.yontem;
+      if (alindi) yama.odeme_yontemi = sonuc.tahsilat.yontem;
 
       await siparisGuncelle(id, yama, (s) => ({
         ...s,
         durum: "teslim",
         teslim_zamani: zaman,
-        odeme_yontemi: sonuc.tahsilat?.yontem ?? s.odeme_yontemi,
+        odeme_alindi: alindi,
+        odeme_alinmayan_kisi: alindi ? null : sonuc.alinmayanKisi,
+        odeme_notu: alindi ? null : sonuc.not || null,
+        odeme_yontemi: alindi ? sonuc.tahsilat.yontem : s.odeme_yontemi,
       }));
 
-      if (sonuc.tahsilat && kurye) {
+      // Kasa yalnızca gerçekten para alındığında hareket eder.
+      if (alindi && sonuc.tahsilat.tutar > 0 && kurye) {
         const kayit = {
           siparis_id: id,
           kurye_id: kurye.id,
@@ -737,7 +758,11 @@ export default function KuryeUygulamasi({
         ]);
       }
 
-      uyar("Teslimat tamamlandı 🎉");
+      uyar(
+        alindi
+          ? "Teslimat tamamlandı 🎉"
+          : "Teslim edildi — ödeme alınamadı olarak kaydedildi",
+      );
     } else {
       const yarin = new Date();
       yarin.setDate(yarin.getDate() + 1);
@@ -877,6 +902,48 @@ export default function KuryeUygulamasi({
     setIslemde(false);
     uyar("Vardiya kapandı · kasa teslim edildi");
     yonlendir.refresh();
+  }
+
+  /* ---------------- Ödeme yöntemleri ---------------- */
+
+  async function yontemEkle(ad: string) {
+    try {
+      const yeni = await odemeYontemiEkle(db, ad);
+      setYontemler((o) =>
+        o.some((y) => y.kod === yeni.kod)
+          ? o.map((y) => (y.kod === yeni.kod ? yeni : y))
+          : [...o, yeni],
+      );
+    } catch {
+      uyar("Ödeme yöntemi eklenemedi");
+    }
+  }
+
+  async function yontemKaldir(kod: string) {
+    try {
+      await odemeYontemiKaldir(db, kod);
+      setYontemler((o) => o.filter((y) => y.kod !== kod));
+    } catch {
+      uyar("Ödeme yöntemi kaldırılamadı");
+    }
+  }
+
+  /* ---------------- Yeni kayıt ---------------- */
+
+  function kayitEklendi(kayit: EklenenKayit, mesaj: string) {
+    if (kayit.tur === "teslimat") {
+      setTeslimatlar((o) => [kayit.siparis, ...o]);
+      setSekme("teslimatlar");
+    } else if (kayit.tur === "abonelik") {
+      setAbonelikler((o) => [kayit.abonelik, ...o]);
+      setSekme("abonelikler");
+    } else {
+      setSepetler((o) => [kayit.sepet, ...o]);
+      setSekme("sepetler");
+    }
+    setKayitEkle(false);
+    setPanel("yari");
+    uyar(mesaj);
   }
 
   async function cikis() {
@@ -1050,6 +1117,105 @@ export default function KuryeUygulamasi({
         )}
       </AnimatePresence>
 
+      {/* Yeni kayıt / toplu yükleme seçimi */}
+      <AnimatePresence>
+        {ekleMenu && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setEkleMenu(false)}
+            className="absolute inset-0 z-50 flex items-end bg-black/45 backdrop-blur-[2px]"
+          >
+            <motion.div
+              initial={{ y: 60 }}
+              animate={{ y: 0 }}
+              exit={{ y: 60 }}
+              transition={{ type: "spring", stiffness: 400, damping: 34 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full rounded-t-[28px] border-t border-cizgi bg-yuzey px-4 pb-[calc(env(safe-area-inset-bottom)+16px)] pt-4"
+            >
+              <div className="mx-auto mb-4 h-1.5 w-11 rounded-full bg-cizgi" />
+              <h2 className="text-xl font-extrabold tracking-tight">Ekle</h2>
+
+              {[
+                {
+                  simge: "👤",
+                  baslik: "Yeni kayıt",
+                  alt: "Müşteri, adres ve teslimat / abonelik / sepet",
+                  tikla: () => {
+                    setEkleMenu(false);
+                    setKayitEkle(true);
+                  },
+                },
+                {
+                  simge: "📄",
+                  baslik: "Excel'den toplu yükle",
+                  alt: "Müşteri ve adresleri tek dosyada aktar",
+                  tikla: () => {
+                    setEkleMenu(false);
+                    setTopluYukleme(true);
+                  },
+                },
+              ].map((s2, i) => (
+                <motion.button
+                  key={s2.baslik}
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.04 * i + 0.05 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={s2.tikla}
+                  className="mt-3 flex w-full items-center gap-3 rounded-[20px] border border-cizgi bg-yuzey p-3.5 text-left hover:bg-yuzey2"
+                >
+                  <span className="text-2xl leading-none">{s2.simge}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[15px] font-black">
+                      {s2.baslik}
+                    </span>
+                    <span className="block text-[12px] text-gri">{s2.alt}</span>
+                  </span>
+                  <span className="text-gri">›</span>
+                </motion.button>
+              ))}
+
+              <button
+                onClick={() => setEkleMenu(false)}
+                className="mt-3 flex h-12 w-full items-center justify-center rounded-hap text-[14px] font-bold text-gri"
+              >
+                Vazgeç
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {kayitEkle && (
+          <KayitEkle
+            key="kayit-ekle"
+            db={db}
+            yontemler={yontemler}
+            kuryeKonumu={kuryeKonumu}
+            onKapat={() => setKayitEkle(false)}
+            onEklendi={kayitEklendi}
+          />
+        )}
+        {topluYukleme && (
+          <TopluYukleme
+            key="toplu-yukleme"
+            db={db}
+            onKapat={() => setTopluYukleme(false)}
+            onBitti={(eklenen) =>
+              uyar(
+                eklenen > 0
+                  ? `${eklenen} müşteri eklendi`
+                  : "Hiçbir satır eklenemedi",
+              )
+            }
+          />
+        )}
+      </AnimatePresence>
+
       {/* Konum düzeltme uyarısı */}
       <AnimatePresence>
         {konumDuzeltme && (
@@ -1128,6 +1294,9 @@ export default function KuryeUygulamasi({
             siparis={secili}
             mod={teslimModu}
             islemde={islemde}
+            yontemler={yontemler}
+            onYontemEkle={yontemEkle}
+            onYontemKaldir={yontemKaldir}
             onKapat={() => setTeslimModu(null)}
             onOnay={teslimSonucuUygula}
           />
@@ -1137,6 +1306,7 @@ export default function KuryeUygulamasi({
             key="vardiya-ozeti"
             vardiya={vardiya}
             tahsilatlar={tahsilatlar}
+            yontemler={yontemler}
             teslimEdilen={
               teslimatlar.filter((s) => s.durum === "teslim").length
             }
@@ -1218,6 +1388,17 @@ export default function KuryeUygulamasi({
                 </button>
               ))}
             </div>
+            <motion.button
+              whileTap={{ scale: 0.92 }}
+              onClick={(e) => {
+                e.stopPropagation();
+                setEkleMenu(true);
+              }}
+              aria-label="Yeni kayıt ekle"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-kirmizi text-[20px] font-black leading-none text-white shadow-yumusak"
+            >
+              +
+            </motion.button>
             <button
               onClick={(e) => {
                 e.stopPropagation();

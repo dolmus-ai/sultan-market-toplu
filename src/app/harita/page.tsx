@@ -5,6 +5,7 @@ import { sunucuIstemcisi } from "@/lib/supabase/server";
 import {
   abonelikleriGetir,
   kuryeGetir,
+  odemeYontemleriGetir,
   sepetleriGetir,
   siparisleriGetir,
 } from "@/lib/veri";
@@ -28,12 +29,14 @@ export default async function HaritaSayfasi() {
     { onConflict: "id", ignoreDuplicates: true },
   );
 
-  const [kurye, teslimatlar, abonelikler, sepetler] = await Promise.all([
-    kuryeGetir(db, user.id),
-    siparisleriGetir(db, bugununTarihi()),
-    abonelikleriGetir(db),
-    sepetleriGetir(db),
-  ]);
+  const [kurye, teslimatlar, abonelikler, sepetler, yontemler] =
+    await Promise.all([
+      kuryeGetir(db, user.id),
+      siparisleriGetir(db, bugununTarihi()),
+      abonelikleriGetir(db),
+      sepetleriGetir(db),
+      odemeYontemleriGetir(db),
+    ]);
 
   return (
     <KuryeUygulamasi
@@ -41,6 +44,7 @@ export default async function HaritaSayfasi() {
       baslangicTeslimatlar={teslimatlar}
       baslangicAbonelikler={abonelikler}
       baslangicSepetler={sepetler}
+      baslangicYontemler={yontemler.filter((y) => y.aktif)}
     />
   );
 }

@@ -1,8 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   Abonelik,
+  AbonelikSikligi,
+  Adres,
   Kurye,
   KuryeKonumu,
+  Musteri,
+  OdemeYontemiTanimi,
   Sepet,
   Siparis,
   Tahsilat,
@@ -14,6 +18,7 @@ const SIPARIS_ALANLARI = `
   id, musteri_id, adres_id, kaynak, abonelik_id, kurye_id, durum, oncelik,
   planlanan_tarih, planlanan_saat, teslim_zamani, odeme_yontemi, tutar, notlar,
   basarisizlik_sebebi, basarisizlik_notu, deneme_sayisi, created_at,
+  odeme_alindi, odeme_alinmayan_kisi, odeme_notu,
   musteri:musteriler ( id, ad, telefon, notlar ),
   adres:adresler ( id, musteri_id, baslik, adres_metni, bina, kat, daire, tarif, kurye_notu, kapi_kodu, lat, lng, konum_dogrulandi ),
   kalemler:siparis_kalemleri (
@@ -24,7 +29,7 @@ const SIPARIS_ALANLARI = `
 
 const ABONELIK_ALANLARI = `
   id, musteri_id, adres_id, baslik, siklik, gunler, teslim_saati,
-  baslangic, bitis, durum, notlar,
+  baslangic, bitis, durum, tutar, notlar,
   musteri:musteriler ( id, ad, telefon, notlar ),
   adres:adresler ( id, musteri_id, baslik, adres_metni, bina, kat, daire, tarif, kurye_notu, kapi_kodu, lat, lng, konum_dogrulandi ),
   kalemler:abonelik_kalemleri (
@@ -34,7 +39,7 @@ const ABONELIK_ALANLARI = `
 `;
 
 const SEPET_ALANLARI = `
-  id, musteri_id, adres_id, durum, updated_at,
+  id, musteri_id, adres_id, durum, tutar, updated_at,
   musteri:musteriler ( id, ad, telefon, notlar ),
   adres:adresler ( id, musteri_id, baslik, adres_metni, bina, kat, daire, tarif, kurye_notu, kapi_kodu, lat, lng, konum_dogrulandi ),
   kalemler:sepet_kalemleri ( id, miktar, urun:urunler ( fiyat ) )
@@ -182,4 +187,269 @@ export async function kuryeKonumlariGetir(
 
 export function sepetToplami(kalemler: { miktar: number; urun: { fiyat: number } | null }[]) {
   return kalemler.reduce((t, k) => t + k.miktar * (k.urun?.fiyat ?? 0), 0);
+}
+
+const ADRES_ALANLARI =
+  "id, musteri_id, baslik, adres_metni, bina, kat, daire, tarif, kurye_notu, kapi_kodu, lat, lng, konum_dogrulandi";
+
+/* ------------------------------------------------------------------ */
+/* Ödeme yöntemleri                                                    */
+/* ------------------------------------------------------------------ */
+
+export async function odemeYontemleriGetir(
+  db: SupabaseClient,
+): Promise<OdemeYontemiTanimi[]> {
+  const { data, error } = await db
+    .from("odeme_yontemleri")
+    .select("kod, ad, para_alinir, sira, aktif")
+    .order("sira");
+  if (error) throw error;
+  return (data ?? []) as OdemeYontemiTanimi[];
+}
+
+/** Yöntem adından kod türetir: "Yemek kartı" → "yemek_karti". */
+export function yontemKodu(ad: string): string {
+  const harita: Record<string, string> = {
+    "ç": "c",
+    "ğ": "g",
+    "ı": "i",
+    "ö": "o",
+    "ş": "s",
+    "ü": "u",
+  };
+  return (
+    ad
+      .toLocaleLowerCase("tr")
+      .replace(/[çğıöşü]/g, (h) => harita[h] ?? h)
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 40) || "yontem"
+  );
+}
+
+export async function odemeYontemiEkle(
+  db: SupabaseClient,
+  ad: string,
+  paraAlinir = true,
+): Promise<OdemeYontemiTanimi> {
+  const { data, error } = await db
+    .from("odeme_yontemleri")
+    .upsert(
+      { kod: yontemKodu(ad), ad: ad.trim(), para_alinir: paraAlinir, aktif: true },
+      { onConflict: "kod" },
+    )
+    .select("kod, ad, para_alinir, sira, aktif")
+    .single();
+  if (error) throw error;
+  return data as OdemeYontemiTanimi;
+}
+
+/** Yöntemi listeden kaldırır — geçmiş kayıtlar bozulmasın diye silinmez, pasifleşir. */
+export async function odemeYontemiKaldir(db: SupabaseClient, kod: string) {
+  const { error } = await db
+    .from("odeme_yontemleri")
+    .update({ aktif: false })
+    .eq("kod", kod);
+  if (error) throw error;
+}
+
+export async function odemeYontemiAdlandir(
+  db: SupabaseClient,
+  kod: string,
+  ad: string,
+) {
+  const { error } = await db
+    .from("odeme_yontemleri")
+    .update({ ad: ad.trim() })
+    .eq("kod", kod);
+  if (error) throw error;
+}
+
+/* ------------------------------------------------------------------ */
+/* Müşteri ve adres                                                    */
+/* ------------------------------------------------------------------ */
+
+export async function musterileriAra(
+  db: SupabaseClient,
+  arama: string,
+): Promise<Musteri[]> {
+  let sorgu = db
+    .from("musteriler")
+    .select("id, ad, telefon, notlar")
+    .eq("aktif", true)
+    .order("ad")
+    .limit(30);
+  const temiz = arama.trim();
+  if (temiz) sorgu = sorgu.or(`ad.ilike.%${temiz}%,telefon.ilike.%${temiz}%`);
+  const { data, error } = await sorgu;
+  if (error) throw error;
+  return (data ?? []) as Musteri[];
+}
+
+export async function musteriAdresleri(
+  db: SupabaseClient,
+  musteriId: string,
+): Promise<Adres[]> {
+  const { data, error } = await db
+    .from("adresler")
+    .select(ADRES_ALANLARI)
+    .eq("musteri_id", musteriId)
+    .order("varsayilan", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as Adres[];
+}
+
+export type YeniMusteri = {
+  ad: string;
+  telefon?: string | null;
+  notlar?: string | null;
+};
+
+export async function musteriEkle(
+  db: SupabaseClient,
+  musteri: YeniMusteri,
+): Promise<Musteri> {
+  const { data, error } = await db
+    .from("musteriler")
+    .insert({
+      ad: musteri.ad.trim(),
+      telefon: musteri.telefon?.trim() || null,
+      notlar: musteri.notlar?.trim() || null,
+    })
+    .select("id, ad, telefon, notlar")
+    .single();
+  if (error) throw error;
+  return data as Musteri;
+}
+
+export type YeniAdres = {
+  musteri_id: string;
+  baslik?: string;
+  adres_metni: string;
+  bina?: string | null;
+  kat?: string | null;
+  daire?: string | null;
+  tarif?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+};
+
+export async function adresEkle(
+  db: SupabaseClient,
+  adres: YeniAdres,
+): Promise<Adres> {
+  const { data, error } = await db
+    .from("adresler")
+    .insert({
+      musteri_id: adres.musteri_id,
+      baslik: adres.baslik?.trim() || "Ev",
+      adres_metni: adres.adres_metni.trim(),
+      bina: adres.bina?.trim() || null,
+      kat: adres.kat?.trim() || null,
+      daire: adres.daire?.trim() || null,
+      tarif: adres.tarif?.trim() || null,
+      lat: adres.lat ?? null,
+      lng: adres.lng ?? null,
+      konum_dogrulandi: adres.lat != null && adres.lng != null,
+    })
+    .select(ADRES_ALANLARI)
+    .single();
+  if (error) throw error;
+  return data as Adres;
+}
+
+/* ------------------------------------------------------------------ */
+/* Teslimat / abonelik / sepet oluşturma                               */
+/* ------------------------------------------------------------------ */
+
+export async function siparisEkle(
+  db: SupabaseClient,
+  yeni: {
+    musteri_id: string;
+    adres_id: string;
+    tutar: number;
+    planlanan_tarih: string;
+    planlanan_saat?: string | null;
+    odeme_yontemi?: string | null;
+    oncelik?: number;
+    notlar?: string | null;
+  },
+): Promise<Siparis> {
+  const { data, error } = await db
+    .from("siparisler")
+    .insert({
+      musteri_id: yeni.musteri_id,
+      adres_id: yeni.adres_id,
+      kaynak: "manuel",
+      durum: "bekliyor",
+      tutar: yeni.tutar,
+      planlanan_tarih: yeni.planlanan_tarih,
+      planlanan_saat: yeni.planlanan_saat || null,
+      odeme_yontemi: yeni.odeme_yontemi || null,
+      oncelik: yeni.oncelik ?? 0,
+      notlar: yeni.notlar?.trim() || null,
+    })
+    .select(SIPARIS_ALANLARI)
+    .single();
+  if (error) throw error;
+  return data as unknown as Siparis;
+}
+
+export async function abonelikEkle(
+  db: SupabaseClient,
+  yeni: {
+    musteri_id: string;
+    adres_id: string;
+    baslik: string;
+    siklik: AbonelikSikligi;
+    gunler: number[];
+    teslim_saati: string;
+    tutar: number;
+    notlar?: string | null;
+  },
+): Promise<Abonelik> {
+  const { data, error } = await db
+    .from("abonelikler")
+    .insert({
+      musteri_id: yeni.musteri_id,
+      adres_id: yeni.adres_id,
+      baslik: yeni.baslik.trim() || "Abonelik",
+      siklik: yeni.siklik,
+      gunler: yeni.gunler,
+      teslim_saati: yeni.teslim_saati,
+      tutar: yeni.tutar,
+      durum: "aktif",
+      notlar: yeni.notlar?.trim() || null,
+    })
+    .select(ABONELIK_ALANLARI)
+    .single();
+  if (error) throw error;
+  return data as unknown as Abonelik;
+}
+
+export async function sepetEkle(
+  db: SupabaseClient,
+  yeni: { musteri_id: string; adres_id: string | null; tutar: number },
+): Promise<Sepet> {
+  const { data, error } = await db
+    .from("sepetler")
+    .insert({
+      musteri_id: yeni.musteri_id,
+      adres_id: yeni.adres_id,
+      durum: "acik",
+      tutar: yeni.tutar,
+    })
+    .select(SEPET_ALANLARI)
+    .single();
+  if (error) throw error;
+  return data as unknown as Sepet;
+}
+
+/** Kalem varsa kalemlerden, yoksa kayda yazılan sabit tutar. */
+export function kayitTutari(kayit: {
+  tutar?: number | null;
+  kalemler?: { miktar: number; urun: { fiyat: number } | null }[] | null;
+}): number {
+  const kalem = sepetToplami(kayit.kalemler ?? []);
+  return kalem > 0 ? kalem : (kayit.tutar ?? 0);
 }

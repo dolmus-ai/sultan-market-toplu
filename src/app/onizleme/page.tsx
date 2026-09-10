@@ -96,6 +96,9 @@ const TESLIMATLAR: Siparis[] = MUSTERILER.map(
       basarisizlik_sebebi: null,
       basarisizlik_notu: null,
       deneme_sayisi: 0,
+      odeme_alindi: null,
+      odeme_alinmayan_kisi: null,
+      odeme_notu: null,
       created_at: new Date().toISOString(),
       musteri: { id: `musteri-${i}`, ad, telefon, notlar: null },
       adres: {
@@ -131,6 +134,7 @@ const ABONELIKLER: Abonelik[] = [0, 3, 6, 9].map((i) => ({
   baslangic: "2026-01-01",
   bitis: null,
   durum: "aktif",
+  tutar: 0,
   notlar: null,
   musteri: TESLIMATLAR[i].musteri,
   adres: TESLIMATLAR[i].adres,
@@ -146,6 +150,7 @@ const SEPETLER: Sepet[] = [1, 4, 7].map((i) => ({
   musteri_id: `musteri-${i}`,
   adres_id: `adres-${i}`,
   durum: "acik",
+  tutar: 0,
   updated_at: new Date().toISOString(),
   musteri: TESLIMATLAR[i].musteri,
   adres: TESLIMATLAR[i].adres,
@@ -172,6 +177,16 @@ export default function OnizlemeSayfasi() {
       baslangicTeslimatlar={TESLIMATLAR}
       baslangicAbonelikler={ABONELIKLER}
       baslangicSepetler={SEPETLER}
+      baslangicYontemler={[
+        { kod: "nakit", ad: "Nakit", para_alinir: true, sira: 10, aktif: true },
+        {
+          kod: "kredi_karti",
+          ad: "Kredi kartı",
+          para_alinir: true,
+          sira: 20,
+          aktif: true,
+        },
+      ]}
     />
   );
 }

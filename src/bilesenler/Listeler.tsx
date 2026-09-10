@@ -12,7 +12,7 @@ import {
   para,
   saat,
 } from "@/lib/bicim";
-import { sepetToplami } from "@/lib/veri";
+import { kayitTutari } from "@/lib/veri";
 import type { Abonelik, Sepet, Siparis } from "@/lib/tipler";
 
 /* ------------------------------------------------------------------ */
@@ -114,8 +114,16 @@ export function TeslimatSatiri({
         <span className="block text-[15px] font-black">
           {para(siparis.tutar)}
         </span>
-        <span className="mt-0.5 block text-[11px] font-semibold text-gri">
-          {siparis.odeme_yontemi === "veresiye" ? "Veresiye" : "Tahsilat"}
+        <span
+          className={`mt-0.5 block text-[11px] font-semibold ${
+            siparis.odeme_alindi === false ? "text-turuncu" : "text-gri"
+          }`}
+        >
+          {siparis.odeme_alindi === false
+            ? "Ödeme alınmadı"
+            : siparis.odeme_alindi
+              ? "Tahsil edildi"
+              : "Tahsilat"}
         </span>
       </span>
     </motion.button>
@@ -135,7 +143,7 @@ export function AbonelikSatiri({
   bugun: boolean;
   onTikla: () => void;
 }) {
-  const tutar = sepetToplami(abonelik.kalemler ?? []);
+  const tutar = kayitTutari(abonelik);
   return (
     <motion.button
       layout
@@ -191,7 +199,7 @@ export function SepetSatiri({
       </span>
       <Etiket>Açık sepet</Etiket>
       <span className="shrink-0 text-[15px] font-black">
-        {para(sepetToplami(sepet.kalemler ?? []))}
+        {para(kayitTutari(sepet))}
       </span>
     </motion.button>
   );

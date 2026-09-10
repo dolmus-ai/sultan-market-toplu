@@ -2,6 +2,7 @@ import { MARKET, acilisDakikasi } from "./market";
 import type {
   BasarisizlikSebebi,
   OdemeYontemi,
+  OdemeYontemiTanimi,
   SiparisDurumu,
 } from "./tipler";
 
@@ -94,13 +95,38 @@ export const DURUM_STIL: Record<
   iptal: { background: "var(--durum-iptal)", color: "var(--durum-iptal-yazi)" },
 };
 
-export const ODEME_ETIKET: Record<OdemeYontemi, string> = {
+/**
+ * Yöntem adları veritabanından geliyor; bu liste yalnızca tanım listesi
+ * henüz yüklenmediğinde ya da eski kayıtlar için yedek.
+ */
+const ODEME_ETIKET_YEDEK: Record<string, string> = {
   nakit: "Nakit",
   kredi_karti: "Kredi kartı",
   yemek_karti: "Yemek kartı",
   veresiye: "Veresiye",
   online: "Online ödendi",
 };
+
+export function odemeAdi(
+  kod: OdemeYontemi | null,
+  tanimlar: OdemeYontemiTanimi[] = [],
+): string {
+  if (!kod) return "—";
+  return (
+    tanimlar.find((t) => t.kod === kod)?.ad ?? ODEME_ETIKET_YEDEK[kod] ?? kod
+  );
+}
+
+/** Bu yöntemde kurye elden para alıyor mu? */
+export function paraAlinirMi(
+  kod: OdemeYontemi | null,
+  tanimlar: OdemeYontemiTanimi[] = [],
+): boolean {
+  if (!kod) return false;
+  const t = tanimlar.find((x) => x.kod === kod);
+  if (t) return t.para_alinir;
+  return kod !== "veresiye" && kod !== "online";
+}
 
 export const GUN_KISA = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];
 

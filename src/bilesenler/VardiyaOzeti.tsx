@@ -3,9 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
 
-import { ODEME_ETIKET, para } from "@/lib/bicim";
+import { odemeAdi, para } from "@/lib/bicim";
 import { mesafeYaz, sureYaz } from "@/lib/rota";
-import type { OdemeYontemi, Tahsilat, Vardiya } from "@/lib/tipler";
+import type {
+  OdemeYontemi,
+  OdemeYontemiTanimi,
+  Tahsilat,
+  Vardiya,
+} from "@/lib/tipler";
 
 /** Kuryenin elden aldığı — kasaya sayması gereken yöntemler. */
 const NAKDE_SAYILAN: OdemeYontemi[] = ["nakit"];
@@ -13,6 +18,7 @@ const NAKDE_SAYILAN: OdemeYontemi[] = ["nakit"];
 export default function VardiyaOzeti({
   vardiya,
   tahsilatlar,
+  yontemler,
   teslimEdilen,
   basarisiz,
   toplamMesafeM,
@@ -23,6 +29,7 @@ export default function VardiyaOzeti({
 }: {
   vardiya: Vardiya;
   tahsilatlar: Tahsilat[];
+  yontemler: OdemeYontemiTanimi[];
   teslimEdilen: number;
   basarisiz: number;
   toplamMesafeM: number;
@@ -115,7 +122,7 @@ export default function VardiyaOzeti({
         <ul className="divide-y divide-cizgi overflow-hidden rounded-[20px] border border-cizgi bg-yuzey">
           {(Object.keys(ozet.yonteme) as OdemeYontemi[]).map((y) => (
             <li key={y} className="flex items-center justify-between px-4 py-3">
-              <span className="text-[14px] font-bold">{ODEME_ETIKET[y]}</span>
+              <span className="text-[14px] font-bold">{odemeAdi(y, yontemler)}</span>
               <span className="text-[15px] font-black">
                 {para(ozet.yonteme[y] ?? 0)}
               </span>

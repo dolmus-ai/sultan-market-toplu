@@ -6,7 +6,7 @@ import { motion } from "motion/react";
 import {
   DURUM_ETIKET,
   DURUM_STIL,
-  ODEME_ETIKET,
+  odemeAdi,
   SEBEP_ETIKET,
   adresYaz,
   gecikmeDk,
@@ -128,12 +128,32 @@ export default function TeslimatDetay({
         </div>
       )}
 
+      {/* Ödeme alınamadıysa kimden alınamadığı burada duruyor */}
+      {siparis.odeme_alindi === false && (
+        <div className="rounded-[20px] border border-turuncu/40 bg-turuncu/10 p-3.5">
+          <p className="text-[12px] font-black uppercase tracking-wide text-turuncu">
+            Ödeme alınamadı
+          </p>
+          <p className="mt-1 text-[14px] font-bold">
+            {siparis.odeme_alinmayan_kisi || siparis.musteri?.ad || "—"} ·{" "}
+            {para(siparis.tutar)}
+          </p>
+          {siparis.odeme_notu && (
+            <p className="mt-1 text-[13px] text-gri">{siparis.odeme_notu}</p>
+          )}
+        </div>
+      )}
+
       {/* Hızlı bilgiler */}
       <div className="grid grid-cols-3 gap-2">
         <Kutu ust="Tutar" alt={para(siparis.tutar)} vurgu />
         <Kutu
           ust="Ödeme"
-          alt={siparis.odeme_yontemi ? ODEME_ETIKET[siparis.odeme_yontemi] : "—"}
+          alt={
+            siparis.odeme_alindi === false
+              ? "Alınamadı"
+              : odemeAdi(siparis.odeme_yontemi)
+          }
         />
         <Kutu
           ust={mesafe != null ? "Uzaklık" : "Saat"}

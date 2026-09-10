@@ -20,6 +20,7 @@ import KayitEkle, {
   type DuzenlenenKayit,
   type EklenenKayit,
 } from "./KayitEkle";
+import HaritaBalonu, { type BalonKayit } from "./HaritaBalonu";
 import TopluYukleme from "./TopluYukleme";
 import VardiyaOzeti from "./VardiyaOzeti";
 import NavigasyonPaneli, { type NavigasyonDurumu } from "./NavigasyonPaneli";
@@ -50,7 +51,7 @@ import {
   kuryeKonumlariGetir,
   vardiyaTahsilatlari,
 } from "@/lib/veri";
-import { binaAnahtari, gecikmeDk, para } from "@/lib/bicim";
+import { binaAnahtari, bugununTarihi, gecikmeDk, para } from "@/lib/bicim";
 import { bekleyenler, kuyruguIsle, kuyrukVeyaGonder } from "@/lib/cevrimdisi";
 import type {
   Abonelik,
@@ -124,6 +125,11 @@ export default function KuryeUygulamasi({
   const [islemKayit, setIslemKayit] = useState<EklenenKayit | null>(null);
   const [duzenlenen, setDuzenlenen] = useState<DuzenlenenKayit | null>(null);
   const [silOnay, setSilOnay] = useState(false);
+  /** Haritada açık balon — kayıt listeden tazelensin diye yalnızca kimlik tutuluyor. */
+  const [balonSecim, setBalonSecim] = useState<{
+    tur: "teslimat" | "abonelik" | "sepet";
+    id: string;
+  } | null>(null);
 
   const [sekme, setSekme] = useState<Sekme>("teslimatlar");
   const [panel, setPanel] = useState<PanelDurumu>("yari");
@@ -136,6 +142,7 @@ export default function KuryeUygulamasi({
 
   const [katmanlar, setKatmanlar] = useState<Katmanlar>(() => ({
     abonelikler: true,
+    sepetler: true,
     teslimEdilenler: false,
     ucBoyut: true,
     isiHaritasi: false,
@@ -1021,6 +1028,60 @@ export default function KuryeUygulamasi({
     yonlendir.refresh();
   }
 
+  /* ------------------------- Harita balonu ------------------------- */
+
+  const balonKayit: BalonKayit | null = useMemo(() => {
+    if (!balonSecim) return null;
+    if (balonSecim.tur === "teslimat") {
+      const s = teslimatlar.find((x) => x.id === balonSecim.id);
+      return s ? { tur: "teslimat", siparis: s } : null;
+    }
+    if (balonSecim.tur === "abonelik") {
+      const a = abonelikler.find((x) => x.id === balonSecim.id);
+      if (!a) return null;
+      // Abonelikten bugün üretilmiş sipariş varsa ödeme bilgisi ondan geliyor.
+      // Bağ kurulmamışsa (elle açılmış sipariş) aynı adresteki bugünkü
+      // teslimata düşüyoruz.
+      const bugun = bugununTarihi();
+      const bugunku =
+        teslimatlar.find(
+          (s) => s.abonelik_id === a.id && s.planlanan_tarih === bugun,
+        ) ??
+        teslimatlar.find(
+          (s) => s.adres_id === a.adres_id && s.planlanan_tarih === bugun,
+        ) ??
+        null;
+      return { tur: "abonelik", abonelik: a, bugunku };
+    }
+    const sp = sepetler.find((x) => x.id === balonSecim.id);
+    return sp ? { tur: "sepet", sepet: sp } : null;
+  }, [balonSecim, teslimatlar, abonelikler, sepetler]);
+
+  const balonNoktasi = useMemo(() => {
+    if (!balonKayit) return null;
+    const adres =
+      balonKayit.tur === "teslimat"
+        ? balonKayit.siparis.adres
+        : balonKayit.tur === "abonelik"
+          ? balonKayit.abonelik.adres
+          : balonKayit.sepet.adres;
+    if (adres?.lat == null || adres.lng == null) return null;
+    return { lat: adres.lat, lng: adres.lng };
+  }, [balonKayit]);
+
+  /** Haritadaki bir pine dokunuldu: balonu aç, paneli kapat, oraya uç. */
+  function haritaPini(
+    tur: "teslimat" | "abonelik" | "sepet",
+    id: string,
+    nokta: Nokta | null,
+  ) {
+    if (secimModu && tur === "teslimat") return secimDegistir(id);
+    setBalonSecim({ tur, id });
+    if (tur === "teslimat") setSeciliId(id);
+    setPanel("kapali");
+    if (nokta) haritaApi.current?.ucur(nokta);
+  }
+
   /* ------------------------- Görünüm ------------------------- */
   const toplamTahsilat = aktifTeslimatlar.reduce((t, s) => t + s.tutar, 0);
 
@@ -1030,6 +1091,7 @@ export default function KuryeUygulamasi({
         ref={haritaApi}
         teslimatlar={teslimatlar}
         abonelikler={bugunAbonelikler}
+        sepetler={sepetler}
         seciliId={seciliId}
         secimModu={secimModu}
         secilenler={secilenler}
@@ -1040,13 +1102,77 @@ export default function KuryeUygulamasi({
         kuryeKonumu={kuryeKonumu}
         kuryeYonu={kuryeYonu}
         digerKuryeler={digerKuryeler}
-        onSecim={pinSecildi}
+        onSecim={(id) => {
+          const s = teslimatlar.find((x) => x.id === id);
+          haritaPini(
+            "teslimat",
+            id,
+            s?.adres?.lat != null
+              ? { lat: s.adres.lat, lng: s.adres.lng! }
+              : null,
+          );
+        }}
+        onAbonelikSecim={(id) => {
+          const a = abonelikler.find((x) => x.id === id);
+          haritaPini(
+            "abonelik",
+            id,
+            a?.adres?.lat != null
+              ? { lat: a.adres.lat, lng: a.adres.lng! }
+              : null,
+          );
+        }}
+        onSepetSecim={(id) => {
+          const sp = sepetler.find((x) => x.id === id);
+          haritaPini(
+            "sepet",
+            id,
+            sp?.adres?.lat != null
+              ? { lat: sp.adres.lat, lng: sp.adres.lng! }
+              : null,
+          );
+        }}
+        balon={
+          balonKayit && balonNoktasi
+            ? {
+                ...balonNoktasi,
+                icerik: (
+                  <HaritaBalonu
+                    kayit={balonKayit}
+                    yontemler={yontemler}
+                    onKapat={() => setBalonSecim(null)}
+                    onOdemeAl={(siparis) => {
+                      setSeciliId(siparis.id);
+                      setBalonSecim(null);
+                      setTeslimModu("teslim");
+                    }}
+                    onDetay={() => {
+                      if (balonKayit.tur === "teslimat")
+                        setSeciliId(balonKayit.siparis.id);
+                      setSekme(
+                        balonKayit.tur === "teslimat"
+                          ? "teslimatlar"
+                          : balonKayit.tur === "abonelik"
+                            ? "abonelikler"
+                            : "sepetler",
+                      );
+                      setBalonSecim(null);
+                      setPanel("yari");
+                    }}
+                  />
+                ),
+              }
+            : null
+        }
         onSecenekSec={setNavSeciliId}
         onKullaniciHareketi={() => {
           if (navRef.current.durum === "surus") setNavTakip(false);
           setKonumTakibi(false);
         }}
-        onHaritaTikla={konumDuzeltme ? konumuKaydet : undefined}
+        onHaritaTikla={(nokta) => {
+          if (konumDuzeltme) return void konumuKaydet(nokta);
+          setBalonSecim(null);
+        }}
         onAciDegisti={(bearing, pitch) => setAci({ bearing, pitch })}
         onHazir={haritaHazir}
       />

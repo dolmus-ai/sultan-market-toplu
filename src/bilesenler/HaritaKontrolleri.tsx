@@ -19,6 +19,7 @@ type Props = {
 
 const KATMAN_ETIKET: Record<keyof Katmanlar, { ad: string; ikon: string }> = {
   abonelikler: { ad: "Abonelikler", ikon: "◎" },
+  sepetler: { ad: "Sepetler", ikon: "◇" },
   teslimEdilenler: { ad: "Teslim edilenler", ikon: "✓" },
   ucBoyut: { ad: "3B binalar", ikon: "◪" },
   isiHaritasi: { ad: "Talep ısı haritası", ikon: "◍" },

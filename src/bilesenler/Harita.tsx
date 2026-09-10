@@ -13,6 +13,8 @@ import type {
   MapMouseEvent,
   Marker,
 } from "maplibre-gl";
+import { createPortal } from "react-dom";
+
 import "maplibre-gl/dist/maplibre-gl.css";
 
 import {
@@ -31,10 +33,12 @@ import type {
   Siparis,
   Abonelik,
   KuryeKonumu,
+  Sepet,
 } from "@/lib/tipler";
 
 export type Katmanlar = {
   abonelikler: boolean;
+  sepetler: boolean;
   teslimEdilenler: boolean;
   ucBoyut: boolean;
   isiHaritasi: boolean;
@@ -58,6 +62,7 @@ type Props = {
   ref?: RefObject<HaritaApi | null>;
   teslimatlar: Siparis[];
   abonelikler: Abonelik[];
+  sepetler: Sepet[];
   seciliId: string | null;
   secimModu: boolean;
   secilenler: string[];
@@ -70,6 +75,15 @@ type Props = {
   /** Vardiyadaki diğer kuryeler — aynı mahalleye iki kişi gitmesin. */
   digerKuryeler: (KuryeKonumu & { ad: string })[];
   onSecim: (id: string) => void;
+  /** Abonelik pinine dokunuldu. */
+  onAbonelikSecim?: (id: string) => void;
+  /** Sepet pinine dokunuldu. */
+  onSepetSecim?: (id: string) => void;
+  /**
+   * Haritada bir pinin üstünde duran balon. Konumlandırmayı MapLibre
+   * yapıyor, içeriği React portal ile basılıyor.
+   */
+  balon?: { lat: number; lng: number; icerik: React.ReactNode } | null;
   onSecenekSec?: (id: string) => void;
   /** Kurye haritayı eliyle kaydırdığında — takip kilidini bırakmak için. */
   onKullaniciHareketi?: () => void;
@@ -77,6 +91,12 @@ type Props = {
   onAciDegisti?: (bearing: number, pitch: number) => void;
   onHazir?: () => void;
 };
+
+/**
+ * Kuryenin kendi imleci açık yeşil: teslimat pinleri kırmızı-siyah
+ * ailesinden geldiği için "ben neredeyim" bir bakışta ayrılsın.
+ */
+const KURYE_RENGI = "#4ade80";
 
 const BOS_GEOJSON = {
   type: "FeatureCollection" as const,
@@ -146,6 +166,8 @@ function katmanlariKur(
   secimRef: RefObject<(id: string) => void>,
   tiklamaRef: RefObject<((nokta: Nokta) => void) | undefined>,
   secenekRef: RefObject<((id: string) => void) | undefined>,
+  abonelikRef: RefObject<((id: string) => void) | undefined>,
+  sepetRef: RefObject<((id: string) => void) | undefined>,
 ) {
   harita.addSource("teslimatlar", {
     type: "geojson",
@@ -156,6 +178,7 @@ function katmanlariKur(
   });
   harita.addSource("yogunluk", { type: "geojson", data: BOS_GEOJSON });
   harita.addSource("abonelikler", { type: "geojson", data: BOS_GEOJSON });
+  harita.addSource("sepetler", { type: "geojson", data: BOS_GEOJSON });
   harita.addSource("rota", { type: "geojson", data: BOS_GEOJSON });
   harita.addSource("navigasyon", { type: "geojson", data: BOS_GEOJSON });
   harita.addSource("kuryeler", { type: "geojson", data: BOS_GEOJSON });
@@ -339,6 +362,30 @@ function katmanlariKur(
     },
   });
 
+  /* Sepet pinleri — beyaz gövde, siyah halka, turuncu çekirdek */
+  harita.addLayer({
+    id: "sepet-halka",
+    type: "circle",
+    source: "sepetler",
+    layout: { visibility: "none" },
+    paint: {
+      "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, 6, 17, 11],
+      "circle-color": "#ffffff",
+      "circle-stroke-color": "#0e0e11",
+      "circle-stroke-width": 3,
+    },
+  });
+  harita.addLayer({
+    id: "sepet-cekirdek",
+    type: "circle",
+    source: "sepetler",
+    layout: { visibility: "none" },
+    paint: {
+      "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, 2, 17, 3.5],
+      "circle-color": "#f59e0b",
+    },
+  });
+
   /* Diğer kuryeler — soluk gri, adlarıyla */
   harita.addLayer({
     id: "kurye-hale",
@@ -518,7 +565,13 @@ function katmanlariKur(
       harita.getCanvas().style.cursor = "";
     });
   };
-  ["teslimat-nokta", "kume", "abonelik-halka", "nav-alternatif"].forEach(
+  [
+    "teslimat-nokta",
+    "kume",
+    "abonelik-halka",
+    "sepet-halka",
+    "nav-alternatif",
+  ].forEach(
     isaretci,
   );
 
@@ -536,6 +589,22 @@ function katmanlariKur(
     })[0];
     const id = ozellik?.properties?.id;
     if (typeof id === "string") secimRef.current(id);
+  });
+
+  harita.on("click", "abonelik-halka", (e: MapMouseEvent) => {
+    const ozellik = harita.queryRenderedFeatures(e.point, {
+      layers: ["abonelik-halka"],
+    })[0];
+    const id = ozellik?.properties?.id;
+    if (typeof id === "string") abonelikRef.current?.(id);
+  });
+
+  harita.on("click", "sepet-halka", (e: MapMouseEvent) => {
+    const ozellik = harita.queryRenderedFeatures(e.point, {
+      layers: ["sepet-halka"],
+    })[0];
+    const id = ozellik?.properties?.id;
+    if (typeof id === "string") sepetRef.current?.(id);
   });
 
   harita.on("click", "kume", async (e: MapMouseEvent) => {
@@ -558,7 +627,12 @@ function katmanlariKur(
   harita.on("click", (e: MapMouseEvent) => {
     if (!tiklamaRef.current) return;
     const uzerinde = harita.queryRenderedFeatures(e.point, {
-      layers: ["teslimat-nokta", "kume", "abonelik-halka"].filter((k) =>
+      layers: [
+        "teslimat-nokta",
+        "kume",
+        "abonelik-halka",
+        "sepet-halka",
+      ].filter((k) =>
         harita.getLayer(k),
       ),
     });
@@ -603,6 +677,7 @@ export default function Harita({
   ref,
   teslimatlar,
   abonelikler,
+  sepetler,
   seciliId,
   secimModu,
   secilenler,
@@ -614,6 +689,9 @@ export default function Harita({
   kuryeYonu,
   digerKuryeler,
   onSecim,
+  onAbonelikSecim,
+  onSepetSecim,
+  balon,
   onSecenekSec,
   onKullaniciHareketi,
   onHaritaTikla,
@@ -634,6 +712,8 @@ export default function Harita({
   const secimRef = useRef(onSecim);
   const tiklamaRef = useRef(onHaritaTikla);
   const secenekRef = useRef(onSecenekSec);
+  const abonelikRef = useRef(onAbonelikSecim);
+  const sepetRef = useRef(onSepetSecim);
   const temaRef = useRef<Tema>(katmanlar.karanlik ? "karanlik" : "aydinlik");
   const onKullaniciHareketiRef = useRef(onKullaniciHareketi);
   useEffect(() => {
@@ -641,6 +721,8 @@ export default function Harita({
     tiklamaRef.current = onHaritaTikla;
     secenekRef.current = onSecenekSec;
     onKullaniciHareketiRef.current = onKullaniciHareketi;
+    abonelikRef.current = onAbonelikSecim;
+    sepetRef.current = onSepetSecim;
   });
 
   /* ---------------- Haritayı kur ---------------- */
@@ -700,7 +782,14 @@ export default function Harita({
         if (iptal || hazirRef.current || !harita.getStyle()?.layers) return;
         ucBoyutluBinalarEkle(harita);
         markaStiliUygula(harita, temaRef.current);
-        katmanlariKur(harita, secimRef, tiklamaRef, secenekRef);
+        katmanlariKur(
+          harita,
+          secimRef,
+          tiklamaRef,
+          secenekRef,
+          abonelikRef,
+          sepetRef,
+        );
         marketiIsaretle(harita);
         hazirRef.current = true;
         setHazir(true);
@@ -806,6 +895,25 @@ export default function Harita({
         })),
     });
   }, [hazir, abonelikler]);
+
+  useEffect(() => {
+    const harita = haritaRef.current;
+    if (!harita || !hazirRef.current) return;
+    const kaynak = harita.getSource("sepetler") as GeoJSONSource | undefined;
+    kaynak?.setData({
+      type: "FeatureCollection",
+      features: sepetler
+        .filter((s) => noktaVar(s.adres))
+        .map((s) => ({
+          type: "Feature",
+          geometry: {
+            type: "Point",
+            coordinates: [s.adres!.lng!, s.adres!.lat!],
+          },
+          properties: { id: s.id, ad: s.musteri?.ad ?? "" },
+        })),
+    });
+  }, [hazir, sepetler]);
 
   useEffect(() => {
     const harita = haritaRef.current;
@@ -929,6 +1037,8 @@ export default function Harita({
     };
     gorunur("abonelik-halka", katmanlar.abonelikler);
     gorunur("abonelik-cekirdek", katmanlar.abonelikler);
+    gorunur("sepet-halka", katmanlar.sepetler);
+    gorunur("sepet-cekirdek", katmanlar.sepetler);
     gorunur("yogunluk-katmani", katmanlar.isiHaritasi);
     ucBoyutluBinalariGoster(harita, katmanlar.ucBoyut);
   }, [hazir, katmanlar]);
@@ -954,16 +1064,16 @@ export default function Harita({
           <svg viewBox="-66 -66 132 132" width="132" height="132" style="overflow:visible">
             <defs>
               <radialGradient id="kurye-koni" cx="50%" cy="100%" r="100%">
-                <stop offset="0%" stop-color="#e30a17" stop-opacity=".55"/>
-                <stop offset="55%" stop-color="#e30a17" stop-opacity=".22"/>
-                <stop offset="100%" stop-color="#e30a17" stop-opacity="0"/>
+                <stop offset="0%" stop-color="${KURYE_RENGI}" stop-opacity=".55"/>
+                <stop offset="55%" stop-color="${KURYE_RENGI}" stop-opacity=".22"/>
+                <stop offset="100%" stop-color="${KURYE_RENGI}" stop-opacity="0"/>
               </radialGradient>
             </defs>
             <path class="kurye-koni" d="M0 0 L-30 -56 A63 63 0 0 1 30 -56 Z"
                   fill="url(#kurye-koni)"/>
-            <circle cx="0" cy="0" r="17" fill="#e30a17" opacity=".18"/>
+            <circle cx="0" cy="0" r="17" fill="${KURYE_RENGI}" opacity=".22"/>
             <circle cx="0" cy="0" r="11" fill="#ffffff"/>
-            <circle cx="0" cy="0" r="7.5" fill="#e30a17"/>
+            <circle cx="0" cy="0" r="7.5" fill="${KURYE_RENGI}"/>
           </svg>`;
 
           kuryeMarkerRef.current = new MapLibreMarker({
@@ -992,6 +1102,48 @@ export default function Harita({
       iptal = true;
     };
   }, [kuryeKonumu, kuryeYonu]);
+
+  /**
+   * Balon bir MapLibre işaretçisine bağlanıyor: konumu harita hesaplıyor,
+   * içeriği React portal ile basılıyor. Böylece harita kaydırılıp
+   * yakınlaştırıldığında balon pinin üstünde kalıyor.
+   */
+  const balonMarkerRef = useRef<Marker | null>(null);
+  const [balonKap, setBalonKap] = useState<HTMLElement | null>(null);
+  const balonVar = balon != null;
+
+  useEffect(() => {
+    const harita = haritaRef.current;
+    if (!harita || !hazir || !balonVar) return;
+
+    let iptal = false;
+    (async () => {
+      const { Marker: MapLibreMarker } = await import("maplibre-gl");
+      if (iptal || !haritaRef.current || balonMarkerRef.current) return;
+      const kutu = document.createElement("div");
+      kutu.style.cssText = "pointer-events:auto";
+      balonMarkerRef.current = new MapLibreMarker({
+        element: kutu,
+        anchor: "bottom",
+        offset: [0, -16],
+      })
+        .setLngLat([0, 0])
+        .addTo(haritaRef.current);
+      setBalonKap(kutu);
+    })();
+
+    return () => {
+      iptal = true;
+      balonMarkerRef.current?.remove();
+      balonMarkerRef.current = null;
+      setBalonKap(null);
+    };
+  }, [hazir, balonVar]);
+
+  useEffect(() => {
+    if (!balon) return;
+    balonMarkerRef.current?.setLngLat([balon.lng, balon.lat]);
+  }, [balon]);
 
   /* ---------------- Dışa açılan harita komutları ---------------- */
   useImperativeHandle(
@@ -1115,6 +1267,7 @@ export default function Harita({
         style={{ position: "absolute", inset: 0 }}
         data-secim-modu={secimModu ? "acik" : "kapali"}
       />
+      {balonKap && balon ? createPortal(balon.icerik, balonKap) : null}
       {yuklenemedi && (
         <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center p-6">
           <div className="pointer-events-auto max-w-sm rounded-[22px] border border-cizgi bg-yuzey p-5 text-center shadow-lg">

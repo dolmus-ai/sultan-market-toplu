@@ -258,6 +258,25 @@ haritaya dokunup ince ayar yapabiliyor.
 Nominatim saniyede bir istek istiyor; uç nokta denemeler arasında bekliyor ve
 en fazla dört aday deniyor.
 
+### Haritadan ödeme
+
+Teslimat, abonelik ve sepet pinlerine dokununca pinin üstünde bir balon
+açılıyor: müşteri, adres, tutar ve **ödeme satırı**.
+
+- Teslimat kapatılmışsa "Nakit ile alındı" (yeşil) ya da "Ödeme alınmadı ·
+  <kişi>" (turuncu).
+- Kapatılmamışsa planlanan yöntem ve doğrudan **Ödeme al** düğmesi — teslim
+  ekranını listeye uğramadan açıyor.
+- Abonelikte o günün siparişi varsa onun ödeme durumu gösteriliyor; yoksa
+  günler ve teslim saati.
+- Sepette "açık sepet, henüz sipariş değil".
+
+Balon MapLibre işaretçisine bağlı, içeriği React portal ile basılıyor; harita
+kaydırılınca pinin üstünde kalıyor. Boş alana dokunmak kapatıyor.
+
+Kuryenin kendi imleci **açık yeşil**: teslimat pinleri kırmızı-siyah
+ailesinden geldiği için "ben neredeyim" bir bakışta ayrılıyor.
+
 ### Satır işlemleri
 
 Teslimat, abonelik ve sepet satırlarının sağındaki **⋯** düğmesi düzenleme,

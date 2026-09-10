@@ -1,6 +1,9 @@
 @import "tailwindcss";
 
 @theme {
+  /* Dar telefonlar için ek kırılım noktası — panel başlığı sığsın. */
+  --breakpoint-xs: 26rem;
+
   /* Marka: beyaz zemin, kırmızı vurgu, siyah derinlik */
   --color-kirmizi: #e30a17;
   --color-kirmizi-koyu: #b00611;

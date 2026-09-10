@@ -45,6 +45,7 @@ export default function TeslimSonucu({
   mod,
   islemde,
   yontemler,
+  baslangicOdeme = "alindi",
   onYontemEkle,
   onYontemKaldir,
   onKapat,
@@ -55,6 +56,8 @@ export default function TeslimSonucu({
   islemde: boolean;
   /** Listelenecek aktif ödeme yöntemleri. */
   yontemler: OdemeYontemiTanimi[];
+  /** Ekran hangi seçenekle açılsın — haritadan "Alınamadı" ile gelinebiliyor. */
+  baslangicOdeme?: "alindi" | "alinmadi";
   onYontemEkle: (ad: string) => Promise<void>;
   onYontemKaldir: (kod: string) => Promise<void>;
   onKapat: () => void;
@@ -65,7 +68,7 @@ export default function TeslimSonucu({
       ? siparis.odeme_yontemi
       : (yontemler[0]?.kod ?? "nakit");
 
-  const [odemeAlindi, setOdemeAlindi] = useState(true);
+  const [odemeAlindi, setOdemeAlindi] = useState(baslangicOdeme === "alindi");
   const [yontem, setYontem] = useState<OdemeYontemi>(varsayilanYontem);
   const [tutar, setTutar] = useState(String(siparis.tutar ?? 0));
   const [kisi, setKisi] = useState(siparis.musteri?.ad ?? "");

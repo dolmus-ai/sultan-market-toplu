@@ -44,6 +44,7 @@ import {
   abonelikBugunMu,
   abonelikSil,
   odemeYontemiEkle,
+  sepetiSiparise,
   odemeYontemiKaldir,
   sepetSil,
   siparisSil,
@@ -125,6 +126,10 @@ export default function KuryeUygulamasi({
   const [islemKayit, setIslemKayit] = useState<EklenenKayit | null>(null);
   const [duzenlenen, setDuzenlenen] = useState<DuzenlenenKayit | null>(null);
   const [silOnay, setSilOnay] = useState(false);
+  /** Teslim ekranı hangi seçenekle açılsın — haritadan "Alınamadı" gelebiliyor. */
+  const [teslimBaslangic, setTeslimBaslangic] = useState<"alindi" | "alinmadi">(
+    "alindi",
+  );
   /** Haritada açık balon — kayıt listeden tazelensin diye yalnızca kimlik tutuluyor. */
   const [balonSecim, setBalonSecim] = useState<{
     tur: "teslimat" | "abonelik" | "sepet";
@@ -191,7 +196,11 @@ export default function KuryeUygulamasi({
 
   const [konumDuzeltme, setKonumDuzeltme] = useState<string | null>(null);
   const [islemde, setIslemde] = useState(false);
-  const [bildirim, setBildirim] = useState<string | null>(null);
+  const [bildirim, setBildirim] = useState<{
+    mesaj: string;
+    eylem?: { etiket: string; calistir: () => void };
+  } | null>(null);
+  const bildirimSayacRef = useRef<number | null>(null);
 
   /**
    * Saate bağlı her şey yalnızca istemcide hesaplanır.
@@ -292,10 +301,18 @@ export default function KuryeUygulamasi({
   }, [katmanlar.karanlik, sesAcik]);
 
   /* ------------------------- Bildirim ------------------------- */
-  const uyar = useCallback((mesaj: string) => {
-    setBildirim(mesaj);
-    setTimeout(() => setBildirim(null), 3200);
-  }, []);
+  const uyar = useCallback(
+    (mesaj: string, eylem?: { etiket: string; calistir: () => void }) => {
+      if (bildirimSayacRef.current) window.clearTimeout(bildirimSayacRef.current);
+      setBildirim({ mesaj, eylem });
+      // Geri alınabilir işlemlerde kurye okuyup karar versin diye daha uzun.
+      bildirimSayacRef.current = window.setTimeout(
+        () => setBildirim(null),
+        eylem ? 6000 : 3200,
+      );
+    },
+    [],
+  );
 
   /* ------------------------- Çevrimdışı kuyruk ------------------------- */
   useEffect(() => {
@@ -1009,6 +1026,7 @@ export default function KuryeUygulamasi({
       }
       setIslemKayit(null);
       setSilOnay(false);
+      setBalonSecim(null);
       if (seciliId) setSeciliId(null);
       uyar("Kayıt silindi");
     } catch {
@@ -1017,6 +1035,92 @@ export default function KuryeUygulamasi({
           ? "Teslim edilmiş sipariş silinemez — tahsilat kaydı ona bağlı."
           : "Silinemedi",
       );
+    } finally {
+      setIslemde(false);
+    }
+  }
+
+  /* ---------------- Haritadan hızlı işlemler ---------------- */
+
+  /** Uzun basışla teslim işaretleme — geri alınabilir. */
+  async function teslimIsaretle(siparis: Siparis) {
+    const oncekiDurum = siparis.durum;
+    const zaman = new Date().toISOString();
+
+    // Teslim edilenler katmanı kapalıysa yeşile dönen pin gözden kaybolurdu.
+    setKatmanlar((k) =>
+      k.teslimEdilenler ? k : { ...k, teslimEdilenler: true },
+    );
+
+    await siparisGuncelle(
+      siparis.id,
+      { durum: "teslim", teslim_zamani: zaman, kurye_id: kurye?.id ?? null },
+      (s) => ({ ...s, durum: "teslim", teslim_zamani: zaman }),
+    );
+    setBalonSecim(null);
+
+    uyar("Teslim edildi", {
+      etiket: "Geri al",
+      calistir: () => {
+        void siparisGuncelle(
+          siparis.id,
+          { durum: oncekiDurum, teslim_zamani: null },
+          (s) => ({ ...s, durum: oncekiDurum, teslim_zamani: null }),
+        );
+      },
+    });
+  }
+
+  function uzunBasis(
+    tur: "teslimat" | "abonelik" | "sepet",
+    id: string,
+  ) {
+    if (tur === "sepet") {
+      const sp = sepetler.find((x) => x.id === id);
+      return haritaPini(
+        "sepet",
+        id,
+        sp?.adres?.lat != null
+          ? { lat: sp.adres.lat, lng: sp.adres.lng! }
+          : null,
+      );
+    }
+
+    const siparis =
+      tur === "teslimat"
+        ? teslimatlar.find((x) => x.id === id)
+        : (() => {
+            const a = abonelikler.find((x) => x.id === id);
+            if (!a) return undefined;
+            const bugun = bugununTarihi();
+            return (
+              teslimatlar.find(
+                (x) => x.abonelik_id === a.id && x.planlanan_tarih === bugun,
+              ) ??
+              teslimatlar.find(
+                (x) => x.adres_id === a.adres_id && x.planlanan_tarih === bugun,
+              )
+            );
+          })();
+
+    if (!siparis) return uyar("Bugün için teslimat yok");
+    if (siparis.durum === "teslim") return uyar("Bu teslimat zaten kapalı");
+    void teslimIsaretle(siparis);
+  }
+
+  /** Sepeti güne ait teslimata çevirir — sepetin tek çıkış kapısı. */
+  async function sepetiCevir(sepet: Sepet) {
+    setIslemde(true);
+    try {
+      const siparis = await sepetiSiparise(db, sepet);
+      setSepetler((o) => o.filter((x) => x.id !== sepet.id));
+      setTeslimatlar((o) => [siparis, ...o]);
+      setBalonSecim(null);
+      setIslemKayit(null);
+      setSekme("teslimatlar");
+      uyar(`${sepet.musteri?.ad ?? "Sepet"} teslimata çevrildi`);
+    } catch {
+      uyar("Sepet çevrilemedi");
     } finally {
       setIslemde(false);
     }
@@ -1132,6 +1236,7 @@ export default function KuryeUygulamasi({
               : null,
           );
         }}
+        onUzunBasis={uzunBasis}
         balon={
           balonKayit && balonNoktasi
             ? {
@@ -1140,11 +1245,29 @@ export default function KuryeUygulamasi({
                   <HaritaBalonu
                     kayit={balonKayit}
                     yontemler={yontemler}
+                    islemde={islemde}
                     onKapat={() => setBalonSecim(null)}
                     onOdemeAl={(siparis) => {
                       setSeciliId(siparis.id);
                       setBalonSecim(null);
+                      setTeslimBaslangic("alindi");
                       setTeslimModu("teslim");
+                    }}
+                    onOdemeAlinmadi={(siparis) => {
+                      setSeciliId(siparis.id);
+                      setBalonSecim(null);
+                      setTeslimBaslangic("alinmadi");
+                      setTeslimModu("teslim");
+                    }}
+                    onSiparise={(sepet) => void sepetiCevir(sepet)}
+                    onSil={() => {
+                      const kayit: EklenenKayit =
+                        balonKayit.tur === "teslimat"
+                          ? { tur: "teslimat", siparis: balonKayit.siparis }
+                          : balonKayit.tur === "abonelik"
+                            ? { tur: "abonelik", abonelik: balonKayit.abonelik }
+                            : { tur: "sepet", sepet: balonKayit.sepet };
+                      void kayitSil(kayit);
                     }}
                     onDetay={() => {
                       if (balonKayit.tur === "teslimat")
@@ -1359,6 +1482,26 @@ export default function KuryeUygulamasi({
                 <span className="flex-1 text-[15px] font-black">Düzenle</span>
                 <span className="text-gri">›</span>
               </motion.button>
+
+              {islemKayit.tur === "sepet" && (
+                <motion.button
+                  whileTap={{ scale: 0.98 }}
+                  disabled={islemde || !islemKayit.sepet.adres_id}
+                  onClick={() => void sepetiCevir(islemKayit.sepet)}
+                  className="mt-2 flex w-full items-center gap-3 rounded-[20px] border border-cizgi bg-yuzey p-3.5 text-left hover:bg-yuzey2 disabled:opacity-50"
+                >
+                  <span className="text-xl leading-none">📦</span>
+                  <span className="flex-1">
+                    <span className="block text-[15px] font-black">
+                      Siparişe çevir
+                    </span>
+                    <span className="block text-[12px] text-gri">
+                      Sepet kapanır, bugünün teslimatı olarak listeye düşer
+                    </span>
+                  </span>
+                  <span className="text-gri">›</span>
+                </motion.button>
+              )}
 
               {kayitBilgisi(islemKayit).adresId && (
                 <motion.button
@@ -1620,9 +1763,22 @@ export default function KuryeUygulamasi({
             initial={{ y: 24, opacity: 0, scale: 0.95 }}
             animate={{ y: 0, opacity: 1, scale: 1 }}
             exit={{ y: 24, opacity: 0, scale: 0.95 }}
-            className="pointer-events-none absolute inset-x-0 bottom-32 z-50 mx-auto w-fit rounded-hap bg-kontrast px-4 py-2.5 text-[13px] font-bold text-white shadow-yuzen"
+            className={`absolute inset-x-0 bottom-32 z-50 mx-auto flex w-fit items-center gap-3 rounded-hap bg-kontrast py-2.5 pl-4 text-[13px] font-bold text-white shadow-yuzen ${
+              bildirim.eylem ? "pr-2" : "pointer-events-none pr-4"
+            }`}
           >
-            {bildirim}
+            <span>{bildirim.mesaj}</span>
+            {bildirim.eylem && (
+              <button
+                onClick={() => {
+                  bildirim.eylem?.calistir();
+                  setBildirim(null);
+                }}
+                className="rounded-hap bg-yuzey/15 px-3 py-1.5 text-[12px] font-black"
+              >
+                {bildirim.eylem.etiket}
+              </button>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -1636,6 +1792,7 @@ export default function KuryeUygulamasi({
             mod={teslimModu}
             islemde={islemde}
             yontemler={yontemler}
+            baslangicOdeme={teslimBaslangic}
             onYontemEkle={yontemEkle}
             onYontemKaldir={yontemKaldir}
             onKapat={() => setTeslimModu(null)}
@@ -1755,7 +1912,9 @@ export default function KuryeUygulamasi({
                   : "bg-kirmizi-sis text-kirmizi-koyu"
               }`}
             >
-              Toplu rota
+              {/* Dar ekranda tek kelime; sekme şeridine yer kalsın. */}
+              <span className="hidden xs:inline">Toplu rota</span>
+              <span className="xs:hidden">Rota</span>
             </button>
           </div>
         }

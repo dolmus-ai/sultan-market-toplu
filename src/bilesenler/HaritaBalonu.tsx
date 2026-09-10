@@ -1,6 +1,7 @@
 "use client";
 
-import { motion } from "motion/react";
+import { useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
 
 import { adresYaz, gunlerYaz, odemeAdi, para, saat } from "@/lib/bicim";
 import { kayitTutari } from "@/lib/veri";
@@ -40,7 +41,7 @@ function odemeSatiri(
         metin: `Ödeme alınmadı · ${s.odeme_alinmayan_kisi || s.musteri?.ad || "—"}`,
         ton: "turuncu",
       };
-    return { metin: "Teslim edildi", ton: "notr" };
+    return { metin: "Teslim edildi · ödeme girilmedi", ton: "notr" };
   }
   return {
     metin: `Ödeme: ${odemeAdi(s.odeme_yontemi, yontemler)}`,
@@ -54,21 +55,37 @@ const TON_SINIFI: Record<Ton, string> = {
   notr: "bg-yuzey2 text-gri",
 };
 
+/** Parmakla rahat basılsın diye tüm düğmeler en az 40 piksel yüksekliğinde. */
+const DUGME = "h-10 rounded-hap text-[12px] font-black";
+
 export default function HaritaBalonu({
   kayit,
   yontemler,
+  islemde = false,
   onKapat,
   onOdemeAl,
+  onOdemeAlinmadi,
+  onSiparise,
+  onSil,
   onDetay,
 }: {
   kayit: BalonKayit;
   yontemler: OdemeYontemiTanimi[];
+  islemde?: boolean;
   onKapat: () => void;
   /** Ödeme almak için teslim ekranını açar. */
   onOdemeAl: (siparis: Siparis) => void;
+  /** Teslim ekranını "alınamadı" seçeneğiyle açar: kimden ve neden. */
+  onOdemeAlinmadi: (siparis: Siparis) => void;
+  /** Sepeti güne ait teslimata çevirir. */
+  onSiparise?: (sepet: Sepet) => void;
+  /** Kaydı tamamen kaldırır. */
+  onSil?: () => void;
   /** Alt paneldeki ayrıntıya götürür. */
   onDetay: () => void;
 }) {
+  const [silOnay, setSilOnay] = useState(false);
+
   const siparis =
     kayit.tur === "teslimat"
       ? kayit.siparis
@@ -92,6 +109,10 @@ export default function HaritaBalonu({
 
   const odeme = siparis ? odemeSatiri(siparis, yontemler) : null;
   const odemeAlinabilir = siparis != null && siparis.durum !== "teslim";
+  // Teslim edilmiş sipariş silinemez: tahsilat kaydı ona bağlı.
+  const silinebilir =
+    onSil != null &&
+    !(kayit.tur === "teslimat" && kayit.siparis.durum === "teslim");
 
   const turEtiketi =
     kayit.tur === "teslimat"
@@ -107,7 +128,7 @@ export default function HaritaBalonu({
       exit={{ opacity: 0, y: 8, scale: 0.96 }}
       transition={{ type: "spring", stiffness: 420, damping: 30 }}
       onClick={(e) => e.stopPropagation()}
-      className="w-[248px] rounded-[20px] border border-cizgi bg-yuzey/95 p-3 shadow-yuzen backdrop-blur-xl"
+      className="w-[264px] max-w-[calc(100vw-32px)] rounded-[20px] border border-cizgi bg-yuzey/95 p-3 shadow-yuzen backdrop-blur-xl"
     >
       <div className="flex items-start gap-2">
         <span className="min-w-0 flex-1">
@@ -121,13 +142,13 @@ export default function HaritaBalonu({
         <button
           onClick={onKapat}
           aria-label="Balonu kapat"
-          className="-mr-1 -mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[15px] font-black text-gri hover:bg-yuzey2"
+          className="-mr-1.5 -mt-1.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[16px] font-black text-gri active:bg-yuzey2"
         >
           ×
         </button>
       </div>
 
-      <div className="mt-2 flex items-baseline justify-between gap-2">
+      <div className="mt-1.5 flex items-baseline justify-between gap-2">
         <span className="text-[19px] font-black leading-none">
           {para(tutar)}
         </span>
@@ -149,24 +170,95 @@ export default function HaritaBalonu({
             : "Açık sepet · henüz sipariş değil"}
       </p>
 
-      <div className="mt-2.5 flex gap-1.5">
-        {odemeAlinabilir && siparis && (
-          <motion.button
-            whileTap={{ scale: 0.96 }}
-            onClick={() => onOdemeAl(siparis)}
-            className="flex-[2] rounded-hap bg-yesil py-2.5 text-[12px] font-black text-white"
+      <AnimatePresence mode="wait" initial={false}>
+        {silOnay ? (
+          <motion.div
+            key="onay"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            className="mt-2.5"
           >
-            Ödeme al
-          </motion.button>
+            <p className="text-center text-[12px] font-bold text-kirmizi-koyu">
+              Bu kayıt silinsin mi?
+            </p>
+            <div className="mt-2 flex gap-1.5">
+              <button
+                onClick={() => setSilOnay(false)}
+                className={`${DUGME} flex-1 bg-yuzey2 text-gri`}
+              >
+                Vazgeç
+              </button>
+              <motion.button
+                whileTap={{ scale: 0.96 }}
+                disabled={islemde}
+                onClick={onSil}
+                className={`${DUGME} flex-[1.4] bg-kirmizi text-white disabled:opacity-60`}
+              >
+                {islemde ? "Siliniyor…" : "Sil"}
+              </motion.button>
+            </div>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="eylemler"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            className="mt-2.5 space-y-1.5"
+          >
+            {odemeAlinabilir && siparis && (
+              <div className="flex gap-1.5">
+                <motion.button
+                  whileTap={{ scale: 0.96 }}
+                  onClick={() => onOdemeAl(siparis)}
+                  className={`${DUGME} flex-1 bg-yesil text-white`}
+                >
+                  Ödeme al
+                </motion.button>
+                <motion.button
+                  whileTap={{ scale: 0.96 }}
+                  onClick={() => onOdemeAlinmadi(siparis)}
+                  className={`${DUGME} flex-1 bg-turuncu text-white`}
+                >
+                  Alınamadı
+                </motion.button>
+              </div>
+            )}
+
+            {kayit.tur === "sepet" && onSiparise && (
+              <motion.button
+                whileTap={{ scale: 0.96 }}
+                disabled={islemde || !kayit.sepet.adres_id}
+                onClick={() => onSiparise(kayit.sepet)}
+                className={`${DUGME} w-full bg-kirmizi text-white disabled:opacity-50`}
+              >
+                {islemde ? "Çevriliyor…" : "Siparişe çevir"}
+              </motion.button>
+            )}
+
+            <div className="flex gap-1.5">
+              {silinebilir && (
+                <motion.button
+                  whileTap={{ scale: 0.9 }}
+                  onClick={() => setSilOnay(true)}
+                  aria-label="Kaydı sil"
+                  className={`${DUGME} w-10 shrink-0 bg-yuzey2 text-[15px] text-kirmizi`}
+                >
+                  🗑
+                </motion.button>
+              )}
+              <motion.button
+                whileTap={{ scale: 0.96 }}
+                onClick={onDetay}
+                className={`${DUGME} flex-1 bg-yuzey2 text-gri`}
+              >
+                Detay
+              </motion.button>
+            </div>
+          </motion.div>
         )}
-        <motion.button
-          whileTap={{ scale: 0.96 }}
-          onClick={onDetay}
-          className="flex-1 rounded-hap bg-yuzey2 py-2.5 text-[12px] font-black text-gri"
-        >
-          Detay
-        </motion.button>
-      </div>
+      </AnimatePresence>
     </motion.div>
   );
 }

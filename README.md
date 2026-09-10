@@ -277,6 +277,26 @@ kaydırılınca pinin üstünde kalıyor. Boş alana dokunmak kapatıyor.
 Kuryenin kendi imleci **açık yeşil**: teslimat pinleri kırmızı-siyah
 ailesinden geldiği için "ben neredeyim" bir bakışta ayrılıyor.
 
+### Sepetin amacı
+
+Sepet, müşteri hâlâ eklemeye devam ederken açık duran kayıt; sipariş ise yola
+çıkacak olan. İkisi arasındaki tek geçiş **Siparişe çevir**: sepet kapanır
+(`durum = siparise_donustu`), tutarı bugünün teslimatına taşınır ve bağ
+`siparisler.sepet_id` üzerinden korunur. Düğme hem harita balonunda hem satır
+menüsünde.
+
+### Uzun basış
+
+Haritada bir pine basılı tutmak (mobilde uzun dokunuş, masaüstünde fareyi
+basılı tutma) teslimatı **teslim edildi** olarak işaretler; pin yeşile döner ve
+bildirimde 6 saniyelik **Geri al** çıkar. Abonelik pininde o günün siparişi
+işaretlenir. Teslim edilenler katmanı kapalıysa kendiliğinden açılır, yoksa
+yeşile dönen pin gözden kaybolurdu.
+
+Parmak 8 pikselden fazla kayarsa bu bir sürüklemedir, uzun basış iptal olur.
+Uzun basıştan sonra gelen `click` yutulur; yoksa hem teslim işaretlenir hem
+balon açılırdı.
+
 ### Satır işlemleri
 
 Teslimat, abonelik ve sepet satırlarının sağındaki **⋯** düğmesi düzenleme,

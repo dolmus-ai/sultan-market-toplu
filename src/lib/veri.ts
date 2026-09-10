@@ -1,3 +1,4 @@
+import { bugununTarihi } from "./bicim";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   Abonelik,
@@ -579,4 +580,46 @@ export async function adresiGeokodla(
   } catch {
     return null;
   }
+}
+
+/**
+ * Sepeti güne ait bir teslimata çevirir.
+ *
+ * Sepet "müşteri hâlâ topluyor" demek; sipariş "yola çıkacak" demek. Çevirme
+ * ikisinin arasındaki tek geçiş: sepet kapanıyor, tutarı siparişe taşınıyor
+ * ve bağ `siparisler.sepet_id` üzerinden korunuyor.
+ */
+export async function sepetiSiparise(
+  db: SupabaseClient,
+  sepet: Sepet,
+  ek: { planlanan_saat?: string | null; odeme_yontemi?: string | null } = {},
+): Promise<Siparis> {
+  if (!sepet.adres_id) throw new Error("adres yok");
+
+  const { data, error } = await db
+    .from("siparisler")
+    .insert({
+      musteri_id: sepet.musteri_id,
+      adres_id: sepet.adres_id,
+      kaynak: "sepet",
+      sepet_id: sepet.id,
+      durum: "bekliyor",
+      tutar: kayitTutari(sepet),
+      planlanan_tarih: bugununTarihi(),
+      planlanan_saat: ek.planlanan_saat ?? null,
+      odeme_yontemi: ek.odeme_yontemi ?? null,
+    })
+    .select(SIPARIS_ALANLARI)
+    .single();
+  if (error) throw error;
+
+  // Sipariş yazıldıktan sonra sepet kapanıyor; ters sırada olsa sipariş
+  // yazılamadığında sepet boşuna kapanmış olurdu.
+  const { error: sepetHatasi } = await db
+    .from("sepetler")
+    .update({ durum: "siparise_donustu", updated_at: new Date().toISOString() })
+    .eq("id", sepet.id);
+  if (sepetHatasi) throw sepetHatasi;
+
+  return data as unknown as Siparis;
 }

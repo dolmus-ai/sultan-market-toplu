@@ -82,9 +82,19 @@ export function TeslimatSatiri({
       </span>
 
       <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-2">
-          <span className="truncate text-[15px] font-bold">
-            {siparis.musteri?.ad ?? "Müşteri"}
+        {/* Ad tek başına: dar ekranda rozetler adı kırpmasın diye alta indi. */}
+        <span className="block truncate text-[15px] font-bold">
+          {siparis.musteri?.ad ?? "Müşteri"}
+        </span>
+        <span className="mt-0.5 block truncate text-[13px] text-gri">
+          {siparis.adres ? adresYaz(siparis.adres) : "Adres tanımsız"}
+        </span>
+        <span className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[12px] font-semibold text-gri">
+          <span
+            className="rounded-hap px-2 py-0.5"
+            style={DURUM_STIL[siparis.durum]}
+          >
+            {DURUM_ETIKET[siparis.durum]}
           </span>
           {siparis.kaynak === "abonelik" && <Etiket>Abonelik</Etiket>}
           {siparis.oncelik > 0 && <Etiket ton="kirmizi">Acil</Etiket>}
@@ -95,17 +105,6 @@ export function TeslimatSatiri({
             <Etiket ton="siyah">Aynı bina · {binaSayisi}</Etiket>
           )}
           {konumYok && <Etiket ton="siyah">Konum yok</Etiket>}
-        </span>
-        <span className="mt-0.5 block truncate text-[13px] text-gri">
-          {siparis.adres ? adresYaz(siparis.adres) : "Adres tanımsız"}
-        </span>
-        <span className="mt-1.5 flex items-center gap-2 text-[12px] font-semibold text-gri">
-          <span
-            className="rounded-hap px-2 py-0.5"
-            style={DURUM_STIL[siparis.durum]}
-          >
-            {DURUM_ETIKET[siparis.durum]}
-          </span>
           <span>{kalemSayisi} ürün</span>
           {siparis.planlanan_saat && (
             <span>· {saat(siparis.planlanan_saat)}</span>
@@ -114,7 +113,7 @@ export function TeslimatSatiri({
       </span>
 
       <span className="shrink-0 text-right">
-        <span className="block text-[15px] font-black">
+        <span className="block whitespace-nowrap text-[15px] font-black">
           {para(siparis.tutar)}
         </span>
         <span

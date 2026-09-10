@@ -11,6 +11,7 @@ import type {
   GeoJSONSource,
   Map as MapLibreMap,
   MapMouseEvent,
+  MapTouchEvent,
   Marker,
 } from "maplibre-gl";
 import { createPortal } from "react-dom";
@@ -79,6 +80,8 @@ type Props = {
   onAbonelikSecim?: (id: string) => void;
   /** Sepet pinine dokunuldu. */
   onSepetSecim?: (id: string) => void;
+  /** Pine uzun basıldı (masaüstünde basılı tutma, mobilde uzun dokunuş). */
+  onUzunBasis?: (tur: "teslimat" | "abonelik" | "sepet", id: string) => void;
   /**
    * Haritada bir pinin üstünde duran balon. Konumlandırmayı MapLibre
    * yapıyor, içeriği React portal ile basılıyor.
@@ -168,7 +171,15 @@ function katmanlariKur(
   secenekRef: RefObject<((id: string) => void) | undefined>,
   abonelikRef: RefObject<((id: string) => void) | undefined>,
   sepetRef: RefObject<((id: string) => void) | undefined>,
+  uzunRef: RefObject<
+    ((tur: "teslimat" | "abonelik" | "sepet", id: string) => void) | undefined
+  >,
 ) {
+  /**
+   * Uzun basış, uzun basıştan sonra gelen "click" olayını yutmak için
+   * paylaşılan bayrak: yoksa hem teslim işaretlenir hem balon açılırdı.
+   */
+  const basim = { uzunOldu: false };
   harita.addSource("teslimatlar", {
     type: "geojson",
     data: BOS_GEOJSON,
@@ -584,6 +595,7 @@ function katmanlariKur(
   });
 
   harita.on("click", "teslimat-nokta", (e: MapMouseEvent) => {
+    if (basim.uzunOldu) return;
     const ozellik = harita.queryRenderedFeatures(e.point, {
       layers: ["teslimat-nokta"],
     })[0];
@@ -592,6 +604,7 @@ function katmanlariKur(
   });
 
   harita.on("click", "abonelik-halka", (e: MapMouseEvent) => {
+    if (basim.uzunOldu) return;
     const ozellik = harita.queryRenderedFeatures(e.point, {
       layers: ["abonelik-halka"],
     })[0];
@@ -600,6 +613,7 @@ function katmanlariKur(
   });
 
   harita.on("click", "sepet-halka", (e: MapMouseEvent) => {
+    if (basim.uzunOldu) return;
     const ozellik = harita.queryRenderedFeatures(e.point, {
       layers: ["sepet-halka"],
     })[0];
@@ -622,6 +636,71 @@ function katmanlariKur(
       duration: 700,
     });
   });
+
+  /**
+   * Uzun basış: masaüstünde fareyi basılı tutma, mobilde parmağı bekletme.
+   * Parmak kayarsa (harita sürükleniyorsa) iptal oluyor.
+   */
+  function uzunBasisKur(
+    katmanId: string,
+    tur: "teslimat" | "abonelik" | "sepet",
+  ) {
+    let sayac: number | null = null;
+    let baslangic: { x: number; y: number } | null = null;
+
+    const iptal = () => {
+      if (sayac != null) window.clearTimeout(sayac);
+      sayac = null;
+      baslangic = null;
+    };
+
+    const basla = (e: MapMouseEvent | MapTouchEvent) => {
+      const nokta = "point" in e ? e.point : null;
+      if (!nokta) return;
+      const ozellik = harita.queryRenderedFeatures(nokta, {
+        layers: [katmanId],
+      })[0];
+      const id = ozellik?.properties?.id;
+      if (typeof id !== "string") return;
+
+      baslangic = { x: nokta.x, y: nokta.y };
+      basim.uzunOldu = false;
+      sayac = window.setTimeout(() => {
+        basim.uzunOldu = true;
+        uzunRef.current?.(tur, id);
+        // Bayrak bir sonraki tıklamayı yutup kendini sıfırlıyor.
+        window.setTimeout(() => {
+          basim.uzunOldu = false;
+        }, 400);
+        iptal();
+      }, 480);
+    };
+
+    harita.on("mousedown", katmanId, basla);
+    harita.on("touchstart", katmanId, basla);
+
+    // Parmak/fare 8 pikselden fazla kayarsa bu bir sürükleme, uzun basış değil.
+    const kaydiMi = (e: MapMouseEvent | MapTouchEvent) => {
+      if (!baslangic || !("point" in e)) return;
+      if (
+        Math.abs(e.point.x - baslangic.x) > 8 ||
+        Math.abs(e.point.y - baslangic.y) > 8
+      )
+        iptal();
+    };
+
+    harita.on("mousemove", kaydiMi);
+    harita.on("touchmove", kaydiMi);
+    harita.on("mouseup", iptal);
+    harita.on("touchend", iptal);
+    harita.on("touchcancel", iptal);
+    harita.on("dragstart", iptal);
+    harita.on("zoomstart", iptal);
+  }
+
+  uzunBasisKur("teslimat-nokta", "teslimat");
+  uzunBasisKur("abonelik-halka", "abonelik");
+  uzunBasisKur("sepet-halka", "sepet");
 
   /* Pin dışına tıklama — konum düzeltme için */
   harita.on("click", (e: MapMouseEvent) => {
@@ -691,6 +770,7 @@ export default function Harita({
   onSecim,
   onAbonelikSecim,
   onSepetSecim,
+  onUzunBasis,
   balon,
   onSecenekSec,
   onKullaniciHareketi,
@@ -706,6 +786,8 @@ export default function Harita({
   const [yuklenemedi, setYuklenemedi] = useState(false);
   const sayacRef = useRef<number | null>(null);
   const kuryeMarkerRef = useRef<Marker | null>(null);
+  /** Kuryenin "K" rozeti — ekrana göre hizalı, dönmeyen ayrı işaretçi. */
+  const kuryeHarfRef = useRef<Marker | null>(null);
   // Art arda gelen konum güncellemeleri aynı anda iki imleç oluşturmasın.
   const kuryeOlusuyorRef = useRef(false);
   // Güncel geri çağırımları harita olay dinleyicilerine taşımak için.
@@ -714,6 +796,7 @@ export default function Harita({
   const secenekRef = useRef(onSecenekSec);
   const abonelikRef = useRef(onAbonelikSecim);
   const sepetRef = useRef(onSepetSecim);
+  const uzunRef = useRef(onUzunBasis);
   const temaRef = useRef<Tema>(katmanlar.karanlik ? "karanlik" : "aydinlik");
   const onKullaniciHareketiRef = useRef(onKullaniciHareketi);
   useEffect(() => {
@@ -723,6 +806,7 @@ export default function Harita({
     onKullaniciHareketiRef.current = onKullaniciHareketi;
     abonelikRef.current = onAbonelikSecim;
     sepetRef.current = onSepetSecim;
+    uzunRef.current = onUzunBasis;
   });
 
   /* ---------------- Haritayı kur ---------------- */
@@ -789,6 +873,7 @@ export default function Harita({
           secenekRef,
           abonelikRef,
           sepetRef,
+          uzunRef,
         );
         marketiIsaretle(harita);
         hazirRef.current = true;
@@ -810,6 +895,8 @@ export default function Harita({
         if (sayacRef.current) window.clearTimeout(sayacRef.current);
         kuryeMarkerRef.current?.remove();
         kuryeMarkerRef.current = null;
+        kuryeHarfRef.current?.remove();
+        kuryeHarfRef.current = null;
         kuryeOlusuyorRef.current = false;
         harita.remove();
         haritaRef.current = null;
@@ -1057,10 +1144,11 @@ export default function Harita({
         if (iptal || !haritaRef.current) return;
 
         if (!kuryeMarkerRef.current) {
-          const kutu = document.createElement("div");
-          kutu.style.cssText = "width:132px;height:132px;position:relative";
-          // Koni ve nokta haritayla birlikte dönsün diye rotationAlignment: map.
-          kutu.innerHTML = `
+          // Yön konisi haritayla dönmeli; bu yüzden ayrı bir işaretçide ve
+          // rotationAlignment: map ile duruyor.
+          const koniKutu = document.createElement("div");
+          koniKutu.style.cssText = "width:132px;height:132px;position:relative";
+          koniKutu.innerHTML = `
           <svg viewBox="-66 -66 132 132" width="132" height="132" style="overflow:visible">
             <defs>
               <radialGradient id="kurye-koni" cx="50%" cy="100%" r="100%">
@@ -1071,20 +1159,37 @@ export default function Harita({
             </defs>
             <path class="kurye-koni" d="M0 0 L-30 -56 A63 63 0 0 1 30 -56 Z"
                   fill="url(#kurye-koni)"/>
-            <circle cx="0" cy="0" r="17" fill="${KURYE_RENGI}" opacity=".22"/>
-            <circle cx="0" cy="0" r="11" fill="#ffffff"/>
-            <circle cx="0" cy="0" r="7.5" fill="${KURYE_RENGI}"/>
+            <circle cx="0" cy="0" r="19" fill="${KURYE_RENGI}" opacity=".2"/>
           </svg>`;
 
           kuryeMarkerRef.current = new MapLibreMarker({
-            element: kutu,
+            element: koniKutu,
             rotationAlignment: "map",
             pitchAlignment: "map",
           })
             .setLngLat([kuryeKonumu.lng, kuryeKonumu.lat])
             .addTo(harita);
+
+          // "K" ekrana göre hizalı ayrı işaretçide: harita döndüğünde ya da
+          // eğildiğinde harf yan yatmasın, hep dik ve okunur kalsın.
+          const harfKutu = document.createElement("div");
+          harfKutu.style.cssText = "width:34px;height:34px";
+          harfKutu.innerHTML = `
+          <svg viewBox="-17 -17 34 34" width="34" height="34">
+            <circle cx="0" cy="0" r="14" fill="#ffffff"/>
+            <circle cx="0" cy="0" r="11.2" fill="${KURYE_RENGI}"/>
+            <text x="0" y="0" text-anchor="middle" dominant-baseline="central"
+                  fill="#ffffff"
+                  style="font:900 13px/1 ui-sans-serif,system-ui,'Segoe UI',sans-serif;
+                         letter-spacing:.5px;paint-order:stroke">K</text>
+          </svg>`;
+
+          kuryeHarfRef.current = new MapLibreMarker({ element: harfKutu })
+            .setLngLat([kuryeKonumu.lng, kuryeKonumu.lat])
+            .addTo(harita);
         } else {
           kuryeMarkerRef.current.setLngLat([kuryeKonumu.lng, kuryeKonumu.lat]);
+          kuryeHarfRef.current?.setLngLat([kuryeKonumu.lng, kuryeKonumu.lat]);
         }
 
         // Yön bilinmiyorsa koniyi gizle, imleci sade nokta olarak bırak.
@@ -1264,7 +1369,14 @@ export default function Harita({
         // maplibre-gl.css katmansız yüklendiği için Tailwind'in `absolute`
         // utility'sini ezip konteyneri sıfır yükseklikte bırakıyor; bu yüzden
         // konumlandırma satır içi stille veriliyor.
-        style={{ position: "absolute", inset: 0 }}
+        style={{
+          position: "absolute",
+          inset: 0,
+          // Uzun basışta tarayıcının kendi menüsü açılmasın.
+          WebkitTouchCallout: "none",
+          WebkitUserSelect: "none",
+          userSelect: "none",
+        }}
         data-secim-modu={secimModu ? "acik" : "kapali"}
       />
       {balonKap && balon ? createPortal(balon.icerik, balonKap) : null}

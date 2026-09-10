@@ -240,6 +240,31 @@ düğmesi kuryenin GPS konumunu adrese işler) → kayıt türü → detay.
 Kurye ürün listesi görmediği için tutar elle giriliyor; abonelik ve sepette
 kalem varsa tutar yine kalemlerden hesaplanır, yoksa `tutar` alanı kullanılır.
 
+### Adresin haritada bulunması
+
+Kayıt haritada ancak adresin `lat`/`lng` alanları doluysa görünür. Adres
+girilirken iki yol var: kapıdayken **Kapıdayım** (kuryenin GPS konumu) ya da
+**Adresten bul** — yazılan adresi OpenStreetMap/Nominatim üzerinde arar.
+Hiçbiri kullanılmazsa kayıt sırasında adres kendiliğinden aranır.
+
+Elle yazılan Türkçe adresleri servis çoğu zaman olduğu gibi bulamıyor
+("Tığcılar mahallesi Kol sokak no 6 daire 8 filiz apartman SAKARYA/ADAPAZARI"
+gibi). `src/lib/adres.ts` kapı/daire/kat/apartman parçalarını atıp giderek
+daha genel adaylar üretiyor — tam metin → sokak + ilçe → mahalle + ilçe →
+ilçe — ve ilk tutan kullanılıyor. Sokak bulunamazsa mahalle ortasına düşmek
+hiç konum olmamasından iyi; kurye satır menüsündeki **Konumu düzelt** ile
+haritaya dokunup ince ayar yapabiliyor.
+
+Nominatim saniyede bir istek istiyor; uç nokta denemeler arasında bekliyor ve
+en fazla dört aday deniyor.
+
+### Satır işlemleri
+
+Teslimat, abonelik ve sepet satırlarının sağındaki **⋯** düğmesi düzenleme,
+konum düzeltme ve silme sunuyor. Silme onay istiyor. Teslim edilmiş sipariş
+silinemez — tahsilat kaydı ona bağlı ve silinseydi kasa geçmişi de yok olurdu;
+kural hem arayüzde hem RLS politikasında var.
+
 **Excel'den toplu yükle** — .xlsx ya da .csv dosyasından müşteri + adres aktarır.
 İlk satır başlık olmalı; en az `Ad` ve `Adres` sütunu gerekir. Telefon, Bina,
 Kat, Daire, Tarif, Lat, Lng ve Not isteğe bağlıdır ve başlıklar Türkçe karakter,

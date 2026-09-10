@@ -6,12 +6,16 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { GUN_KISA, bugununTarihi, para } from "@/lib/bicim";
 import {
+  abonelikDuzenle,
   abonelikEkle,
   adresEkle,
+  adresiGeokodla,
   musteriAdresleri,
   musteriEkle,
   musterileriAra,
+  sepetDuzenle,
   sepetEkle,
+  siparisDuzenle,
   siparisEkle,
 } from "@/lib/veri";
 import type {
@@ -28,6 +32,9 @@ export type EklenenKayit =
   | { tur: "teslimat"; siparis: Siparis }
   | { tur: "abonelik"; abonelik: Abonelik }
   | { tur: "sepet"; sepet: Sepet };
+
+/** Düzenleme kipinde açılırken verilen mevcut kayıt. */
+export type DuzenlenenKayit = EklenenKayit;
 
 type Adim = "musteri" | "adres" | "tur" | "detay";
 type KayitTuru = "teslimat" | "abonelik" | "sepet";
@@ -66,6 +73,7 @@ export default function KayitEkle({
   db,
   yontemler,
   kuryeKonumu,
+  duzenlenen,
   onKapat,
   onEklendi,
 }: {
@@ -73,10 +81,13 @@ export default function KayitEkle({
   yontemler: OdemeYontemiTanimi[];
   /** Kuryenin anlık konumu — adres işaretlemek için. */
   kuryeKonumu: { lat: number; lng: number } | null;
+  /** Doluysa akış doğrudan detay adımında, düzenleme kipinde açılır. */
+  duzenlenen?: DuzenlenenKayit | null;
   onKapat: () => void;
   onEklendi: (kayit: EklenenKayit, mesaj: string) => void;
 }) {
-  const [adim, setAdim] = useState<Adim>("musteri");
+  const duzenleme = duzenlenen != null;
+  const [adim, setAdim] = useState<Adim>(duzenlenen ? "detay" : "musteri");
   const [islemde, setIslemde] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
 
@@ -101,16 +112,56 @@ export default function KayitEkle({
   const [konum, setKonum] = useState<{ lat: number; lng: number } | null>(null);
 
   /* --- Kayıt --- */
-  const [tur, setTur] = useState<KayitTuru>("teslimat");
-  const [tutar, setTutar] = useState("");
-  const [tarih, setTarih] = useState(bugununTarihi());
-  const [saat, setSaat] = useState("");
-  const [yontem, setYontem] = useState(yontemler[0]?.kod ?? "nakit");
-  const [acil, setAcil] = useState(false);
-  const [not, setNot] = useState("");
-  const [baslik, setBaslik] = useState("Abonelik");
-  const [siklik, setSiklik] = useState<AbonelikSikligi>("haftalik");
-  const [gunler, setGunler] = useState<number[]>([1, 2, 3, 4, 5]);
+  const [tur, setTur] = useState<KayitTuru>(duzenlenen?.tur ?? "teslimat");
+  const [tutar, setTutar] = useState(() => {
+    if (duzenlenen?.tur === "teslimat") return String(duzenlenen.siparis.tutar);
+    if (duzenlenen?.tur === "abonelik") return String(duzenlenen.abonelik.tutar);
+    if (duzenlenen?.tur === "sepet") return String(duzenlenen.sepet.tutar);
+    return "";
+  });
+  const [tarih, setTarih] = useState(
+    duzenlenen?.tur === "teslimat"
+      ? duzenlenen.siparis.planlanan_tarih
+      : bugununTarihi(),
+  );
+  const [saat, setSaat] = useState(() => {
+    if (duzenlenen?.tur === "teslimat")
+      return duzenlenen.siparis.planlanan_saat?.slice(0, 5) ?? "";
+    if (duzenlenen?.tur === "abonelik")
+      return duzenlenen.abonelik.teslim_saati.slice(0, 5);
+    return "";
+  });
+  const [yontem, setYontem] = useState(
+    (duzenlenen?.tur === "teslimat" ? duzenlenen.siparis.odeme_yontemi : null) ??
+      yontemler[0]?.kod ??
+      "nakit",
+  );
+  const [acil, setAcil] = useState(
+    duzenlenen?.tur === "teslimat" ? duzenlenen.siparis.oncelik > 0 : false,
+  );
+  const [not, setNot] = useState(
+    (duzenlenen?.tur === "teslimat"
+      ? duzenlenen.siparis.notlar
+      : duzenlenen?.tur === "abonelik"
+        ? duzenlenen.abonelik.notlar
+        : null) ?? "",
+  );
+  const [baslik, setBaslik] = useState(
+    duzenlenen?.tur === "abonelik" ? duzenlenen.abonelik.baslik : "Abonelik",
+  );
+  const [siklik, setSiklik] = useState<AbonelikSikligi>(
+    duzenlenen?.tur === "abonelik" ? duzenlenen.abonelik.siklik : "haftalik",
+  );
+  const [gunler, setGunler] = useState<number[]>(
+    duzenlenen?.tur === "abonelik" && duzenlenen.abonelik.gunler.length
+      ? duzenlenen.abonelik.gunler
+      : [1, 2, 3, 4, 5],
+  );
+
+  /* Adresten koordinat arama */
+  const [geokod, setGeokod] = useState<
+    { durum: "bos" | "araniyor" | "yok" } | { durum: "bulundu"; ad: string }
+  >({ durum: "bos" });
 
   /* Müşteri araması — yazarken 250 ms bekliyor. */
   useEffect(() => {
@@ -141,9 +192,25 @@ export default function KayitEkle({
 
   function geri() {
     setHata(null);
+    if (duzenleme) return onKapat();
     const i = ADIM_SIRASI.indexOf(adim);
     if (i > 0) setAdim(ADIM_SIRASI[i - 1]);
     else onKapat();
+  }
+
+  /** Yazılan adresi haritada arar; bulursa konumu işaretler. */
+  async function konumuAdrestenBul(): Promise<{ lat: number; lng: number } | null> {
+    const metin = yeniAdres.adres_metni.trim();
+    if (metin.length < 5) return null;
+    setGeokod({ durum: "araniyor" });
+    const sonuc = await adresiGeokodla(metin);
+    if (!sonuc) {
+      setGeokod({ durum: "yok" });
+      return null;
+    }
+    setKonum({ lat: sonuc.lat, lng: sonuc.lng });
+    setGeokod({ durum: "bulundu", ad: sonuc.ad });
+    return sonuc;
   }
 
   /** Müşteri adımını kapatır: seçileni ya da yeni açılanı kullanır. */
@@ -188,11 +255,14 @@ export default function KayitEkle({
 
     setIslemde(true);
     try {
+      // Kurye konumu işaretlemediyse adresi haritada aramayı deniyoruz;
+      // yoksa kayıt haritada hiç görünmüyor.
+      const nokta = konum ?? (await konumuAdrestenBul());
       const kayit = await adresEkle(db, {
         musteri_id: musteri.id,
         ...yeniAdres,
-        lat: konum?.lat ?? null,
-        lng: konum?.lng ?? null,
+        lat: nokta?.lat ?? null,
+        lng: nokta?.lng ?? null,
       });
       setAdresler((o) => [...o, kayit]);
       setAdres(kayit);
@@ -206,10 +276,45 @@ export default function KayitEkle({
 
   async function kaydet() {
     setHata(null);
-    if (!musteri || !adres) return setHata("Müşteri ve adres gerekli.");
-
     setIslemde(true);
     try {
+      if (duzenlenen?.tur === "teslimat") {
+        const siparis = await siparisDuzenle(db, duzenlenen.siparis.id, {
+          tutar: sayisalTutar,
+          planlanan_tarih: tarih,
+          planlanan_saat: saat ? `${saat}:00` : null,
+          odeme_yontemi: yontem,
+          oncelik: acil ? 1 : 0,
+          notlar: not.trim() || null,
+        });
+        onEklendi({ tur: "teslimat", siparis }, "Teslimat güncellendi");
+        return;
+      }
+      if (duzenlenen?.tur === "abonelik") {
+        const abonelik = await abonelikDuzenle(db, duzenlenen.abonelik.id, {
+          baslik,
+          siklik,
+          gunler: siklik === "gunluk" ? [1, 2, 3, 4, 5, 6, 7] : gunler,
+          teslim_saati: `${saat || "09:00"}:00`,
+          tutar: sayisalTutar,
+          notlar: not.trim() || null,
+        });
+        onEklendi({ tur: "abonelik", abonelik }, "Abonelik güncellendi");
+        return;
+      }
+      if (duzenlenen?.tur === "sepet") {
+        const sepet = await sepetDuzenle(db, duzenlenen.sepet.id, {
+          tutar: sayisalTutar,
+        });
+        onEklendi({ tur: "sepet", sepet }, "Sepet güncellendi");
+        return;
+      }
+
+      if (!musteri || !adres) {
+        setHata("Müşteri ve adres gerekli.");
+        return;
+      }
+
       if (tur === "teslimat") {
         const siparis = await siparisEkle(db, {
           musteri_id: musteri.id,
@@ -269,8 +374,8 @@ export default function KayitEkle({
       >
         <div className="mx-auto mb-4 h-1.5 w-11 rounded-full bg-cizgi" />
 
-        {/* Adım göstergesi */}
-        <div className="mb-4 flex items-center gap-1.5">
+        {/* Adım göstergesi — düzenlemede tek adım var */}
+        <div hidden={duzenleme} className="mb-4 flex items-center gap-1.5">
           {ADIM_SIRASI.map((a, i) => (
             <motion.span
               key={a}
@@ -479,25 +584,79 @@ export default function KayitEkle({
                       />
                     </Alan>
 
-                    <motion.button
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => setKonum(kuryeKonumu)}
-                      disabled={!kuryeKonumu}
-                      className={`mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-2xl border text-[14px] font-bold disabled:opacity-50 ${
-                        konum
-                          ? "border-yesil bg-yesil/10 text-yesil"
-                          : "border-cizgi bg-yuzey text-gri"
-                      }`}
-                    >
-                      {konum
-                        ? "✓ Konum işaretlendi"
-                        : kuryeKonumu
-                          ? "📍 Kapıdayım — konumu buraya al"
-                          : "Konum alınamıyor"}
-                    </motion.button>
+                    <div className="mt-3 flex gap-2">
+                      <motion.button
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => void konumuAdrestenBul()}
+                        disabled={
+                          geokod.durum === "araniyor" ||
+                          yeniAdres.adres_metni.trim().length < 5
+                        }
+                        className="flex h-12 flex-[2] items-center justify-center gap-2 rounded-2xl border border-cizgi bg-yuzey text-[14px] font-bold text-gri disabled:opacity-50"
+                      >
+                        {geokod.durum === "araniyor" ? (
+                          <>
+                            <motion.span
+                              animate={{ rotate: 360 }}
+                              transition={{
+                                duration: 1,
+                                repeat: Infinity,
+                                ease: "linear",
+                              }}
+                              className="h-4 w-4 rounded-full border-2 border-cizgi border-t-kirmizi"
+                            />
+                            Aranıyor…
+                          </>
+                        ) : (
+                          "🔎 Adresten bul"
+                        )}
+                      </motion.button>
+                      <motion.button
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => {
+                          setKonum(kuryeKonumu);
+                          setGeokod({ durum: "bos" });
+                        }}
+                        disabled={!kuryeKonumu}
+                        className="h-12 flex-1 rounded-2xl border border-cizgi bg-yuzey text-[14px] font-bold text-gri disabled:opacity-50"
+                      >
+                        📍 Kapıdayım
+                      </motion.button>
+                    </div>
+
+                    <AnimatePresence initial={false}>
+                      {konum && (
+                        <motion.p
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="mt-2 overflow-hidden rounded-2xl border border-yesil bg-yesil/10 px-3.5 py-2.5 text-[12px] font-bold text-yesil"
+                        >
+                          ✓ Konum işaretlendi
+                          {geokod.durum === "bulundu" && (
+                            <span className="mt-0.5 block font-semibold opacity-80">
+                              {geokod.ad}
+                            </span>
+                          )}
+                        </motion.p>
+                      )}
+                      {!konum && geokod.durum === "yok" && (
+                        <motion.p
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0 }}
+                          className="mt-2 rounded-2xl bg-yuzey2 px-3.5 py-2.5 text-[12px] font-semibold text-gri"
+                        >
+                          Adres haritada bulunamadı. Mahalle ve ilçeyi yazmayı
+                          ya da kapıdayken &quot;Kapıdayım&quot;a basmayı dene.
+                        </motion.p>
+                      )}
+                    </AnimatePresence>
+
                     <p className="mt-1.5 px-1 text-[11px] text-gri">
-                      Konum girilmezse adres haritada görünmez; sonra
-                      düzeltilebilir.
+                      Konum işaretlenmezse kaydederken adres kendiliğinden
+                      haritada aranır; bulunamazsa kayıt haritada görünmez ve
+                      sonradan düzeltilebilir.
                     </p>
                   </motion.div>
                 )}
@@ -539,9 +698,9 @@ export default function KayitEkle({
           {adim === "detay" && (
             <Sayfa anahtar="detay">
               <Baslik
-                ust="4 / 4"
+                ust={duzenleme ? "Düzenle" : "4 / 4"}
                 ana={TURLER.find((t) => t.deger === tur)?.baslik ?? "Detay"}
-                alt={musteri?.ad}
+                alt={musteri?.ad ?? undefined}
               />
 
               <Alan etiket="Tutar">

@@ -453,3 +453,130 @@ export function kayitTutari(kayit: {
   const kalem = sepetToplami(kayit.kalemler ?? []);
   return kalem > 0 ? kalem : (kayit.tutar ?? 0);
 }
+
+/* ------------------------------------------------------------------ */
+/* Düzenleme ve silme                                                  */
+/* ------------------------------------------------------------------ */
+
+export async function siparisDuzenle(
+  db: SupabaseClient,
+  id: string,
+  yama: {
+    tutar?: number;
+    planlanan_tarih?: string;
+    planlanan_saat?: string | null;
+    odeme_yontemi?: string | null;
+    oncelik?: number;
+    notlar?: string | null;
+  },
+): Promise<Siparis> {
+  const { data, error } = await db
+    .from("siparisler")
+    .update(yama)
+    .eq("id", id)
+    .select(SIPARIS_ALANLARI)
+    .single();
+  if (error) throw error;
+  return data as unknown as Siparis;
+}
+
+export async function abonelikDuzenle(
+  db: SupabaseClient,
+  id: string,
+  yama: {
+    baslik?: string;
+    siklik?: AbonelikSikligi;
+    gunler?: number[];
+    teslim_saati?: string;
+    tutar?: number;
+    durum?: "aktif" | "duraklatildi" | "iptal";
+    notlar?: string | null;
+  },
+): Promise<Abonelik> {
+  const { data, error } = await db
+    .from("abonelikler")
+    .update(yama)
+    .eq("id", id)
+    .select(ABONELIK_ALANLARI)
+    .single();
+  if (error) throw error;
+  return data as unknown as Abonelik;
+}
+
+export async function sepetDuzenle(
+  db: SupabaseClient,
+  id: string,
+  yama: { tutar?: number; durum?: "acik" | "siparise_donustu" | "terk_edildi" },
+): Promise<Sepet> {
+  const { data, error } = await db
+    .from("sepetler")
+    .update({ ...yama, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .select(SEPET_ALANLARI)
+    .single();
+  if (error) throw error;
+  return data as unknown as Sepet;
+}
+
+/**
+ * Teslim edilmiş sipariş silinemez: tahsilat kaydı ona bağlı ve silinseydi
+ * kasa geçmişi de sessizce yok olurdu. RLS de aynı kuralı uyguluyor.
+ */
+export async function siparisSil(db: SupabaseClient, id: string) {
+  const { error, count } = await db
+    .from("siparisler")
+    .delete({ count: "exact" })
+    .eq("id", id);
+  if (error) throw error;
+  if (!count) throw new Error("silinemedi");
+}
+
+export async function abonelikSil(db: SupabaseClient, id: string) {
+  const { error, count } = await db
+    .from("abonelikler")
+    .delete({ count: "exact" })
+    .eq("id", id);
+  if (error) throw error;
+  if (!count) throw new Error("silinemedi");
+}
+
+export async function sepetSil(db: SupabaseClient, id: string) {
+  const { error, count } = await db
+    .from("sepetler")
+    .delete({ count: "exact" })
+    .eq("id", id);
+  if (error) throw error;
+  if (!count) throw new Error("silinemedi");
+}
+
+/* ------------------------------------------------------------------ */
+/* Adres konumu                                                        */
+/* ------------------------------------------------------------------ */
+
+export async function adresKonumuYaz(
+  db: SupabaseClient,
+  adresId: string,
+  lat: number,
+  lng: number,
+) {
+  const { error } = await db
+    .from("adresler")
+    .update({ lat, lng, konum_dogrulandi: true })
+    .eq("id", adresId);
+  if (error) throw error;
+}
+
+export type GeokodSonucu = { lat: number; lng: number; ad: string };
+
+/** Adres metnini koordinata çevirir; bulunamazsa null döner. */
+export async function adresiGeokodla(
+  adres: string,
+): Promise<GeokodSonucu | null> {
+  try {
+    const yanit = await fetch(`/api/geokod?adres=${encodeURIComponent(adres)}`);
+    if (!yanit.ok) return null;
+    return (await yanit.json()) as GeokodSonucu;
+  } catch {
+    return null;
+  }
+}

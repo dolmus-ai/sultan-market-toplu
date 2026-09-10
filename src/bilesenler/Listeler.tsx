@@ -28,6 +28,7 @@ export function TeslimatSatiri({
   gecikme,
   binaSayisi,
   onTikla,
+  onIslemler,
 }: {
   siparis: Siparis;
   sira?: number;
@@ -39,6 +40,8 @@ export function TeslimatSatiri({
   /** Aynı binadaki toplam teslimat sayısı (1'den büyükse rozet çıkar). */
   binaSayisi?: number;
   onTikla: () => void;
+  /** Verilirse satırın sağında işlem menüsü düğmesi çıkar. */
+  onIslemler?: () => void;
 }) {
   const kalemSayisi = siparis.kalemler?.length ?? 0;
   const konumYok = siparis.adres?.lat == null;
@@ -126,6 +129,7 @@ export function TeslimatSatiri({
               : "Tahsilat"}
         </span>
       </span>
+      {onIslemler && !secimModu && <IslemDugmesi onTikla={onIslemler} />}
     </motion.button>
   );
 }
@@ -138,10 +142,12 @@ export function AbonelikSatiri({
   abonelik,
   bugun,
   onTikla,
+  onIslemler,
 }: {
   abonelik: Abonelik;
   bugun: boolean;
   onTikla: () => void;
+  onIslemler?: () => void;
 }) {
   const tutar = kayitTutari(abonelik);
   return (
@@ -172,6 +178,7 @@ export function AbonelikSatiri({
       <span className="shrink-0 text-right text-[15px] font-black">
         {para(tutar)}
       </span>
+      {onIslemler && <IslemDugmesi onTikla={onIslemler} />}
     </motion.button>
   );
 }
@@ -183,9 +190,11 @@ export function AbonelikSatiri({
 export function SepetSatiri({
   sepet,
   onTikla,
+  onIslemler,
 }: {
   sepet: Sepet;
   onTikla: () => void;
+  onIslemler?: () => void;
 }) {
   return (
     <motion.button
@@ -201,6 +210,7 @@ export function SepetSatiri({
       <span className="shrink-0 text-[15px] font-black">
         {para(kayitTutari(sepet))}
       </span>
+      {onIslemler && <IslemDugmesi onTikla={onIslemler} />}
     </motion.button>
   );
 }
@@ -208,6 +218,31 @@ export function SepetSatiri({
 /* ------------------------------------------------------------------ */
 /* Ortak küçük parçalar                                                */
 /* ------------------------------------------------------------------ */
+
+/** Satır sağındaki üç nokta — düzenle / sil menüsünü açar. */
+export function IslemDugmesi({ onTikla }: { onTikla: () => void }) {
+  return (
+    <motion.span
+      whileTap={{ scale: 0.9 }}
+      role="button"
+      tabIndex={0}
+      aria-label="Kayıt işlemleri"
+      onClick={(e) => {
+        e.stopPropagation();
+        onTikla();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.stopPropagation();
+          onTikla();
+        }
+      }}
+      className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full text-[17px] font-black leading-none text-gri hover:bg-yuzey2"
+    >
+      ⋯
+    </motion.span>
+  );
+}
 
 export function Etiket({
   children,

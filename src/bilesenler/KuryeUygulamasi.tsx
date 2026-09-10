@@ -16,7 +16,10 @@ import HaritaKontrolleri from "./HaritaKontrolleri";
 import AltPanel, { type PanelDurumu } from "./AltPanel";
 import TeslimatDetay from "./TeslimatDetay";
 import TeslimSonucu, { type TeslimSonuc } from "./TeslimSonucu";
-import KayitEkle, { type EklenenKayit } from "./KayitEkle";
+import KayitEkle, {
+  type DuzenlenenKayit,
+  type EklenenKayit,
+} from "./KayitEkle";
 import TopluYukleme from "./TopluYukleme";
 import VardiyaOzeti from "./VardiyaOzeti";
 import NavigasyonPaneli, { type NavigasyonDurumu } from "./NavigasyonPaneli";
@@ -38,8 +41,11 @@ import {
 import { adimCumlesi, konus, sesiKes } from "@/lib/ses";
 import {
   abonelikBugunMu,
+  abonelikSil,
   odemeYontemiEkle,
   odemeYontemiKaldir,
+  sepetSil,
+  siparisSil,
   acikVardiyaGetir,
   kuryeKonumlariGetir,
   vardiyaTahsilatlari,
@@ -52,6 +58,7 @@ import type {
   KuryeKonumu,
   Nokta,
   RotaSonucu,
+  Adres,
   OdemeYontemiTanimi,
   Sepet,
   Siparis,
@@ -113,6 +120,10 @@ export default function KuryeUygulamasi({
   const [ekleMenu, setEkleMenu] = useState(false);
   const [kayitEkle, setKayitEkle] = useState(false);
   const [topluYukleme, setTopluYukleme] = useState(false);
+  /** Satır menüsü açık olan kayıt. */
+  const [islemKayit, setIslemKayit] = useState<EklenenKayit | null>(null);
+  const [duzenlenen, setDuzenlenen] = useState<DuzenlenenKayit | null>(null);
+  const [silOnay, setSilOnay] = useState(false);
 
   const [sekme, setSekme] = useState<Sekme>("teslimatlar");
   const [panel, setPanel] = useState<PanelDurumu>("yari");
@@ -822,35 +833,41 @@ export default function KuryeUygulamasi({
     uyar("Kapı bilgisi kaydedildi");
   }
 
+  /**
+   * Haritaya dokunulan noktayı adrese yazar. `konumDuzeltme` adres kimliği
+   * tutuyor: aynı adres teslimatta da abonelikte de sepette de geçebiliyor,
+   * üçünü birden tazeliyoruz.
+   */
   async function konumuKaydet(nokta: Nokta) {
-    if (!konumDuzeltme) return;
-    const hedef = teslimatlar.find((s) => s.id === konumDuzeltme);
-    if (!hedef?.adres) return;
+    const adresId = konumDuzeltme;
+    if (!adresId) return;
 
     const { error } = await db
       .from("adresler")
       .update({ lat: nokta.lat, lng: nokta.lng, konum_dogrulandi: true })
-      .eq("id", hedef.adres.id);
+      .eq("id", adresId);
 
     if (error) {
       uyar("Konum kaydedilemedi.");
       return;
     }
-    setTeslimatlar((onceki) =>
-      onceki.map((s) =>
-        s.adres?.id === hedef.adres!.id
-          ? {
-              ...s,
-              adres: {
-                ...s.adres,
-                lat: nokta.lat,
-                lng: nokta.lng,
-                konum_dogrulandi: true,
-              },
-            }
-          : s,
-      ),
-    );
+
+    const yeniAdres = <T extends { adres: Adres | null }>(kayit: T): T =>
+      kayit.adres?.id === adresId
+        ? {
+            ...kayit,
+            adres: {
+              ...kayit.adres,
+              lat: nokta.lat,
+              lng: nokta.lng,
+              konum_dogrulandi: true,
+            },
+          }
+        : kayit;
+
+    setTeslimatlar((o) => o.map(yeniAdres));
+    setAbonelikler((o) => o.map(yeniAdres));
+    setSepetler((o) => o.map(yeniAdres));
     setKonumDuzeltme(null);
     uyar("Konum güncellendi.");
   }
@@ -930,20 +947,72 @@ export default function KuryeUygulamasi({
 
   /* ---------------- Yeni kayıt ---------------- */
 
+  /** Listeye ekler ya da aynı id varsa yerine yazar. */
+  function birlestir<T extends { id: string }>(liste: T[], kayit: T): T[] {
+    return liste.some((x) => x.id === kayit.id)
+      ? liste.map((x) => (x.id === kayit.id ? kayit : x))
+      : [kayit, ...liste];
+  }
+
   function kayitEklendi(kayit: EklenenKayit, mesaj: string) {
     if (kayit.tur === "teslimat") {
-      setTeslimatlar((o) => [kayit.siparis, ...o]);
+      setTeslimatlar((o) => birlestir(o, kayit.siparis));
       setSekme("teslimatlar");
     } else if (kayit.tur === "abonelik") {
-      setAbonelikler((o) => [kayit.abonelik, ...o]);
+      setAbonelikler((o) => birlestir(o, kayit.abonelik));
       setSekme("abonelikler");
     } else {
-      setSepetler((o) => [kayit.sepet, ...o]);
+      setSepetler((o) => birlestir(o, kayit.sepet));
       setSekme("sepetler");
     }
     setKayitEkle(false);
+    setDuzenlenen(null);
     setPanel("yari");
     uyar(mesaj);
+  }
+
+  /** Satır menüsündeki kaydın müşteri adı ve adresi. */
+  function kayitBilgisi(kayit: EklenenKayit) {
+    const ortak =
+      kayit.tur === "teslimat"
+        ? kayit.siparis
+        : kayit.tur === "abonelik"
+          ? kayit.abonelik
+          : kayit.sepet;
+    return {
+      ad: ortak.musteri?.ad ?? "Müşteri",
+      adresId: ortak.adres?.id ?? null,
+      konumVar: ortak.adres?.lat != null,
+      teslimEdildi: kayit.tur === "teslimat" && kayit.siparis.durum === "teslim",
+    };
+  }
+
+  async function kayitSil(kayit: EklenenKayit) {
+    setIslemde(true);
+    try {
+      if (kayit.tur === "teslimat") {
+        await siparisSil(db, kayit.siparis.id);
+        setTeslimatlar((o) => o.filter((x) => x.id !== kayit.siparis.id));
+      } else if (kayit.tur === "abonelik") {
+        await abonelikSil(db, kayit.abonelik.id);
+        setAbonelikler((o) => o.filter((x) => x.id !== kayit.abonelik.id));
+      } else {
+        await sepetSil(db, kayit.sepet.id);
+        setSepetler((o) => o.filter((x) => x.id !== kayit.sepet.id));
+      }
+      setIslemKayit(null);
+      setSilOnay(false);
+      if (seciliId) setSeciliId(null);
+      uyar("Kayıt silindi");
+    } catch {
+      uyar(
+        kayit.tur === "teslimat"
+          ? "Teslim edilmiş sipariş silinemez — tahsilat kaydı ona bağlı."
+          : "Silinemedi",
+      );
+    } finally {
+      setIslemde(false);
+    }
   }
 
   async function cikis() {
@@ -1117,6 +1186,148 @@ export default function KuryeUygulamasi({
         )}
       </AnimatePresence>
 
+      {/* Satır işlemleri: düzenle · konumu düzelt · sil */}
+      <AnimatePresence>
+        {islemKayit && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => {
+              setIslemKayit(null);
+              setSilOnay(false);
+            }}
+            className="absolute inset-0 z-50 flex items-end bg-black/45 backdrop-blur-[2px]"
+          >
+            <motion.div
+              initial={{ y: 60 }}
+              animate={{ y: 0 }}
+              exit={{ y: 60 }}
+              transition={{ type: "spring", stiffness: 400, damping: 34 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full rounded-t-[28px] border-t border-cizgi bg-yuzey px-4 pb-[calc(env(safe-area-inset-bottom)+16px)] pt-4"
+            >
+              <div className="mx-auto mb-4 h-1.5 w-11 rounded-full bg-cizgi" />
+
+              <p className="text-[11px] font-black uppercase tracking-wider text-gri">
+                {islemKayit.tur === "teslimat"
+                  ? "Teslimat"
+                  : islemKayit.tur === "abonelik"
+                    ? "Abonelik"
+                    : "Sepet"}
+              </p>
+              <h2 className="mt-0.5 truncate text-xl font-extrabold tracking-tight">
+                {kayitBilgisi(islemKayit).ad}
+              </h2>
+
+              <motion.button
+                whileTap={{ scale: 0.98 }}
+                onClick={() => {
+                  setDuzenlenen(islemKayit);
+                  setIslemKayit(null);
+                  setKayitEkle(true);
+                }}
+                className="mt-3 flex w-full items-center gap-3 rounded-[20px] border border-cizgi bg-yuzey p-3.5 text-left hover:bg-yuzey2"
+              >
+                <span className="text-xl leading-none">✏️</span>
+                <span className="flex-1 text-[15px] font-black">Düzenle</span>
+                <span className="text-gri">›</span>
+              </motion.button>
+
+              {kayitBilgisi(islemKayit).adresId && (
+                <motion.button
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => {
+                    setKonumDuzeltme(kayitBilgisi(islemKayit).adresId);
+                    setIslemKayit(null);
+                    setPanel("kapali");
+                  }}
+                  className="mt-2 flex w-full items-center gap-3 rounded-[20px] border border-cizgi bg-yuzey p-3.5 text-left hover:bg-yuzey2"
+                >
+                  <span className="text-xl leading-none">📍</span>
+                  <span className="flex-1">
+                    <span className="block text-[15px] font-black">
+                      Konumu düzelt
+                    </span>
+                    <span className="block text-[12px] text-gri">
+                      {kayitBilgisi(islemKayit).konumVar
+                        ? "Haritada doğru noktaya taşı"
+                        : "Bu adresin konumu yok — haritada işaretle"}
+                    </span>
+                  </span>
+                  <span className="text-gri">›</span>
+                </motion.button>
+              )}
+
+              <AnimatePresence mode="wait" initial={false}>
+                {silOnay ? (
+                  <motion.div
+                    key="onay"
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    className="mt-2 rounded-[20px] border border-kirmizi bg-kirmizi-sis p-3.5"
+                  >
+                    <p className="text-[14px] font-bold text-kirmizi-koyu">
+                      Bu kayıt kalıcı olarak silinecek. Emin misin?
+                    </p>
+                    <div className="mt-3 flex gap-2">
+                      <button
+                        onClick={() => setSilOnay(false)}
+                        className="flex-1 rounded-hap bg-yuzey py-3 text-[14px] font-bold text-gri"
+                      >
+                        Vazgeç
+                      </button>
+                      <motion.button
+                        whileTap={{ scale: 0.97 }}
+                        disabled={islemde}
+                        onClick={() => void kayitSil(islemKayit)}
+                        className="flex-[2] rounded-hap bg-kirmizi py-3 text-[14px] font-black text-white disabled:opacity-60"
+                      >
+                        {islemde ? "Siliniyor…" : "Evet, sil"}
+                      </motion.button>
+                    </div>
+                  </motion.div>
+                ) : (
+                  <motion.button
+                    key="sil"
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => setSilOnay(true)}
+                    disabled={kayitBilgisi(islemKayit).teslimEdildi}
+                    className="mt-2 flex w-full items-center gap-3 rounded-[20px] border border-cizgi bg-yuzey p-3.5 text-left hover:bg-yuzey2 disabled:opacity-50"
+                  >
+                    <span className="text-xl leading-none">🗑️</span>
+                    <span className="flex-1">
+                      <span className="block text-[15px] font-black text-kirmizi">
+                        Sil
+                      </span>
+                      {kayitBilgisi(islemKayit).teslimEdildi && (
+                        <span className="block text-[12px] text-gri">
+                          Teslim edilmiş sipariş silinemez
+                        </span>
+                      )}
+                    </span>
+                  </motion.button>
+                )}
+              </AnimatePresence>
+
+              <button
+                onClick={() => {
+                  setIslemKayit(null);
+                  setSilOnay(false);
+                }}
+                className="mt-3 flex h-12 w-full items-center justify-center rounded-hap text-[14px] font-bold text-gri"
+              >
+                Kapat
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Yeni kayıt / toplu yükleme seçimi */}
       <AnimatePresence>
         {ekleMenu && (
@@ -1196,7 +1407,11 @@ export default function KuryeUygulamasi({
             db={db}
             yontemler={yontemler}
             kuryeKonumu={kuryeKonumu}
-            onKapat={() => setKayitEkle(false)}
+            duzenlenen={duzenlenen}
+            onKapat={() => {
+              setKayitEkle(false);
+              setDuzenlenen(null);
+            }}
             onEklendi={kayitEklendi}
           />
         )}
@@ -1432,7 +1647,7 @@ export default function KuryeUygulamasi({
               onNotKaydet={kapiBilgisiKaydet}
               onNavigasyon={() => navigasyonuAc(secili)}
               onKonumDuzelt={() => {
-                setKonumDuzeltme(secili.id);
+                setKonumDuzeltme(secili.adres?.id ?? null);
                 setPanel("kapali");
               }}
             />
@@ -1462,6 +1677,9 @@ export default function KuryeUygulamasi({
                       }
                       binaSayisi={binaSayilari.get(binaAnahtari(s.adres))}
                       onTikla={() => pinSecildi(s.id)}
+                      onIslemler={() =>
+                        setIslemKayit({ tur: "teslimat", siparis: s })
+                      }
                     />
                   ))}
                   {siraliTeslimatlar.length === 0 && (
@@ -1486,6 +1704,9 @@ export default function KuryeUygulamasi({
                           setPanel("kapali");
                         }
                       }}
+                      onIslemler={() =>
+                        setIslemKayit({ tur: "abonelik", abonelik: a })
+                      }
                     />
                   ))}
                   {abonelikler.length === 0 && (
@@ -1509,6 +1730,9 @@ export default function KuryeUygulamasi({
                           setPanel("kapali");
                         }
                       }}
+                      onIslemler={() =>
+                        setIslemKayit({ tur: "sepet", sepet: s })
+                      }
                     />
                   ))}
                   {sepetler.length === 0 && <Bos mesaj="Açık sepet yok." />}

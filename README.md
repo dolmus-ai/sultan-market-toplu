@@ -449,6 +449,25 @@ git config user.email "214736703+dolmus-ai@users.noreply.github.com"
 
 (Depoya özel ayardır, diğer projelerinizdeki genel kimliğe dokunmaz.)
 
+## Testler
+
+```bash
+npm test
+```
+
+`testler/testler.mts` tarayıcıya ihtiyaç duymayan her şeyi sınıyor: para/saat/
+miktar biçimleri, gecikme ve açılış saati mantığı, ödeme yöntemi adları ve
+`para_alinir` davranışı, adres normalleştirme adayları, haversine ve yerel rota
+çözücü, navigasyon adım seçimi ve manevra çevirileri, CSV/XLSX ayrıştırma.
+Node'un `--experimental-strip-types` kipiyle derlemeden çalışıyor;
+`testler/ts-cozucu.mjs` uzantısız içe aktarmaları çözüyor.
+
+Veritabanı tarafı (RLS altında müşteri/adres/teslimat/abonelik/sepet açma,
+düzenleme, silme, ödeme alma ve alamama, sepetin siparişe dönmesi, vardiya,
+muhasebe tablolarının kuryeye kapalı kalması) Supabase üzerinde kuryenin kendi
+kimliği taklit edilerek sınanıyor; bu testler depoda durmuyor çünkü canlı
+veritabanına yazıyorlar.
+
 ## Bilinen sınırlar
 
 - Abonelikler ve sepetler ilk yüklemede gelir; canlı yenileme yalnızca
@@ -470,5 +489,11 @@ git config user.email "214736703+dolmus-ai@users.noreply.github.com"
 - Sesli tarif tarayıcının `speechSynthesis` desteğine bağlıdır. Cihazda
   Türkçe ses paketi yoksa sistem varsayılanı okur; hiç destek yoksa sessiz
   kalır, uygulama çalışmaya devam eder.
+- Haritada açılışta 3 adet "Expected value to be of type number, but found
+  null instead" uyarısı çıkıyor. Sebebi stilin kendi 3B bina katmanı: ilk
+  karolar biz katmanı düzeltmeden ayrıştırılıyor. Zararsız — sonraki karolar
+  düzeltilmiş ifadeyi kullanıyor. Stili haritaya nesne olarak verip önceden
+  düzeltmek denendi ama MapLibre o yolda `styledata` olayını biz dinlemeden
+  geçiriyor ve katmanlar hiç kurulmuyor; o yüzden uyarılarla yaşıyoruz.
 - Supabase'de "Leaked password protection" kapalı — Dashboard → Authentication
   → Policies bölümünden açmanız önerilir.

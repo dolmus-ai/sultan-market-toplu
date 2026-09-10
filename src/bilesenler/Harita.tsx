@@ -820,6 +820,9 @@ export default function Harita({
 
       const harita = new MapLibre({
         container: kapsayiciRef.current,
+        // Stil nesne olarak verilirse MapLibre onu kurucu içinde işliyor ve
+        // `styledata` biz dinlemeye başlamadan geçiyor; katmanlar hiç
+        // kurulmuyor. Bu yüzden adres olarak veriliyor.
         style: HARITA_STILI,
         center: [MERKEZ.lng, MERKEZ.lat],
         zoom: MERKEZ.zoom,
@@ -864,18 +867,26 @@ export default function Harita({
       // ayrıştırılır ayrıştırılmaz kuruyoruz.
       const kur = () => {
         if (iptal || hazirRef.current || !harita.getStyle()?.layers) return;
-        ucBoyutluBinalarEkle(harita);
-        markaStiliUygula(harita, temaRef.current);
-        katmanlariKur(
-          harita,
-          secimRef,
-          tiklamaRef,
-          secenekRef,
-          abonelikRef,
-          sepetRef,
-          uzunRef,
-        );
-        marketiIsaretle(harita);
+        // Bu geri çağırım stil yüklenirken çalışıyor: içeriden fırlayan bir
+        // hata stilin yüklenmesini yarıda kesiyor ve harita komple ölüyor.
+        // O yüzden burada hiçbir hata dışarı sızmıyor.
+        try {
+          ucBoyutluBinalarEkle(harita);
+          markaStiliUygula(harita, temaRef.current);
+          katmanlariKur(
+            harita,
+            secimRef,
+            tiklamaRef,
+            secenekRef,
+            abonelikRef,
+            sepetRef,
+            uzunRef,
+          );
+          marketiIsaretle(harita);
+        } catch (hata) {
+          console.error("[harita] katmanlar kurulamadı", hata);
+          return;
+        }
         hazirRef.current = true;
         setHazir(true);
         setYuklenemedi(false);

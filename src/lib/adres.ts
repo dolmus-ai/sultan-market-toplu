@@ -4,8 +4,9 @@
  * Kurye "Tığcılar mahallesi Kol sokak no 6 daire 8 filiz apartman
  * SAKARYA/ADAPAZARI" gibi yazıyor; Nominatim bunu bulamıyor. Kapı/daire
  * bilgisini atıp giderek daha genel adaylar üretiyoruz: tam metin → sokak +
- * ilçe → mahalle + ilçe → ilçe. Sokak bulunamazsa mahalle ortasına düşmek
- * hiç konum olmamasından iyi; kurye haritadan ince ayar yapabiliyor.
+ * ilçe → mahalle + ilçe. Sokak bulunamazsa mahalle ortasına düşmek hiç konum
+ * olmamasından iyi; kurye haritadan ince ayar yapabiliyor. Mahalleden daha
+ * kaba bir sonuç (ilçe, il) kabul edilmiyor.
  */
 
 /** Kapı, daire, kat, blok gibi harita servisini şaşırtan parçalar. */
@@ -123,11 +124,12 @@ export function adresAdaylari(ham: string, il = "Sakarya"): string[] {
   const yol = yolParcasi(metin);
   const mahalle = mahalleParcasi(metin);
 
+  // Yalnızca il/ilçe adı aday değil: il merkezine pin koymak, konum
+  // olmamasından beter — kurye yanlış yere gider.
   const adaylar = [
     ilVar ? metin : `${metin}, ${il}`,
     yol && kuyruk ? `${yol}, ${kuyruk}` : null,
     mahalle && kuyruk ? `${mahalle}, ${kuyruk}` : null,
-    kuyruk || null,
   ];
 
   // Tekrarları at, sırayı koru.

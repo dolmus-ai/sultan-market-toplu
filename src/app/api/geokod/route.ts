@@ -22,7 +22,28 @@ const KIMLIK = "SultanMarketKurye/1.0 (kurye uygulamasi; Serdivan/Sakarya)";
 const KUTU_DERECE = 0.35;
 /** Nominatim saniyede bir istek istiyor. */
 const ISTEKLER_ARASI_MS = 1100;
-const AZAMI_DENEME = 4;
+const AZAMI_DENEME = 3;
+/**
+ * Kabul edilmeyen sonuç türleri. İl ya da ilçe merkezine pin koymak konum
+ * olmamasından beter: kurye kilometrelerce öteye gider ve haritada her şey
+ * yolundaymış gibi görünür. Mahalle (`suburb`) ve altı kabul; `place_rank`
+ * ayırmaya yetmiyor çünkü mahalle de ilçe de 16 dönebiliyor.
+ */
+const KABA_TURLER = new Set([
+  "country",
+  "state",
+  "province",
+  "region",
+  "county",
+  "city",
+  "town",
+  "municipality",
+  "district",
+  "borough",
+  "administrative",
+]);
+/** Ülke/il gibi çok kaba sonuçlara karşı ikinci güvence. */
+const EN_KABA_KADEME = 14;
 
 export type GeokodSonucu = {
   lat: number;
@@ -69,9 +90,16 @@ export async function GET(istek: Request) {
       lat: string;
       lon: string;
       display_name: string;
+      place_rank?: number;
+      addresstype?: string;
     }[];
     const ilk = veri[0];
     if (!ilk) return null;
+    if (
+      KABA_TURLER.has(ilk.addresstype ?? "") ||
+      (ilk.place_rank ?? 0) < EN_KABA_KADEME
+    )
+      return null;
     const enlem = Number(ilk.lat);
     const boylam = Number(ilk.lon);
     if (!Number.isFinite(enlem) || !Number.isFinite(boylam)) return null;

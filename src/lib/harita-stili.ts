@@ -2,7 +2,7 @@ import type { Map as MapLibreMap, LayerSpecification } from "maplibre-gl";
 
 export type Tema = "aydinlik" | "karanlik";
 
-type Palet = {
+export type Palet = {
   zemin: string;
   su: string;
   yesil: string;
@@ -31,7 +31,7 @@ type Palet = {
  * değişen yalnızca renk paleti: Yandex'in sıcak bej zemini, doygun mavi
  * suyu, canlı yeşil parkları ve sarı ana yolları. Kırmızı hep bize ait.
  */
-const PALETLER: Record<Tema, Palet> = {
+export const PALETLER: Record<Tema, Palet> = {
   // Gündüz: Yandex'in sıcak bej zemini, doygun mavi su, canlı yeşil parklar.
   aydinlik: {
     zemin: "#f3f0ea",

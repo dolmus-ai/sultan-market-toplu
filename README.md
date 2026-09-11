@@ -5,7 +5,8 @@ müşterilerin açık sepetlerini tek haritada görür, toplu siparişlerde en k
 yolu hesaplatır ve teslimat durumlarını sahadan günceller.
 
 - **Next.js 16** (App Router, Turbopack) · **React 19** · **Tailwind v4**
-- **MapLibre GL 5** + **OpenFreeMap** vektör karolar (API anahtarı gerekmez)
+- **MapLibre GL 5** + **Google Map Tiles API** zemin karoları (anahtar yoksa
+  OpenFreeMap vektör stiline düşer)
 - **Supabase** (`sultan-market` projesi) — auth, veri, realtime
 - **motion** ile geçişler
 
@@ -48,7 +49,9 @@ ve market konumu gizli değil. Yerelde farklı bir değer denemek isterseniz
 | --- | --- |
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase proje adresi |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Publishable key |
-| `NEXT_PUBLIC_HARITA_STILI` | MapLibre stil URL'si (varsayılan OpenFreeMap Liberty) |
+| `NEXT_PUBLIC_GOOGLE_HARITA_ANAHTARI` | Google Map Tiles API anahtarı — harita zemini Google'dan gelir. Boşsa aşağıdaki yedek stil kullanılır (aşağıya bakın) |
+| `NEXT_PUBLIC_HARITA_STILI` | Google anahtarı yokken kullanılan MapLibre stil URL'si (varsayılan OpenFreeMap Liberty) |
+| `NEXT_PUBLIC_BINA_KARO_KAYNAGI` | 3B bina yüksekliklerini veren vektör karo kaynağı (varsayılan OpenFreeMap). Boşsa 3B bina katmanı kurulmaz |
 | `NEXT_PUBLIC_MARKET_AD` / `_ADRES` / `_LAT` / `_LNG` | Sultan Market'in konumu — harita başlangıcı, depo pini ve rota çıkış noktası |
 | `NEXT_PUBLIC_MARKET_ACILIS` | Açılış saati (varsayılan `07:30`) — bu saatten önce hiçbir teslimat "gecikti" sayılmaz |
 | `NEXT_PUBLIC_MERKEZ_LAT` / `_LNG` / `_ZOOM` | Kurye konumu alınamazsa haritanın açılacağı yer (varsayılan: market) |
@@ -57,6 +60,46 @@ ve market konumu gizli değil. Yerelde farklı bir değer denemek isterseniz
 **Market konumu:** Arabacıalanı Mah. Orhan Gazi Sk. No:19, 54050 Serdivan/Sakarya
 → `40.78067, 30.35218`. Harita ve tüm demo adresler Serdivan–Adapazarı
 çevresine kuruludur.
+
+### Google Haritalar zemini
+
+Harita motoru MapLibre; zemin karoları **Google Map Tiles API**'den (2B yol
+haritası) geliyor. Pinler, kümeler, rota şeridi, ısı haritası, 3B binalar,
+karanlık mod ve tüm etkileşim aynı MapLibre katmanlarında kaldı — değişen
+yalnızca altlık. Kurulum:
+
+1. Google Cloud Console'da bir proje açın, faturalandırmayı bağlayın ve
+   **Map Tiles API**'yi etkinleştirin.
+2. Bir API anahtarı oluşturun. Anahtar tarayıcıya gittiği için mutlaka
+   kısıtlayın: *Uygulama kısıtı* → HTTP yönlendirenler (üretim alan adınız ve
+   `localhost`), *API kısıtı* → yalnızca Map Tiles API.
+3. Anahtarı `NEXT_PUBLIC_GOOGLE_HARITA_ANAHTARI` olarak Vercel'e (ve yerelde
+   `.env.local`'a) yazın. `NEXT_PUBLIC_` değişkenleri derleme anında
+   gömülür; anahtarı değiştirince yeniden dağıtım gerekir.
+
+Nasıl çalışıyor (`src/lib/google-karo.ts`):
+
+- Google karoları iki adımlı: önce `createSession` ile harita türü, dil
+  (`tr-TR`), bölge, 2x çözünürlük ve **stil kuralları** verilerek bir oturum
+  açılıyor; karolar o oturum jetonuyla isteniyor. Oturum ~2 hafta geçerli ve
+  `localStorage`'da saklanıyor.
+- Gündüz/gece paleti `src/lib/harita-stili.ts` içindeki aynı tablodan
+  Google'ın stil diline çevriliyor; tema başına ayrı oturum açılıyor, tema
+  değişince yalnızca görünür karo katmanı değişiyor.
+- Google karoları düz resim olduğu için 3B bina yükseklikleri ayrı bir
+  vektör kaynaktan (`NEXT_PUBLIC_BINA_KARO_KAYNAGI`, OpenStreetMap verisi)
+  alınıp Google zemininin üstüne çiziliyor. Yazı tipleri (küme sayıları,
+  sıra numaraları, müşteri adları) `public/maplibre/fonts/` altından, kendi
+  sunucumuzdan geliyor.
+- Google'ın kullanım şartı gereği haritada Google logosu ve görünen
+  bölgenin telif metni duruyor (üst çubuğun altında, sol tarafta — alt
+  paneli her durumda alt kenarı örttüğü için); metin her harita hareketinde `viewport`
+  ucundan yenileniyor.
+- Oturum açılamazsa (anahtar yok, API kapalı, alan adı izinsiz) harita
+  pinleriyle çalışmaya devam eder ve sebebi yazan bir "Yeniden dene" kartı
+  çıkar. Anahtar hiç tanımlı değilse uygulama OpenFreeMap stiline düşer.
+- Maliyet: Google karo başına ücretlendiriyor; eğik (3B) görünüm düz
+  görünümden daha çok karo yükler.
 
 ```bash
 npm run dev
@@ -479,21 +522,20 @@ veritabanına yazıyorlar.
 - Teslimat fotoğrafı, push bildirimi, iade/eksik ürün ve km-yakıt raporu
   henüz yok (öneri listesindeki 3. kademe).
 - Harita görünümü Yandex Haritalar'a benzetildi (sıcak bej zemin, doygun mavi
-  su, sarı ana yollar; gece modunda lacivert arduvaz). Karoların kendisi yine
-  OpenStreetMap/OpenFreeMap'ten geliyor: Yandex'in karo sunucusu üçüncü parti
-  harita kütüphanelerinde kullanılamıyor. Palet `src/lib/harita-stili.ts`
-  içinde tek yerde duruyor.
-- OpenFreeMap'te trafik katmanı ve Street View yoktur. Bunlar gerekiyorsa
-  `NEXT_PUBLIC_HARITA_STILI` değiştirilip harita sağlayıcısı Google/Mapbox'a
-  taşınabilir; uygulama içindeki harita kodu tek dosyada (`src/bilesenler/Harita.tsx`).
+  su, sarı ana yollar; gece modunda lacivert arduvaz). Palet
+  `src/lib/harita-stili.ts` içinde tek yerde duruyor; hem Google karolarının
+  stil kuralları hem yedek OpenFreeMap stilinin boyaması oradan türetiliyor.
+- Google karoları raster (düz resim) olduğu için harita eğildiğinde ya da
+  döndürüldüğünde sokak adları da karoyla birlikte eğilir/döner; vektör
+  stilde yazılar hep dik dururdu. Trafik katmanı ve Street View, Map Tiles
+  API'nin 2B karolarında yok.
+- Yedek OpenFreeMap stilinde açılışta 3 adet "Expected value to be of type
+  number, but found null instead" uyarısı çıkıyor. Sebebi stilin kendi 3B
+  bina katmanı: ilk karolar biz katmanı düzeltmeden ayrıştırılıyor.
+  Zararsız — sonraki karolar düzeltilmiş ifadeyi kullanıyor. Google modunda
+  bina katmanı baştan düzeltilmiş ifadeyle kurulduğu için uyarı yok.
 - Sesli tarif tarayıcının `speechSynthesis` desteğine bağlıdır. Cihazda
   Türkçe ses paketi yoksa sistem varsayılanı okur; hiç destek yoksa sessiz
   kalır, uygulama çalışmaya devam eder.
-- Haritada açılışta 3 adet "Expected value to be of type number, but found
-  null instead" uyarısı çıkıyor. Sebebi stilin kendi 3B bina katmanı: ilk
-  karolar biz katmanı düzeltmeden ayrıştırılıyor. Zararsız — sonraki karolar
-  düzeltilmiş ifadeyi kullanıyor. Stili haritaya nesne olarak verip önceden
-  düzeltmek denendi ama MapLibre o yolda `styledata` olayını biz dinlemeden
-  geçiriyor ve katmanlar hiç kurulmuyor; o yüzden uyarılarla yaşıyoruz.
 - Supabase'de "Leaked password protection" kapalı — Dashboard → Authentication
   → Policies bölümünden açmanız önerilir.

@@ -27,6 +27,15 @@ import {
 import { MARKET, acilisDakikasi, marketAcikMi } from "../src/lib/market.ts";
 import { kayitTutari, yontemKodu } from "../src/lib/veri.ts";
 import { csvAyristir, dosyayiCoz, satirlariCikar } from "../src/lib/toplu.ts";
+import {
+  GoogleOturumHatasi,
+  googleHataMetni,
+  googleStilKurallari,
+  googleTemelStili,
+  karoAdresi,
+  oturumGecerliMi,
+} from "../src/lib/google-karo.ts";
+import { PALETLER } from "../src/lib/harita-stili.ts";
 
 let gecti = 0;
 const kaldi: string[] = [];
@@ -251,6 +260,50 @@ const yanlisBaslik = satirlariCikar(csvAyristir("Foo;Bar\n1;2"));
 bekle("başlıksız dosya reddedildi", yanlisBaslik.tamam === false);
 const bozuk = await dosyayiCoz("x.xlsx", Buffer.from("bu excel degil"));
 bekle("bozuk xlsx reddedildi", bozuk.tamam === false);
+
+/* ------------------------------------------------------------------ */
+bolum("Google karoları");
+
+const kurallar = googleStilKurallari(PALETLER.aydinlik);
+bekle("stil kuralları dolu", kurallar.length > 10, `-> ${kurallar.length}`);
+bekle(
+  "su rengi paletten",
+  kurallar.some(
+    (k) =>
+      k.featureType === "water" &&
+      k.elementType === "geometry" &&
+      k.stylers.some((s) => s.color === PALETLER.aydinlik.su),
+  ),
+);
+bekle(
+  "kuralda boş değer yok",
+  kurallar.every((k) =>
+    k.stylers.every((s) => Object.values(s).every((v) => v !== undefined && v !== "")),
+  ),
+);
+bekle(
+  "gece stili farklı",
+  JSON.stringify(googleStilKurallari(PALETLER.karanlik)) !== JSON.stringify(kurallar),
+);
+bekle(
+  "karo adresi kodlanıyor",
+  karoAdresi("abc def", "k/1") ===
+    "https://tile.googleapis.com/v1/2dtiles/{z}/{x}/{y}?session=abc%20def&key=k%2F1",
+  `-> ${karoAdresi("abc def", "k/1")}`,
+);
+bekle("oturum geçerli", oturumGecerliMi({ session: "x", expiry: 1000 + 3600 }, 1000));
+bekle("süresi dolmak üzere olan oturum geçersiz", !oturumGecerliMi({ session: "x", expiry: 1000 + 60 }, 1000));
+bekle("boş oturum geçersiz", !oturumGecerliMi(null, 1000) && !oturumGecerliMi({ session: "", expiry: 9e9 }, 1000));
+bekle("expiry metin ise geçersiz", !oturumGecerliMi({ session: "x", expiry: "9999999999" }, 1000));
+bekle("403 metni anahtarı işaret ediyor", googleHataMetni(new GoogleOturumHatasi(403, "x")).includes("403"));
+bekle("ağ hatası metni", googleHataMetni(new TypeError("fetch")).includes("ulaşılamadı"));
+
+const temel = googleTemelStili("karanlik", "https://ornek/planet", "https://kurye.ornek");
+bekle("temel stil zeminle başlıyor", temel.layers[0]?.id === "zemin" && temel.layers[0]?.type === "background");
+bekle("temel stil bina katmanı", temel.layers.some((k) => k.id === "bina-3b" && k.type === "fill-extrusion"));
+bekle("glyph adresi kendi sunucumuz", temel.glyphs === "https://kurye.ornek/maplibre/fonts/{fontstack}/{range}.pbf");
+const binasiz = googleTemelStili("aydinlik", "", "https://kurye.ornek");
+bekle("bina kaynağı boşsa katman yok", !binasiz.layers.some((k) => k.id === "bina-3b") && Object.keys(binasiz.sources).length === 0);
 
 /* ------------------------------------------------------------------ */
 console.log(`\n${"=".repeat(52)}`);

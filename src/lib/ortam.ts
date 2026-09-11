@@ -61,11 +61,40 @@ export const OSRM_SUNUCU = ortamMetni(
   "https://router.project-osrm.org",
 );
 
-/** Harita stilinin adresi. */
+/**
+ * Google Map Tiles API anahtarı. Karolar tarayıcıdan doğrudan Google'a
+ * istendiği için anahtar istemciye gidiyor; Google Cloud tarafında HTTP
+ * yönlendiren (alan adı) ve "Map Tiles API" kısıtı konulmalı. Boşsa harita
+ * `HARITA_STILI` ile OpenFreeMap'e düşer — geliştirme ortamı anahtarsız da
+ * çalışsın diye.
+ */
+export const GOOGLE_HARITA_ANAHTARI = (() => {
+  const temiz = process.env.NEXT_PUBLIC_GOOGLE_HARITA_ANAHTARI?.trim();
+  if (temiz) return temiz;
+  if (process.env.NODE_ENV !== "production") {
+    console.warn(
+      "[ortam] NEXT_PUBLIC_GOOGLE_HARITA_ANAHTARI boş, harita OpenFreeMap stiline düşüyor.",
+    );
+  }
+  return "";
+})();
+
+/** Google anahtarı yokken kullanılan yedek harita stilinin adresi. */
 export const HARITA_STILI = ortamMetni(
   "NEXT_PUBLIC_HARITA_STILI",
   process.env.NEXT_PUBLIC_HARITA_STILI,
   "https://tiles.openfreemap.org/styles/liberty",
+);
+
+/**
+ * 3B bina katmanını besleyen vektör karo kaynağı (TileJSON adresi). Google
+ * 2B karoları düz resim olduğu için bina yükseklikleri buradan geliyor;
+ * boş bırakılırsa 3B bina katmanı hiç kurulmaz.
+ */
+export const BINA_KARO_KAYNAGI = ortamMetni(
+  "NEXT_PUBLIC_BINA_KARO_KAYNAGI",
+  process.env.NEXT_PUBLIC_BINA_KARO_KAYNAGI,
+  "https://tiles.openfreemap.org/planet",
 );
 
 /** Haritanın açılış konumu — market çevresi. */

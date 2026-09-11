@@ -19,6 +19,16 @@ import { createPortal } from "react-dom";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 import {
+  BINA_ATIFI,
+  GoogleAtifi,
+  googleHataMetni,
+  googleKatmaniEkle,
+  googleKatmaniGoster,
+  googleOturumuAc,
+  googleTemelStili,
+  oturumuUnut,
+} from "@/lib/google-karo";
+import {
   markaStiliUygula,
   ucBoyutluBinalarEkle,
   ucBoyutluBinalariGoster,
@@ -26,7 +36,12 @@ import {
 import { haritaDurumRengi } from "@/lib/bicim";
 import type { Tema } from "@/lib/harita-stili";
 import { MARKET } from "@/lib/market";
-import { HARITA_STILI, MERKEZ } from "@/lib/ortam";
+import {
+  BINA_KARO_KAYNAGI,
+  GOOGLE_HARITA_ANAHTARI,
+  HARITA_STILI,
+  MERKEZ,
+} from "@/lib/ortam";
 import type { RotaSecenegi } from "@/lib/navigasyon";
 import type {
   Nokta,
@@ -100,6 +115,28 @@ type Props = {
  * ailesinden geldiği için "ben neredeyim" bir bakışta ayrılsın.
  */
 const KURYE_RENGI = "#4ade80";
+
+/**
+ * Anahtar varsa zemin Google Map Tiles API'den geliyor; yoksa OpenFreeMap
+ * vektör stiline düşülüyor. Pinler, rota, kümeler ve öteki katmanlar iki
+ * durumda da aynı MapLibre katmanları — değişen yalnızca altlık.
+ */
+const GOOGLE_MODU = GOOGLE_HARITA_ANAHTARI !== "";
+
+/** Stil ayrıştırılana kadar bekler; katman eklemek ondan önce hata veriyor. */
+function stilHazirOlunca(harita: MapLibreMap) {
+  return new Promise<void>((coz) => {
+    if (harita.getStyle()?.layers) return coz();
+    harita.once("styledata", () => coz());
+  });
+}
+
+/** Açılış stili: Google modunda yerel temel stil, değilse yedek stil adresi. */
+function acilisStili(tema: Tema) {
+  return GOOGLE_MODU
+    ? googleTemelStili(tema, BINA_KARO_KAYNAGI, window.location.origin)
+    : HARITA_STILI;
+}
 
 const BOS_GEOJSON = {
   type: "FeatureCollection" as const,
@@ -799,6 +836,43 @@ export default function Harita({
   const uzunRef = useRef(onUzunBasis);
   const temaRef = useRef<Tema>(katmanlar.karanlik ? "karanlik" : "aydinlik");
   const onKullaniciHareketiRef = useRef(onKullaniciHareketi);
+  /** Google oturumu açılamayınca gösterilen sebep. */
+  const [googleHatasi, setGoogleHatasi] = useState<string | null>(null);
+  const atifRef = useRef<GoogleAtifi | null>(null);
+  // Karo isteği reddedilince (yanlış alan adı kısıtı gibi) uyarı bir kez çıksın.
+  const googleKaroHatasiRef = useRef(false);
+  /**
+   * Google karolarını geçerli temaya göre kurar: oturumu (önbellekten ya da
+   * ağdan) alır, kaynak ve katmanı ekler, öteki temanın karolarını gizler.
+   * Oturum açılamazsa harita pinleriyle çalışmaya devam eder; kullanıcıya
+   * sebep ve "yeniden dene" gösterilir. Efektler bunu ref üzerinden
+   * çağırıyor: durum güncellemeleri hep ağ yanıtından sonra geliyor.
+   */
+  const googleKarolariYukle = async (yenile = false) => {
+    const harita = haritaRef.current;
+    if (!harita || !GOOGLE_MODU) return;
+    const tema = temaRef.current;
+    try {
+      const oturum = await googleOturumuAc(GOOGLE_HARITA_ANAHTARI, tema, {
+        yenile,
+      });
+      if (haritaRef.current !== harita) return;
+      await stilHazirOlunca(harita);
+      if (haritaRef.current !== harita) return;
+      googleKatmaniEkle(harita, tema, oturum, GOOGLE_HARITA_ANAHTARI);
+      // Bu arada tema değişmiş olabilir; görünen hep güncel tema olsun.
+      googleKatmaniGoster(harita, temaRef.current);
+      atifRef.current?.oturumAyarla(oturum);
+      setGoogleHatasi(null);
+      setYuklenemedi(false);
+    } catch (hata) {
+      console.error("[harita] Google karoları kurulamadı", hata);
+      if (haritaRef.current !== harita) return;
+      setGoogleHatasi(googleHataMetni(hata));
+      setYuklenemedi(true);
+    }
+  };
+  const googleYukleRef = useRef(googleKarolariYukle);
   useEffect(() => {
     secimRef.current = onSecim;
     tiklamaRef.current = onHaritaTikla;
@@ -807,6 +881,7 @@ export default function Harita({
     abonelikRef.current = onAbonelikSecim;
     sepetRef.current = onSepetSecim;
     uzunRef.current = onUzunBasis;
+    googleYukleRef.current = googleKarolariYukle;
   });
 
   /* ---------------- Haritayı kur ---------------- */
@@ -820,15 +895,15 @@ export default function Harita({
 
       const harita = new MapLibre({
         container: kapsayiciRef.current,
-        // Stil nesne olarak verilirse MapLibre onu kurucu içinde işliyor ve
-        // `styledata` biz dinlemeye başlamadan geçiyor; katmanlar hiç
-        // kurulmuyor. Bu yüzden adres olarak veriliyor.
-        style: HARITA_STILI,
+        // Google modunda stil yerel bir nesne: MapLibre 5 nesne stili bir
+        // sonraki karede ayrıştırıyor, `styledata` dinleyicimiz yetişiyor.
+        style: acilisStili(temaRef.current),
         center: [MERKEZ.lng, MERKEZ.lat],
         zoom: MERKEZ.zoom,
         pitch: 45,
         bearing: -12,
-        attributionControl: { compact: true },
+        // Google modunda atıf ve logo kendi denetimimizden geliyor.
+        attributionControl: GOOGLE_MODU ? false : { compact: true },
         dragRotate: true,
         pitchWithRotate: true,
         maxPitch: 75,
@@ -845,9 +920,25 @@ export default function Harita({
       // Hata kaydı üretimde de açık: stil ya da karo sunucusuna
       // ulaşılamadığında ekran sessizce boş kalmasın, konsolda sebebi olsun.
       (window as unknown as { __harita?: MapLibreMap }).__harita = harita;
-      harita.on("error", (e) =>
-        console.error("[harita]", e.error?.message ?? e),
-      );
+      harita.on("error", (e) => {
+        console.error("[harita]", e.error?.message ?? e);
+        // Google karosu 401/403 dönüyorsa anahtar bu alan adına izinli
+        // değil ya da oturum düşmüş: sessiz boş harita yerine sebebi söyle.
+        const hata = e.error as { status?: number; url?: string } | undefined;
+        if (
+          GOOGLE_MODU &&
+          !googleKaroHatasiRef.current &&
+          hata?.url?.includes("tile.googleapis.com") &&
+          (hata.status === 401 || hata.status === 403)
+        ) {
+          googleKaroHatasiRef.current = true;
+          oturumuUnut(temaRef.current);
+          setGoogleHatasi(
+            `Google karoları reddedildi (HTTP ${hata.status}). Anahtarın bu alan adına izinli olduğundan emin olun.`,
+          );
+          setYuklenemedi(true);
+        }
+      });
 
       for (const olay of ["dragstart", "zoomstart", "rotatestart"] as const) {
         harita.on(olay, (e: { originalEvent?: unknown }) => {
@@ -894,6 +985,17 @@ export default function Harita({
         onHazir?.();
       };
       harita.on("styledata", kur);
+      // Olay çoktan geçmişse (ör. önbellekten anında gelen stil) elle dene.
+      kur();
+
+      if (GOOGLE_MODU) {
+        const atif = new GoogleAtifi(GOOGLE_HARITA_ANAHTARI);
+        atifRef.current = atif;
+        // Alt panel haritanın alt kenarını her durumda örtüyor; logo üst
+        // çubuğun altında, sağdaki pusulayla aynı hizada duruyor.
+        harita.addControl(atif, "top-left");
+        void googleYukleRef.current();
+      }
 
       // Stil inmezse MapLibre hiçbir katman kuramaz ve ekran bomboş kalır;
       // sebebi ağ engeli de olabilir, sunucu arızası da. Belirli bir süre
@@ -909,6 +1011,7 @@ export default function Harita({
         kuryeHarfRef.current?.remove();
         kuryeHarfRef.current = null;
         kuryeOlusuyorRef.current = false;
+        atifRef.current = null;
         harita.remove();
         haritaRef.current = null;
         hazirRef.current = false;
@@ -1066,6 +1169,8 @@ export default function Harita({
     if (!harita || !hazirRef.current) return;
 
     markaStiliUygula(harita, tema);
+    // Google zemini tema başına ayrı oturum/karo; gerekiyorsa açıp değiştir.
+    if (GOOGLE_MODU) void googleYukleRef.current();
 
     // Kendi katmanlarımızın kontrastını da çevir.
     const karanlik = tema === "karanlik";
@@ -1139,6 +1244,10 @@ export default function Harita({
     gorunur("sepet-cekirdek", katmanlar.sepetler);
     gorunur("yogunluk-katmani", katmanlar.isiHaritasi);
     ucBoyutluBinalariGoster(harita, katmanlar.ucBoyut);
+    // Bina verisi OpenStreetMap'ten; katman açıkken atfı da görünsün.
+    atifRef.current?.ekAtifAyarla(
+      katmanlar.ucBoyut && harita.getLayer("bina-3b") ? BINA_ATIFI : "",
+    );
   }, [hazir, katmanlar]);
 
   /* ---------------- Kurye imleci ---------------- */
@@ -1364,13 +1473,25 @@ export default function Harita({
     const harita = haritaRef.current;
     if (!harita) return;
     setYuklenemedi(false);
+    setGoogleHatasi(null);
+    googleKaroHatasiRef.current = false;
+    // Temel stil kurulduysa yalnızca Google oturumunu tazelemek yeter.
+    if (GOOGLE_MODU && hazirRef.current) {
+      oturumuUnut(temaRef.current);
+      void googleKarolariYukle(true);
+      return;
+    }
     hazirRef.current = false;
     setHazir(false);
-    harita.setStyle(HARITA_STILI);
+    harita.setStyle(acilisStili(temaRef.current));
     if (sayacRef.current) window.clearTimeout(sayacRef.current);
     sayacRef.current = window.setTimeout(() => {
       if (!hazirRef.current) setYuklenemedi(true);
     }, 8000);
+    if (GOOGLE_MODU) {
+      oturumuUnut(temaRef.current);
+      void googleKarolariYukle(true);
+    }
   }
 
   return (
@@ -1396,8 +1517,8 @@ export default function Harita({
           <div className="pointer-events-auto max-w-sm rounded-[22px] border border-cizgi bg-yuzey p-5 text-center shadow-lg">
             <p className="text-[15px] font-black">Harita yüklenemedi</p>
             <p className="mt-1 text-[13px] text-gri">
-              Harita sunucusuna ulaşılamıyor. Teslimat listesi çalışmaya devam
-              ediyor; bağlantını kontrol edip yeniden deneyebilirsin.
+              {googleHatasi ??
+                "Harita sunucusuna ulaşılamıyor. Teslimat listesi çalışmaya devam ediyor; bağlantını kontrol edip yeniden deneyebilirsin."}
             </p>
             <button
               onClick={stiliYenidenYukle}

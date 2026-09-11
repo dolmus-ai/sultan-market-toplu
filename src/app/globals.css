@@ -201,6 +201,36 @@ body {
   outline: none;
 }
 
+/* Google zemini: logo + görünen bölgenin telif metni (kullanım şartı).
+   Üst çubuğun altında, sağdaki harita düğmeleriyle aynı hizada. */
+.google-atif {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: calc(env(safe-area-inset-top) + 96px) 0 0 12px !important;
+  padding: 3px 9px 3px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--cam-zemin) 76%, transparent);
+  backdrop-filter: blur(8px);
+  font: 600 10px/1.2 ui-sans-serif, system-ui, sans-serif;
+  color: var(--color-gri);
+  white-space: nowrap;
+  /* Sağdaki pusula/düğme sütununa girmesin; uzun telif metni kısalsın. */
+  max-width: calc(100vw - 92px);
+  pointer-events: none;
+}
+.google-atif-yazi {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.google-atif-logo {
+  flex: none;
+  display: block;
+  height: 14px;
+  width: auto;
+}
+
 /* Konum imleci ve pinler tıklanabilir olsun */
 .maplibregl-marker {
   cursor: pointer;

@@ -174,10 +174,15 @@ function guvenliBosluk(
 /** Marketi haritaya sabit bir işaretçi olarak koyar. */
 async function marketiIsaretle(harita: MapLibreMap) {
   const { Marker } = await import("maplibre-gl");
+  // İşaretçinin kutusu tam olarak simge kadar (36x36) ve `anchor: "center"`
+  // ile ortalanıyor; böylece simgenin merkezi marketin gerçek koordinatına
+  // oturuyor. Etiket akıştan çıkarılıp altına asılıyor — kutunun boyuna
+  // katılsaydı MapLibre kutunun altını noktaya hizalar ve simge, yakınlık
+  // azaldıkça büyüyen bir payla kuzeye kayardı (z14'te ~250 m).
   const kutu = document.createElement("div");
-  kutu.className = "relative";
+  kutu.style.cssText = "position:relative;width:36px;height:36px";
   kutu.innerHTML = `
-    <div style="display:flex;flex-direction:column;align-items:center;gap:3px">
+    <div style="position:relative;width:36px;height:36px">
       <div style="width:36px;height:36px;border-radius:13px;background:#16212e;
                   display:flex;align-items:center;justify-content:center;
                   box-shadow:0 4px 14px rgba(14,14,17,.4);border:2.5px solid #fff">
@@ -191,11 +196,13 @@ async function marketiIsaretle(harita: MapLibreMap) {
           <circle cx="43.5" cy="55" r="4.8" fill="#e30a17"/>
         </svg>
       </div>
-      <span style="font:800 10px/1 ui-sans-serif,system-ui;color:#0e0e11;
+      <span style="position:absolute;top:calc(100% + 3px);left:50%;
+                   transform:translateX(-50%);
+                   font:800 10px/1 ui-sans-serif,system-ui;color:#0e0e11;
                    background:rgba(255,255,255,.9);padding:3px 7px;border-radius:999px;
                    white-space:nowrap;box-shadow:0 1px 4px rgba(14,14,17,.12)">MARKET</span>
     </div>`;
-  new Marker({ element: kutu, anchor: "bottom" })
+  new Marker({ element: kutu, anchor: "center" })
     .setLngLat([MARKET.nokta.lng, MARKET.nokta.lat])
     .addTo(harita);
 }

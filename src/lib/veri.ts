@@ -567,7 +567,13 @@ export async function adresKonumuYaz(
   if (error) throw error;
 }
 
-export type GeokodSonucu = { lat: number; lng: number; ad: string };
+export type GeokodSonucu = {
+  lat: number;
+  lng: number;
+  ad: string;
+  /** Kapı değil sokak/mahalle düzeyinde bulundu — kurye haritadan düzeltsin. */
+  kaba?: boolean;
+};
 
 /** Adres metnini koordinata çevirir; bulunamazsa null döner. */
 export async function adresiGeokodla(

@@ -160,7 +160,8 @@ export default function KayitEkle({
 
   /* Adresten koordinat arama */
   const [geokod, setGeokod] = useState<
-    { durum: "bos" | "araniyor" | "yok" } | { durum: "bulundu"; ad: string }
+    | { durum: "bos" | "araniyor" | "yok" }
+    | { durum: "bulundu"; ad: string; kaba: boolean }
   >({ durum: "bos" });
 
   /* Müşteri araması — yazarken 250 ms bekliyor. */
@@ -202,14 +203,19 @@ export default function KayitEkle({
   async function konumuAdrestenBul(): Promise<{ lat: number; lng: number } | null> {
     const metin = yeniAdres.adres_metni.trim();
     if (metin.length < 5) return null;
+    // Kapı numarası ayrı kutuya yazıldıysa aramaya kat: sokak ortası yerine
+    // kapıya düşsün. Metinde zaten "No" geçiyorsa ikinci kez ekleme.
+    const bina = yeniAdres.bina.trim();
+    const sorgu =
+      bina && !/\bno\s*[:.]?\s*\d/i.test(metin) ? `${metin} No:${bina}` : metin;
     setGeokod({ durum: "araniyor" });
-    const sonuc = await adresiGeokodla(metin);
+    const sonuc = await adresiGeokodla(sorgu);
     if (!sonuc) {
       setGeokod({ durum: "yok" });
       return null;
     }
     setKonum({ lat: sonuc.lat, lng: sonuc.lng });
-    setGeokod({ durum: "bulundu", ad: sonuc.ad });
+    setGeokod({ durum: "bulundu", ad: sonuc.ad, kaba: !!sonuc.kaba });
     return sonuc;
   }
 
@@ -632,7 +638,9 @@ export default function KayitEkle({
                           exit={{ opacity: 0, height: 0 }}
                           className="mt-2 overflow-hidden rounded-2xl border border-yesil bg-yesil/10 px-3.5 py-2.5 text-[12px] font-bold text-yesil"
                         >
-                          ✓ Konum işaretlendi
+                          {geokod.durum === "bulundu" && geokod.kaba
+                            ? "≈ Yaklaşık konum — kapı bulunamadı, haritadan düzeltin"
+                            : "✓ Konum işaretlendi"}
                           {geokod.durum === "bulundu" && (
                             <span className="mt-0.5 block font-semibold opacity-80">
                               {geokod.ad}

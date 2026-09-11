@@ -52,13 +52,15 @@ ve market konumu gizli değil. Yerelde farklı bir değer denemek isterseniz
 | `NEXT_PUBLIC_GOOGLE_HARITA_ANAHTARI` | Google Map Tiles API anahtarı — harita zemini Google'dan gelir. Boşsa aşağıdaki yedek stil kullanılır (aşağıya bakın) |
 | `NEXT_PUBLIC_HARITA_STILI` | Google anahtarı yokken kullanılan MapLibre stil URL'si (varsayılan OpenFreeMap Liberty) |
 | `NEXT_PUBLIC_BINA_KARO_KAYNAGI` | 3B bina yüksekliklerini veren vektör karo kaynağı (varsayılan OpenFreeMap). Boşsa 3B bina katmanı kurulmaz |
+| `GOOGLE_GEOKOD_ANAHTARI` | Adres çözümleme için **sunucu** anahtarı (Geocoding API). Boşsa harita anahtarı denenir; o da yoksa OpenStreetMap/Nominatim |
 | `NEXT_PUBLIC_MARKET_AD` / `_ADRES` / `_LAT` / `_LNG` | Sultan Market'in konumu — harita başlangıcı, depo pini ve rota çıkış noktası |
 | `NEXT_PUBLIC_MARKET_ACILIS` | Açılış saati (varsayılan `07:30`) — bu saatten önce hiçbir teslimat "gecikti" sayılmaz |
 | `NEXT_PUBLIC_MERKEZ_LAT` / `_LNG` / `_ZOOM` | Kurye konumu alınamazsa haritanın açılacağı yer (varsayılan: market) |
 | `OSRM_SUNUCU` | Gerçek yol ağı rotası. Boşsa her şey yerel hesaplanır (aşağıya bakın) |
 
 **Market konumu:** Arabacıalanı Mah. Orhan Gazi Sk. No:19, 54050 Serdivan/Sakarya
-→ `40.78067, 30.35218`. Harita ve tüm demo adresler Serdivan–Adapazarı
+→ `40.7784889, 30.3518378` (Google Haritalar'daki işletme pini). Harita ve tüm
+demo adresler Serdivan–Adapazarı
 çevresine kuruludur.
 
 ### Google Haritalar zemini
@@ -69,7 +71,7 @@ karanlık mod ve tüm etkileşim aynı MapLibre katmanlarında kaldı — deği�
 yalnızca altlık. Kurulum:
 
 1. Google Cloud Console'da bir proje açın, faturalandırmayı bağlayın ve
-   **Map Tiles API**'yi etkinleştirin.
+   **Map Tiles API** ile **Geocoding API**'yi etkinleştirin.
 2. Bir API anahtarı oluşturun. Anahtar tarayıcıya gittiği için mutlaka
    kısıtlayın: *Uygulama kısıtı* → HTTP yönlendirenler (üretim alan adınız ve
    `localhost`), *API kısıtı* → yalnızca Map Tiles API.
@@ -287,6 +289,22 @@ Kurye ürün listesi görmediği için tutar elle giriliyor; abonelik ve sepette
 kalem varsa tutar yine kalemlerden hesaplanır, yoksa `tutar` alanı kullanılır.
 
 ### Adresin haritada bulunması
+
+Adres çözümleme `/api/geokod` ile sunucuda yapılır. Anahtar varsa **Google
+Geocoding API** kullanılır: Türkiye'de kapı numarasına iner, işletme adlarını
+("Ramada Otel Sakarya") tanır, sonuçlar market çevresine yanlıdır ve il/ilçe
+merkezine düşen kaba sonuçlar reddedilir. Sonuç kapı düzeyinde değilse
+(`kaba: true`) form "Yaklaşık konum — haritadan düzeltin" der. Google yoksa ya
+da cevap vermezse OpenStreetMap/Nominatim'e düşülür; orada kapı numarası
+verisi seyrek olduğu için sokak ortasına pin düşebilir.
+
+Geocoding için ayrı bir **sunucu anahtarı** açın: Google Cloud → Kimlik
+Bilgileri → API anahtarı; *Uygulama kısıtlaması* **Yok** (istek Vercel
+sunucusundan çıkıyor, tarayıcı yönlendireni yok), *API kısıtlaması* yalnızca
+**Geocoding API**. Anahtarı Vercel'de `GOOGLE_GEOKOD_ANAHTARI` olarak
+tanımlayın (başında `NEXT_PUBLIC_` yok; tarayıcıya gitmez). Harita anahtarı
+alan adıyla kısıtlı olduğu için sunucudan çalışmaz; bu yüzden ikinci anahtar
+gerekiyor.
 
 Kayıt haritada ancak adresin `lat`/`lng` alanları doluysa görünür. Adres
 girilirken iki yol var: kapıdayken **Kapıdayım** (kuryenin GPS konumu) ya da

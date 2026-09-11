@@ -124,7 +124,7 @@ bolum("Gecikme ve açılış saati");
 
 bekle("açılış dakikası", acilisDakikasi() === 7 * 60 + 30, `-> ${acilisDakikasi()}`);
 bekle("market adı", MARKET.ad === "Sultan Market");
-bekle("market konumu Sakarya", Math.abs(MARKET.nokta.lat - 40.78067) < 0.001);
+bekle("market konumu Sakarya", Math.abs(MARKET.nokta.lat - 40.7784889) < 0.001 && Math.abs(MARKET.nokta.lng - 30.3518378) < 0.001);
 bekle("market açık mı bool", typeof marketAcikMi() === "boolean");
 
 const bugun = bugununTarihi();

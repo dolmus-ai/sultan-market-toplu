@@ -17,12 +17,12 @@ export const MARKET = {
     lat: ortamSayisi(
       "NEXT_PUBLIC_MARKET_LAT",
       process.env.NEXT_PUBLIC_MARKET_LAT,
-      40.78067,
+      40.7784889,
     ),
     lng: ortamSayisi(
       "NEXT_PUBLIC_MARKET_LNG",
       process.env.NEXT_PUBLIC_MARKET_LNG,
-      30.35218,
+      30.3518378,
     ),
   } as Nokta,
   /** "07:30" — market açılmadan hiçbir teslimat gecikmiş sayılmaz. */

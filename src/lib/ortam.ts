@@ -79,6 +79,15 @@ export const GOOGLE_HARITA_ANAHTARI = (() => {
   return "";
 })();
 
+/**
+ * Adres çözümleme (Google Geocoding API) için sunucu anahtarı. Tarayıcıya
+ * gitmediği için alan adı kısıtı olmayan, yalnızca Geocoding API'ye izinli
+ * ayrı bir anahtar önerilir. Boşsa harita anahtarı denenir; o da yoksa
+ * adresler OpenStreetMap/Nominatim ile aranır.
+ */
+export const GOOGLE_GEOKOD_ANAHTARI =
+  process.env.GOOGLE_GEOKOD_ANAHTARI?.trim() || GOOGLE_HARITA_ANAHTARI;
+
 /** Google anahtarı yokken kullanılan yedek harita stilinin adresi. */
 export const HARITA_STILI = ortamMetni(
   "NEXT_PUBLIC_HARITA_STILI",
@@ -102,12 +111,12 @@ export const MERKEZ = {
   lat: ortamSayisi(
     "NEXT_PUBLIC_MERKEZ_LAT",
     process.env.NEXT_PUBLIC_MERKEZ_LAT,
-    40.78067,
+    40.7784889,
   ),
   lng: ortamSayisi(
     "NEXT_PUBLIC_MERKEZ_LNG",
     process.env.NEXT_PUBLIC_MERKEZ_LNG,
-    30.35218,
+    30.3518378,
   ),
   zoom: ortamSayisi(
     "NEXT_PUBLIC_MERKEZ_ZOOM",

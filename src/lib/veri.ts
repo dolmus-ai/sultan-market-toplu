@@ -573,6 +573,8 @@ export type GeokodSonucu = {
   ad: string;
   /** Kapı değil sokak/mahalle düzeyinde bulundu — kurye haritadan düzeltsin. */
   kaba?: boolean;
+  /** Hangi servis çözdü; "nominatim" ise Google devrede değil demektir. */
+  motor?: "google" | "nominatim";
 };
 
 /** Adres metnini koordinata çevirir; bulunamazsa null döner. */

@@ -161,7 +161,13 @@ export default function KayitEkle({
   /* Adresten koordinat arama */
   const [geokod, setGeokod] = useState<
     | { durum: "bos" | "araniyor" | "yok" }
-    | { durum: "bulundu"; ad: string; kaba: boolean }
+    | {
+        durum: "bulundu";
+        ad: string;
+        kaba: boolean;
+        /** Hangi servis buldu — Google yoksa kapı numarası şaşabilir. */
+        motor?: "google" | "nominatim";
+      }
   >({ durum: "bos" });
 
   /* Müşteri araması — yazarken 250 ms bekliyor. */
@@ -215,7 +221,12 @@ export default function KayitEkle({
       return null;
     }
     setKonum({ lat: sonuc.lat, lng: sonuc.lng });
-    setGeokod({ durum: "bulundu", ad: sonuc.ad, kaba: !!sonuc.kaba });
+    setGeokod({
+      durum: "bulundu",
+      ad: sonuc.ad,
+      kaba: !!sonuc.kaba,
+      motor: sonuc.motor,
+    });
     return sonuc;
   }
 
@@ -636,7 +647,11 @@ export default function KayitEkle({
                           initial={{ opacity: 0, height: 0 }}
                           animate={{ opacity: 1, height: "auto" }}
                           exit={{ opacity: 0, height: 0 }}
-                          className="mt-2 overflow-hidden rounded-2xl border border-yesil bg-yesil/10 px-3.5 py-2.5 text-[12px] font-bold text-yesil"
+                          className={`mt-2 overflow-hidden rounded-2xl border px-3.5 py-2.5 text-[12px] font-bold ${
+                            geokod.durum === "bulundu" && geokod.kaba
+                              ? "border-turuncu bg-turuncu/10 text-turuncu"
+                              : "border-yesil bg-yesil/10 text-yesil"
+                          }`}
                         >
                           {geokod.durum === "bulundu" && geokod.kaba
                             ? "≈ Yaklaşık konum — kapı bulunamadı, haritadan düzeltin"
@@ -646,6 +661,15 @@ export default function KayitEkle({
                               {geokod.ad}
                             </span>
                           )}
+                          {/* Google devrede değilse sebebini söyle: aksi hâlde
+                              yanlış pinin neden çıktığı anlaşılmıyor. */}
+                          {geokod.durum === "bulundu" &&
+                            geokod.motor === "nominatim" && (
+                              <span className="mt-1 block font-semibold opacity-80">
+                                OpenStreetMap ile bulundu — Google adres servisi
+                                devrede değil, kapı numarası şaşabilir.
+                              </span>
+                            )}
                         </motion.p>
                       )}
                       {!konum && geokod.durum === "yok" && (

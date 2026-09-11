@@ -62,33 +62,40 @@ export const OSRM_SUNUCU = ortamMetni(
 );
 
 /**
- * Google Map Tiles API anahtarı. Karolar tarayıcıdan doğrudan Google'a
- * istendiği için anahtar istemciye gidiyor; Google Cloud tarafında HTTP
- * yönlendiren (alan adı) ve "Map Tiles API" kısıtı konulmalı. Boşsa harita
- * `HARITA_STILI` ile OpenFreeMap'e düşer — geliştirme ortamı anahtarsız da
- * çalışsın diye.
+ * Google Map Tiles API anahtarı — **isteğe bağlı, varsayılan olarak kapalı.**
+ *
+ * Harita zemini OpenFreeMap vektör karolarıyla çiziliyor: ücretsiz, sınırsız
+ * ve anahtarsız. Google karoları karo başına faturalanıyor ve her kaydırma
+ * onlarca karo istediği için aylık ücretsiz hakkı hızla tüketiyor; kazanç ise
+ * yalnızca zeminin görünümü, adres doğruluğuyla ilgisi yok. Bu yüzden boş
+ * bırakılıyor. Doldurulursa zemin Google karolarına geçer; o durumda Google
+ * Cloud tarafında HTTP yönlendiren (alan adı) ve "Map Tiles API" kısıtı
+ * konulmalı, çünkü anahtar istemciye gidiyor.
  */
-export const GOOGLE_HARITA_ANAHTARI = (() => {
-  const temiz = process.env.NEXT_PUBLIC_GOOGLE_HARITA_ANAHTARI?.trim();
+export const GOOGLE_HARITA_ANAHTARI =
+  process.env.NEXT_PUBLIC_GOOGLE_HARITA_ANAHTARI?.trim() ?? "";
+
+/**
+ * Adres çözümleme (Google Geocoding API) için **sunucu** anahtarı.
+ *
+ * Harita anahtarından bilerek ayrı: bu istek Vercel sunucusundan çıkıyor,
+ * tarayıcı yönlendireni yok. Google Cloud'da uygulama kısıtlaması "Yok",
+ * API kısıtlaması yalnızca Geocoding API olmalı. Boşsa adresler
+ * OpenStreetMap/Nominatim ile aranır; orada kapı numarası verisi seyrek
+ * olduğu için pin sokak ortasına düşebilir.
+ */
+export const GOOGLE_GEOKOD_ANAHTARI = (() => {
+  const temiz = process.env.GOOGLE_GEOKOD_ANAHTARI?.trim();
   if (temiz) return temiz;
   if (process.env.NODE_ENV !== "production") {
     console.warn(
-      "[ortam] NEXT_PUBLIC_GOOGLE_HARITA_ANAHTARI boş, harita OpenFreeMap stiline düşüyor.",
+      "[ortam] GOOGLE_GEOKOD_ANAHTARI boş, adresler Nominatim ile aranacak.",
     );
   }
   return "";
 })();
 
-/**
- * Adres çözümleme (Google Geocoding API) için sunucu anahtarı. Tarayıcıya
- * gitmediği için alan adı kısıtı olmayan, yalnızca Geocoding API'ye izinli
- * ayrı bir anahtar önerilir. Boşsa harita anahtarı denenir; o da yoksa
- * adresler OpenStreetMap/Nominatim ile aranır.
- */
-export const GOOGLE_GEOKOD_ANAHTARI =
-  process.env.GOOGLE_GEOKOD_ANAHTARI?.trim() || GOOGLE_HARITA_ANAHTARI;
-
-/** Google anahtarı yokken kullanılan yedek harita stilinin adresi. */
+/** Harita zemininin stil adresi (varsayılan: OpenFreeMap Liberty). */
 export const HARITA_STILI = ortamMetni(
   "NEXT_PUBLIC_HARITA_STILI",
   process.env.NEXT_PUBLIC_HARITA_STILI,

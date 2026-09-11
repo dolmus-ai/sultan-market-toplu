@@ -5,8 +5,9 @@ müşterilerin açık sepetlerini tek haritada görür, toplu siparişlerde en k
 yolu hesaplatır ve teslimat durumlarını sahadan günceller.
 
 - **Next.js 16** (App Router, Turbopack) · **React 19** · **Tailwind v4**
-- **MapLibre GL 5** + **Google Map Tiles API** zemin karoları (anahtar yoksa
-  OpenFreeMap vektör stiline düşer)
+- **MapLibre GL 5** + **OpenFreeMap** vektör karolar — ücretsiz, sınırsız,
+  anahtarsız (Google Map Tiles'a geçiş tek değişkenle açılabilir, bkz. aşağısı)
+- **Google Geocoding API** ile adres çözümleme — kapı numarasına kadar
 - **Supabase** (`sultan-market` projesi) — auth, veri, realtime
 - **motion** ile geçişler
 
@@ -49,10 +50,10 @@ ve market konumu gizli değil. Yerelde farklı bir değer denemek isterseniz
 | --- | --- |
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase proje adresi |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Publishable key |
-| `NEXT_PUBLIC_GOOGLE_HARITA_ANAHTARI` | Google Map Tiles API anahtarı — harita zemini Google'dan gelir. Boşsa aşağıdaki yedek stil kullanılır (aşağıya bakın) |
-| `NEXT_PUBLIC_HARITA_STILI` | Google anahtarı yokken kullanılan MapLibre stil URL'si (varsayılan OpenFreeMap Liberty) |
-| `NEXT_PUBLIC_BINA_KARO_KAYNAGI` | 3B bina yüksekliklerini veren vektör karo kaynağı (varsayılan OpenFreeMap). Boşsa 3B bina katmanı kurulmaz |
-| `GOOGLE_GEOKOD_ANAHTARI` | Adres çözümleme için **sunucu** anahtarı (Geocoding API). Boşsa harita anahtarı denenir; o da yoksa OpenStreetMap/Nominatim |
+| `GOOGLE_GEOKOD_ANAHTARI` | **Adres çözümleme için sunucu anahtarı** (Geocoding API). Tarayıcıya gitmez. Boşsa adresler OpenStreetMap/Nominatim ile aranır ve kapı numarası şaşabilir |
+| `NEXT_PUBLIC_HARITA_STILI` | Harita zemininin MapLibre stil URL'si (varsayılan OpenFreeMap Liberty) |
+| `NEXT_PUBLIC_GOOGLE_HARITA_ANAHTARI` | İsteğe bağlı, **varsayılan boş**. Doldurulursa zemin Google Map Tiles'a geçer (aşağıya bakın) |
+| `NEXT_PUBLIC_BINA_KARO_KAYNAGI` | Google zemini açıkken 3B bina yüksekliklerini veren vektör karo kaynağı (varsayılan OpenFreeMap) |
 | `NEXT_PUBLIC_MARKET_AD` / `_ADRES` / `_LAT` / `_LNG` | Sultan Market'in konumu — harita başlangıcı, depo pini ve rota çıkış noktası |
 | `NEXT_PUBLIC_MARKET_ACILIS` | Açılış saati (varsayılan `07:30`) — bu saatten önce hiçbir teslimat "gecikti" sayılmaz |
 | `NEXT_PUBLIC_MERKEZ_LAT` / `_LNG` / `_ZOOM` | Kurye konumu alınamazsa haritanın açılacağı yer (varsayılan: market) |
@@ -63,51 +64,83 @@ ve market konumu gizli değil. Yerelde farklı bir değer denemek isterseniz
 demo adresler Serdivan–Adapazarı
 çevresine kuruludur.
 
-### Google Haritalar zemini
+### Adres çözümleme ve harita zemini
 
-Harita motoru MapLibre; zemin karoları **Google Map Tiles API**'den (2B yol
-haritası) geliyor. Pinler, kümeler, rota şeridi, ısı haritası, 3B binalar,
-karanlık mod ve tüm etkileşim aynı MapLibre katmanlarında kaldı — değişen
-yalnızca altlık. Kurulum:
+İki ayrı iş, iki ayrı karar:
 
-1. Google Cloud Console'da bir proje açın, faturalandırmayı bağlayın ve
-   **Map Tiles API** ile **Geocoding API**'yi etkinleştirin.
-2. Bir API anahtarı oluşturun. Anahtar tarayıcıya gittiği için mutlaka
-   kısıtlayın: *Uygulama kısıtı* → HTTP yönlendirenler (üretim alan adınız ve
-   `localhost`), *API kısıtı* → yalnızca Map Tiles API.
-3. Anahtarı `NEXT_PUBLIC_GOOGLE_HARITA_ANAHTARI` olarak Vercel'e (ve yerelde
-   `.env.local`'a) yazın. `NEXT_PUBLIC_` değişkenleri derleme anında
-   gömülür; anahtarı değiştirince yeniden dağıtım gerekir.
+**Zemin (harita görüntüsü) OpenFreeMap'te.** Ücretsiz, sınırsız, anahtar
+istemiyor. Palet `src/lib/harita-stili.ts` içinde tek yerde duruyor ve
+Yandex'in sıcak bej gündüz / lacivert gece görünümüne yaklaştırılmış.
 
-Nasıl çalışıyor (`src/lib/google-karo.ts`):
+**Adres çözümleme Google'da.** Türkiye'de OpenStreetMap'in kapı numarası
+verisi seyrek; elle yazılan bir adres sokağın ortasına düşüyor ve kurye
+yanlış yere gidiyor. Google Geocoding kapı numarasına iniyor, işletme adını
+("Ramada Otel Sakarya") da tanıyor.
 
-- Google karoları iki adımlı: önce `createSession` ile harita türü, dil
-  (`tr-TR`), bölge, 2x çözünürlük ve **stil kuralları** verilerek bir oturum
-  açılıyor; karolar o oturum jetonuyla isteniyor. Oturum ~2 hafta geçerli ve
-  `localStorage`'da saklanıyor.
-- Gündüz/gece paleti `src/lib/harita-stili.ts` içindeki aynı tablodan
-  Google'ın stil diline çevriliyor; tema başına ayrı oturum açılıyor, tema
-  değişince yalnızca görünür karo katmanı değişiyor.
-- Google karoları düz resim olduğu için 3B bina yükseklikleri ayrı bir
-  vektör kaynaktan (`NEXT_PUBLIC_BINA_KARO_KAYNAGI`, OpenStreetMap verisi)
-  alınıp Google zemininin üstüne çiziliyor. Yazı tipleri (küme sayıları,
-  sıra numaraları, müşteri adları) `public/maplibre/fonts/` altından, kendi
-  sunucumuzdan geliyor.
-- Google'ın kullanım şartı gereği haritada Google logosu ve görünen
-  bölgenin telif metni duruyor (üst çubuğun altında, sol tarafta — alt
-  paneli her durumda alt kenarı örttüğü için); metin her harita hareketinde `viewport`
-  ucundan yenileniyor.
-- Oturum açılamazsa (anahtar yok, API kapalı, alan adı izinsiz) harita
-  pinleriyle çalışmaya devam eder ve sebebi yazan bir "Yeniden dene" kartı
-  çıkar. Anahtar hiç tanımlı değilse uygulama OpenFreeMap stiline düşer.
-- Maliyet: Google karo başına ücretlendiriyor; eğik (3B) görünüm düz
-  görünümden daha çok karo yükler.
+Kurulum — tek anahtar yeter:
 
-```bash
-npm run dev
-```
+1. Google Cloud Console'da bir proje açın, faturalandırmayı bağlayın,
+   **Geocoding API**'yi etkinleştirin.
+2. API anahtarı oluşturun. Bu anahtar Vercel **sunucusundan** kullanılıyor,
+   tarayıcıya gitmiyor: *Uygulama kısıtlaması* → **Yok**, *API kısıtlaması* →
+   yalnızca **Geocoding API**.
+3. Vercel'de `GOOGLE_GEOKOD_ANAHTARI` olarak tanımlayın (yerelde
+   `.env.local`). Başında `NEXT_PUBLIC_` **yok**; olsaydı anahtar istemciye
+   gömülürdü.
 
----
+Maliyet: Geocoding ayda 10.000 isteğe kadar ücretsiz, sonrası 1.000 istek
+başına 5 dolar. Çağrı yalnızca **yeni** bir adres eklenirken çıkıyor; kayıtlı
+müşterinin koordinatı veritabanında duruyor. Ayrıca hem istemcide hem
+sunucuda aynı metin için önbellek var, tekrar eden aramalar isteğe dönüşmüyor.
+Yine de Google Cloud'da bir bütçe uyarısı ve günlük kota tavanı kurmanız
+önerilir.
+
+Nasıl çalışıyor (`src/app/api/geokod/route.ts`):
+
+- Önce ham adres metni Google'a soruluyor; tutmazsa `src/lib/adres.ts`
+  kapı/daire/kat gibi parçaları ayıklayıp giderek genelleşen adaylar
+  üretiyor, ilk tutan kazanıyor.
+- Sonuçlar market çevresine yanlı (`bounds`), ülke `TR` ile kısıtlı ve
+  marketten 80 km'den uzak sonuçlar reddediliyor — başka ildeki aynı adlı
+  sokak seçilmesin diye.
+- İl/ilçe merkezine düşen kaba sonuçlar hiç kabul edilmiyor: konum
+  olmamasından beter, kurye kilometrelerce öteye gider.
+- Sonuç kapı düzeyinde değilse `kaba: true` dönüyor ve form "≈ Yaklaşık
+  konum — haritadan düzeltin" diyor.
+- Anahtar yoksa ya da Google reddederse OpenStreetMap/Nominatim'e düşülüyor.
+  O durumda form "OpenStreetMap ile bulundu — Google adres servisi devrede
+  değil" satırını gösteriyor, böylece yanlış pinin sebebi görünür oluyor.
+
+### İsteğe bağlı: zemini Google karolarına almak
+
+Kod hazır (`src/lib/google-karo.ts`) ama **varsayılan olarak kapalı**.
+`NEXT_PUBLIC_GOOGLE_HARITA_ANAHTARI` doldurulursa zemin Google Map Tiles
+API'ye geçer; boşsa OpenFreeMap kullanılır. Kod değişikliği gerekmiyor,
+beğenilmezse değişken silinip geri dönülüyor.
+
+Neden varsayılan kapalı: Map Tiles karo **başına** faturalanıyor ve bir ekran
+dolusu harita ~23 karo istiyor. Aylık 100.000 ücretsiz hak kabaca 4.300 kamera
+hareketine denk; üç kuryenin yoğun kullanımı bu sınırın kenarında geziniyor.
+Karşılığında alınan tek şey zeminin görünümü, adres doğruluğuyla ilgisi yok.
+
+Açılırsa neler oluyor:
+
+- Karolar iki adımlı: `createSession` ile harita türü, dil (`tr-TR`), bölge,
+  2x çözünürlük ve **stil kuralları** verilip oturum açılıyor; karolar o
+  oturum jetonuyla isteniyor. Oturum ~2 hafta geçerli, `localStorage`'da.
+- Gündüz/gece paleti aynı `harita-stili.ts` tablosundan Google'ın stil diline
+  çevriliyor; tema başına ayrı oturum açılıyor.
+- Google karoları düz resim olduğu için 3B bina yükseklikleri ayrı bir vektör
+  kaynaktan (`NEXT_PUBLIC_BINA_KARO_KAYNAGI`) alınıp üstüne çiziliyor. Yazı
+  tipleri `public/maplibre/fonts/` altından kendi sunucumuzdan geliyor.
+- Google'ın kullanım şartı gereği logo ve görünen bölgenin telif metni
+  haritada duruyor; metin her harita hareketinde `viewport` ucundan
+  yenileniyor.
+- Oturum açılamazsa harita pinleriyle çalışmaya devam eder ve sebebi yazan
+  bir "Yeniden dene" kartı çıkar.
+- O anahtar tarayıcıya gittiği için mutlaka kısıtlanmalı: *Uygulama kısıtı* →
+  HTTP yönlendirenler (üretim alan adınız ve `localhost`), *API kısıtı* →
+  yalnızca Map Tiles API.
 
 ## Kurye hesabı açma
 
@@ -290,21 +323,8 @@ kalem varsa tutar yine kalemlerden hesaplanır, yoksa `tutar` alanı kullanılı
 
 ### Adresin haritada bulunması
 
-Adres çözümleme `/api/geokod` ile sunucuda yapılır. Anahtar varsa **Google
-Geocoding API** kullanılır: Türkiye'de kapı numarasına iner, işletme adlarını
-("Ramada Otel Sakarya") tanır, sonuçlar market çevresine yanlıdır ve il/ilçe
-merkezine düşen kaba sonuçlar reddedilir. Sonuç kapı düzeyinde değilse
-(`kaba: true`) form "Yaklaşık konum — haritadan düzeltin" der. Google yoksa ya
-da cevap vermezse OpenStreetMap/Nominatim'e düşülür; orada kapı numarası
-verisi seyrek olduğu için sokak ortasına pin düşebilir.
-
-Geocoding için ayrı bir **sunucu anahtarı** açın: Google Cloud → Kimlik
-Bilgileri → API anahtarı; *Uygulama kısıtlaması* **Yok** (istek Vercel
-sunucusundan çıkıyor, tarayıcı yönlendireni yok), *API kısıtlaması* yalnızca
-**Geocoding API**. Anahtarı Vercel'de `GOOGLE_GEOKOD_ANAHTARI` olarak
-tanımlayın (başında `NEXT_PUBLIC_` yok; tarayıcıya gitmez). Harita anahtarı
-alan adıyla kısıtlı olduğu için sunucudan çalışmaz; bu yüzden ikinci anahtar
-gerekiyor.
+Adres çözümleme `/api/geokod` ile sunucuda yapılır; ayrıntısı yukarıdaki
+"Adres çözümleme ve harita zemini" bölümünde.
 
 Kayıt haritada ancak adresin `lat`/`lng` alanları doluysa görünür. Adres
 girilirken iki yol var: kapıdayken **Kapıdayım** (kuryenin GPS konumu) ya da
@@ -546,15 +566,13 @@ veritabanına yazıyorlar.
   su, sarı ana yollar; gece modunda lacivert arduvaz). Palet
   `src/lib/harita-stili.ts` içinde tek yerde duruyor; hem Google karolarının
   stil kuralları hem yedek OpenFreeMap stilinin boyaması oradan türetiliyor.
-- Google karoları raster (düz resim) olduğu için harita eğildiğinde ya da
-  döndürüldüğünde sokak adları da karoyla birlikte eğilir/döner; vektör
-  stilde yazılar hep dik dururdu. Trafik katmanı ve Street View, Map Tiles
-  API'nin 2B karolarında yok.
-- Yedek OpenFreeMap stilinde açılışta 3 adet "Expected value to be of type
-  number, but found null instead" uyarısı çıkıyor. Sebebi stilin kendi 3B
-  bina katmanı: ilk karolar biz katmanı düzeltmeden ayrıştırılıyor.
-  Zararsız — sonraki karolar düzeltilmiş ifadeyi kullanıyor. Google modunda
-  bina katmanı baştan düzeltilmiş ifadeyle kurulduğu için uyarı yok.
+- OpenFreeMap'te trafik katmanı ve Street View yok.
+- Açılışta 3 adet "Expected value to be of type number, but found null
+  instead" uyarısı çıkıyor. Sebebi OpenFreeMap stilinin kendi 3B bina
+  katmanı: ilk karolar biz katmanı düzeltmeden ayrıştırılıyor. Zararsız —
+  sonraki karolar düzeltilmiş ifadeyi kullanıyor.
+- Google Geocoding anahtarı tanımlı değilse adresler Nominatim ile aranır ve
+  kapı numarası şaşabilir. Form bunu açıkça yazar; kurye haritadan düzeltir.
 - Sesli tarif tarayıcının `speechSynthesis` desteğine bağlıdır. Cihazda
   Türkçe ses paketi yoksa sistem varsayılanı okur; hiç destek yoksa sessiz
   kalır, uygulama çalışmaya devam eder.

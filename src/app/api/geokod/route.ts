@@ -219,12 +219,60 @@ async function nominatimIleAra(
   };
 }
 
+/* ---------------- Önbellek ---------------- */
+
+/**
+ * Sunucu tarafı önbellek. Geocoding istek başına faturalanıyor ve aynı adres
+ * sık tekrarlanıyor: bir apartmanın farklı daireleri, aynı müşterinin ikinci
+ * siparişi, kuryenin yeniden denemesi. Sunucusuz ortamda örnek ömrü kısa,
+ * bu yüzden garanti değil ama bedava bir kazanç.
+ */
+const onbellek = new Map<string, { sonuc: GeokodSonucu | null; bitis: number }>();
+const ONBELLEK_SINIRI = 500;
+/** Bulunan adres uzun süre geçerli; bulunamayan tekrar denensin diye kısa. */
+const BULUNAN_OMRU_MS = 24 * 60 * 60 * 1000;
+const BULUNAMAYAN_OMRU_MS = 10 * 60 * 1000;
+
+function onbellekAnahtari(adres: string) {
+  return adres.toLocaleLowerCase("tr").replace(/\s+/g, " ");
+}
+
+function onbellektenOku(adres: string): { sonuc: GeokodSonucu | null } | null {
+  const kayit = onbellek.get(onbellekAnahtari(adres));
+  if (!kayit) return null;
+  if (kayit.bitis < Date.now()) {
+    onbellek.delete(onbellekAnahtari(adres));
+    return null;
+  }
+  return { sonuc: kayit.sonuc };
+}
+
+function onbellegeYaz(adres: string, sonuc: GeokodSonucu | null) {
+  if (onbellek.size >= ONBELLEK_SINIRI) {
+    onbellek.delete(onbellek.keys().next().value!);
+  }
+  onbellek.set(onbellekAnahtari(adres), {
+    sonuc,
+    bitis: Date.now() + (sonuc ? BULUNAN_OMRU_MS : BULUNAMAYAN_OMRU_MS),
+  });
+}
+
 /* ---------------- Uç ---------------- */
 
 export async function GET(istek: Request) {
   const adres = new URL(istek.url).searchParams.get("adres")?.trim();
   if (!adres || adres.length < 5) {
     return NextResponse.json({ hata: "Adres çok kısa." }, { status: 400 });
+  }
+
+  const eldeki = onbellektenOku(adres);
+  if (eldeki) {
+    return eldeki.sonuc
+      ? NextResponse.json(eldeki.sonuc)
+      : NextResponse.json(
+          { hata: "Bu adres haritada bulunamadı." },
+          { status: 404 },
+        );
   }
 
   const adaylar = adresAdaylari(adres).slice(0, AZAMI_DENEME);
@@ -236,10 +284,14 @@ export async function GET(istek: Request) {
       // Tutmazsa kapı/daire ayıklanmış, giderek genelleşen adaylar.
       for (const sorgu of [adres, ...adaylar.filter((a) => a !== adres)]) {
         const sonuc = await googleIleAra(GOOGLE_GEOKOD_ANAHTARI, sorgu);
-        if (sonuc) return NextResponse.json(sonuc);
+        if (sonuc) {
+          onbellegeYaz(adres, sonuc);
+          return NextResponse.json(sonuc);
+        }
       }
       // Google Türkiye'de neredeyse her şeyi bulur; bulamadıysa Nominatim'e
       // sormak gecikmeden başka bir şey getirmiyor.
+      onbellegeYaz(adres, null);
       return NextResponse.json(
         { hata: "Bu adres haritada bulunamadı." },
         { status: 404 },
@@ -256,8 +308,12 @@ export async function GET(istek: Request) {
     for (const [i, aday] of adaylar.entries()) {
       if (i > 0) await bekle(ISTEKLER_ARASI_MS);
       const sonuc = await nominatimIleAra(aday, i === 0 ? "tam" : aday);
-      if (sonuc) return NextResponse.json(sonuc);
+      if (sonuc) {
+        onbellegeYaz(adres, sonuc);
+        return NextResponse.json(sonuc);
+      }
     }
+    onbellegeYaz(adres, null);
     return NextResponse.json(
       { hata: "Bu adres haritada bulunamadı." },
       { status: 404 },

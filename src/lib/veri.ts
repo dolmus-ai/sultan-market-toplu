@@ -577,17 +577,44 @@ export type GeokodSonucu = {
   motor?: "google" | "nominatim";
 };
 
+/**
+ * Aynı oturumda aynı metni tekrar sormamak için küçük bir önbellek.
+ * Geocoding istek başına faturalanıyor; kurye "Adresten bul"a üst üste
+ * bastığında ya da kaydederken aynı adres yeniden aranacağında ikinci
+ * istek çıkmasın. Sekme kapanınca sıfırlanır.
+ */
+const geokodOnbellegi = new Map<string, GeokodSonucu | null>();
+const GEOKOD_ONBELLEK_SINIRI = 200;
+
+function geokodAnahtari(adres: string) {
+  return adres.trim().toLocaleLowerCase("tr").replace(/\s+/g, " ");
+}
+
 /** Adres metnini koordinata çevirir; bulunamazsa null döner. */
 export async function adresiGeokodla(
   adres: string,
 ): Promise<GeokodSonucu | null> {
+  const anahtar = geokodAnahtari(adres);
+  if (geokodOnbellegi.has(anahtar)) return geokodOnbellegi.get(anahtar) ?? null;
+
+  let sonuc: GeokodSonucu | null = null;
+  let yazilabilir = true;
   try {
     const yanit = await fetch(`/api/geokod?adres=${encodeURIComponent(adres)}`);
-    if (!yanit.ok) return null;
-    return (await yanit.json()) as GeokodSonucu;
+    // 404 "bu adres yok" demek, önbelleğe girer; 502 geçici arıza, girmez.
+    if (yanit.ok) sonuc = (await yanit.json()) as GeokodSonucu;
+    else if (yanit.status >= 500) yazilabilir = false;
   } catch {
-    return null;
+    yazilabilir = false;
   }
+
+  if (yazilabilir) {
+    if (geokodOnbellegi.size >= GEOKOD_ONBELLEK_SINIRI) {
+      geokodOnbellegi.delete(geokodOnbellegi.keys().next().value!);
+    }
+    geokodOnbellegi.set(anahtar, sonuc);
+  }
+  return sonuc;
 }
 
 /**

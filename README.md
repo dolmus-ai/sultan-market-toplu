@@ -238,7 +238,10 @@ drop policy "muhasebe kilidi" on public.profiles;
   kartı (*"Göbekten 2. çıkış · Mehmet Akif Ersoy Caddesi"*), altta kalan
   süre/mesafe ve varış saati, kamera kuryenin arkasından eğik takip eder.
   Hedefe 70 m kala doğrudan "Teslim ettim" çıkar. İsteyen kurye tek
-  dokunuşla harici haritada da açabilir.
+  dokunuşla harici haritada da açabilir. Seçenekler süreye göre sıralanır;
+  varsayılan seçim her zaman en hızlısıdır. Sürüşte kurye rotadan 50 m'den
+  fazla saparsa (iki iyi doğruluklu GPS okuması üst üste) bulunduğu yerden
+  hedefe en hızlı rota otomatik yeniden hesaplanır ve sesle bildirilir.
 - **Toplu rota:** birden çok teslimat seçilir, "En kısa yolu bul" duraklara
   sıra numarası verir ve rotayı haritaya çizer. "Üstlen" rotayı kaydeder ve
   siparişleri kuryenin üstüne alır.

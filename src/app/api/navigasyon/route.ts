@@ -90,7 +90,12 @@ async function osrmIleCoz(
   const veri = (await yanit.json()) as { code?: string; routes?: OsrmRota[] };
   if (veri.code !== "Ok" || !veri.routes?.length) return null;
 
-  return veri.routes.slice(0, 3).map((r, i) => {
+  // OSRM'nin sırasına güvenmiyoruz: en kısa süreli rota hep ilk sırada,
+  // "En hızlı" etiketi ve varsayılan seçim ona gidiyor.
+  const sirali = [...veri.routes]
+    .sort((a, b) => a.duration - b.duration || a.distance - b.distance)
+    .slice(0, 3);
+  return sirali.map((r, i) => {
     const adimlar: Adim[] = r.legs
       .flatMap((l) => l.steps)
       .map((s) => {

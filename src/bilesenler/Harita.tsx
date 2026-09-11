@@ -822,6 +822,8 @@ export default function Harita({
   const [hazir, setHazir] = useState(false);
   const [yuklenemedi, setYuklenemedi] = useState(false);
   const sayacRef = useRef<number | null>(null);
+  /** +/- düğmeleriyle hedeflenen zoom; animasyon bitince sıfırlanır. */
+  const hedefZoomRef = useRef<number | null>(null);
   const kuryeMarkerRef = useRef<Marker | null>(null);
   /** Kuryenin "K" rozeti — ekrana göre hizalı, dönmeyen ayrı işaretçi. */
   const kuryeHarfRef = useRef<Marker | null>(null);
@@ -947,6 +949,9 @@ export default function Harita({
         });
       }
 
+      harita.on("zoomend", () => {
+        hedefZoomRef.current = null;
+      });
       harita.on("rotate", () =>
         onAciDegisti?.(harita.getBearing(), harita.getPitch()),
       );
@@ -1423,11 +1428,24 @@ export default function Harita({
           duration: 700,
         });
       },
-      yakinlastir: (yon) =>
-        haritaRef.current?.easeTo({
-          zoom: (haritaRef.current?.getZoom() ?? 14) + yon,
-          duration: 400,
-        }),
+      yakinlastir: (yon) => {
+        const harita = haritaRef.current;
+        if (!harita) return;
+        // Animasyon sürerken art arda basılırsa ara değerden değil,
+        // hedeflenen zoomdan devam et; yoksa hızlı dokunuşlar adım yutuyor.
+        const taban =
+          harita.isZooming() && hedefZoomRef.current != null
+            ? hedefZoomRef.current
+            : harita.getZoom();
+        const hedef = Math.min(
+          harita.getMaxZoom(),
+          Math.max(harita.getMinZoom(), taban + yon),
+        );
+        // easeTo önce süren animasyonu durdurup `zoomend` fırlatıyor; hedef
+        // ondan sonra yazılmalı ki sıfırlanmasın.
+        harita.easeTo({ zoom: hedef, duration: 400 });
+        hedefZoomRef.current = hedef;
+      },
       aci: () => ({
         bearing: haritaRef.current?.getBearing() ?? 0,
         pitch: haritaRef.current?.getPitch() ?? 0,

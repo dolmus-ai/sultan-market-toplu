@@ -35,7 +35,9 @@ import { tarayiciIstemcisi } from "@/lib/supabase/client";
 import { haversine, mesafeYaz, sureYaz } from "@/lib/rota";
 import { MARKET, marketAcikMi } from "@/lib/market";
 import {
+  SAPMA_ESIGI_M,
   kalanlar,
+  rotayaUzaklik,
   siradakiAdim,
   type RotaSecenegi,
 } from "@/lib/navigasyon";
@@ -181,7 +183,15 @@ export default function KuryeUygulamasi({
     durum: NavigasyonDurumu;
     secenek: RotaSecenegi | null;
     takip: boolean;
-  }>({ durum: "secim", secenek: null, takip: true });
+    hedef: Nokta | null;
+  }>({ durum: "secim", secenek: null, takip: true, hedef: null });
+  // Rotadan sapma: art arda kaç konum çizgiden uzak düştü.
+  const sapmaSayaciRef = useRef(0);
+  const sonYenidenRotaRef = useRef(0);
+  const yenidenRotalaniyorRef = useRef(false);
+  const yenidenRotalaRef = useRef<(konum: Nokta) => Promise<void>>(
+    async () => {},
+  );
   /** Hangi adım için hangi uyarının seslendirildiğini tutar. */
   const seslendirilenRef = useRef<{ adim: number; yakin: boolean }>({
     adim: -1,
@@ -468,6 +478,27 @@ export default function KuryeUygulamasi({
           setNavAdimIndeks(yeniAdim);
           seslendir(secenek, yeniAdim, nokta, adimDegisti);
           if (takip) haritaApi.current?.surusKamerasi(nokta, yon ?? 0);
+
+          // Rotadan sapma: iyi doğruluklu iki konum art arda çizgiden
+          // uzaksa bulunduğu yerden en hızlı rotayı yeniden iste. Kuş
+          // uçuşu "yerel" rotada anlamı yok — zaten yol değil.
+          const dogruluk = konum.coords.accuracy ?? 0;
+          if (
+            secenek.motor === "osrm" &&
+            dogruluk <= 60 &&
+            rotayaUzaklik(secenek.geometri, nokta) > SAPMA_ESIGI_M
+          ) {
+            sapmaSayaciRef.current += 1;
+            if (
+              sapmaSayaciRef.current >= 2 &&
+              Date.now() - sonYenidenRotaRef.current > 15_000
+            ) {
+              sapmaSayaciRef.current = 0;
+              void yenidenRotalaRef.current(nokta);
+            }
+          } else {
+            sapmaSayaciRef.current = 0;
+          }
         }
 
         const simdi = Date.now();
@@ -516,10 +547,6 @@ export default function KuryeUygulamasi({
   const navAdim = navSecili?.adimlar[navAdimIndeks] ?? null;
   const navSonraki = navSecili?.adimlar[navAdimIndeks + 1] ?? null;
 
-  useEffect(() => {
-    navRef.current = { durum: navDurum, secenek: navSecili, takip: navTakip };
-  });
-
   const navHedefNokta = useMemo<Nokta | null>(
     () =>
       navHedef?.adres?.lat != null
@@ -527,6 +554,52 @@ export default function KuryeUygulamasi({
         : null,
     [navHedef],
   );
+
+  /**
+   * Kurye rotadan çıktı: bulunduğu yerden hedefe yeniden, en hızlı rotayı
+   * iste. Sürüş modu bozulmaz; adımlar yeni rotanın başından sayılır.
+   * Ağ yoksa eldeki rota kalır, bir sonraki sapmada yine denenir.
+   */
+  async function yenidenRotala(konum: Nokta) {
+    const hedef = navRef.current.hedef;
+    if (!hedef || yenidenRotalaniyorRef.current) return;
+    yenidenRotalaniyorRef.current = true;
+    sonYenidenRotaRef.current = Date.now();
+    try {
+      const yanit = await fetch("/api/navigasyon", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ baslangic: konum, hedef }),
+      });
+      if (!yanit.ok) throw new Error("navigasyon");
+      const { secenekler } = (await yanit.json()) as {
+        secenekler: RotaSecenegi[];
+      };
+      const enHizli = secenekler[0];
+      if (!enHizli || navRef.current.durum !== "surus") return;
+      setNavSecenekler(secenekler);
+      setNavSeciliId(enHizli.id);
+      navAdimRef.current = 0;
+      setNavAdimIndeks(0);
+      seslendirilenRef.current = { adim: -1, yakin: false };
+      sapmaSayaciRef.current = 0;
+      if (sesRef.current) konus("Rota yeniden hesaplandı");
+    } catch {
+      /* eldeki rota kalır */
+    } finally {
+      yenidenRotalaniyorRef.current = false;
+    }
+  }
+
+  useEffect(() => {
+    navRef.current = {
+      durum: navDurum,
+      secenek: navSecili,
+      takip: navTakip,
+      hedef: navHedefNokta,
+    };
+    yenidenRotalaRef.current = yenidenRotala;
+  });
 
   const navVardi =
     !!kuryeKonumu && !!navHedefNokta && haversine(kuryeKonumu, navHedefNokta) < 70;

@@ -19,8 +19,11 @@ import {
 import { adresAdaylari } from "../src/lib/adres.ts";
 import { haversine, mesafeYaz, sureYaz, yerelRotaCoz } from "../src/lib/rota.ts";
 import {
+  SAPMA_ESIGI_M,
+  hizaGoreSirala,
   kalanlar,
   manevrayiCevir,
+  rotayaUzaklik,
   siradakiAdim,
   varisSaati,
 } from "../src/lib/navigasyon.ts";
@@ -260,6 +263,26 @@ const yanlisBaslik = satirlariCikar(csvAyristir("Foo;Bar\n1;2"));
 bekle("başlıksız dosya reddedildi", yanlisBaslik.tamam === false);
 const bozuk = await dosyayiCoz("x.xlsx", Buffer.from("bu excel degil"));
 bekle("bozuk xlsx reddedildi", bozuk.tamam === false);
+
+/* ------------------------------------------------------------------ */
+bolum("En hızlı rota ve sapma");
+
+const sirali = hizaGoreSirala([
+  { id: "a", sureSn: 600, mesafeM: 3000 },
+  { id: "b", sureSn: 420, mesafeM: 3500 },
+  { id: "c", sureSn: 420, mesafeM: 3100 },
+]);
+bekle("en kısa süreli rota başa", sirali[0].id === "c" && sirali[1].id === "b" && sirali[2].id === "a", sirali.map((s) => s.id).join(","));
+
+// Market önünden doğuya 1 km'lik düz çizgi (≈ 0,0118° boylam bu enlemde).
+const cizgi: [number, number][] = [[30.35218, 40.78067], [30.364, 40.78067]];
+bekle("çizgi üstündeki nokta ~0 m", rotayaUzaklik(cizgi, { lat: 40.78067, lng: 30.358 }) < 1);
+const kuzey = rotayaUzaklik(cizgi, { lat: 40.78067 + 100 / 111_320, lng: 30.358 });
+bekle("çizginin 100 m kuzeyi ≈ 100 m", Math.abs(kuzey - 100) < 2, `-> ${kuzey.toFixed(1)}`);
+const otesi = rotayaUzaklik(cizgi, { lat: 40.78067, lng: 30.366 });
+bekle("uç noktanın ötesi uç noktaya göre ölçülür", otesi > 150 && otesi < 180, `-> ${otesi.toFixed(0)}`);
+bekle("boş rota sonsuz uzak", rotayaUzaklik([], { lat: 0, lng: 0 }) === Infinity);
+bekle("sapma eşiği kavşak toleransında", SAPMA_ESIGI_M >= 30 && SAPMA_ESIGI_M <= 80);
 
 /* ------------------------------------------------------------------ */
 bolum("Google karoları");

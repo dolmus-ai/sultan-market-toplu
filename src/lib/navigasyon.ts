@@ -119,8 +119,64 @@ export function manevrayiCevir(
 }
 
 /* ------------------------------------------------------------------ */
+/* Seçenek sırası                                                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Seçenekleri süreye göre sıralar; eşitlikte kısa olan önde. OSRM'nin
+ * ilk döndürdüğü rota genelde en hızlısı ama garanti değil; kurye hep en
+ * hızlıyı görsün diye burada açıkça sıralıyoruz.
+ */
+export function hizaGoreSirala<T extends { sureSn: number; mesafeM: number }>(
+  secenekler: T[],
+): T[] {
+  return [...secenekler].sort(
+    (a, b) => a.sureSn - b.sureSn || a.mesafeM - b.mesafeM,
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Sürüş sırasında hesaplananlar                                       */
 /* ------------------------------------------------------------------ */
+
+/** Kurye rotadan bu kadar uzaklaşınca yoldan çıkmış sayılır (metre). */
+export const SAPMA_ESIGI_M = 50;
+
+/**
+ * Noktanın rota çizgisine en yakın mesafesi (metre). Şehir ölçeğinde
+ * düzlem yaklaşımı yeterli: boylam, enleme göre ölçeklenip her parçaya
+ * dik izdüşüm alınıyor.
+ */
+export function rotayaUzaklik(
+  geometri: [number, number][],
+  konum: Nokta,
+): number {
+  if (geometri.length === 0) return Infinity;
+  const rad = Math.PI / 180;
+  const ky = 6_371_000 * rad;
+  const kx = Math.cos(konum.lat * rad) * ky;
+  const px = konum.lng * kx;
+  const py = konum.lat * ky;
+
+  let enAz = Infinity;
+  for (let i = 0; i < geometri.length; i++) {
+    const ax = geometri[i][0] * kx;
+    const ay = geometri[i][1] * ky;
+    if (i === geometri.length - 1) {
+      enAz = Math.min(enAz, Math.hypot(px - ax, py - ay));
+      break;
+    }
+    const dx = geometri[i + 1][0] * kx - ax;
+    const dy = geometri[i + 1][1] * ky - ay;
+    const uzunluk2 = dx * dx + dy * dy;
+    const t =
+      uzunluk2 === 0
+        ? 0
+        : Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / uzunluk2));
+    enAz = Math.min(enAz, Math.hypot(px - (ax + t * dx), py - (ay + t * dy)));
+  }
+  return enAz;
+}
 
 /** Kurye ilerledikçe sıradaki adımı bulur. */
 export function siradakiAdim(

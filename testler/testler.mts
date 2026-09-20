@@ -50,6 +50,7 @@ import {
   uzaklik,
   yerAnahtari,
 } from "../src/lib/adres-obek.ts";
+import { sakaryaCoz } from "../src/lib/sakarya.ts";
 import {
   GoogleOturumHatasi,
   googleHataMetni,
@@ -508,6 +509,50 @@ bekle("temel stil bina katmanı", temel.layers.some((k) => k.id === "bina-3b" &&
 bekle("glyph adresi kendi sunucumuz", temel.glyphs === "https://kurye.ornek/maplibre/fonts/{fontstack}/{range}.pbf");
 const binasiz = googleTemelStili("aydinlik", "", "https://kurye.ornek");
 bekle("bina kaynağı boşsa katman yok", !binasiz.layers.some((k) => k.id === "bina-3b") && Object.keys(binasiz.sources).length === 0);
+
+bolum("Sakarya çözücü");
+
+{
+  const c = (m: string) => sakaryaCoz("x", m);
+  // Site sözlüğü: yazım varyantları tek ada iniyor, blok/daire sorguya girmiyor.
+  bekle("ÇAĞRI ELİT GARDEN tek ada iniyor", c("ÇAĞRI ELİT GARDEN 1. SOL D:5").sorgu === "Çağrı Elit Garden, Serdivan, Sakarya", c("ÇAĞRI ELİT GARDEN 1. SOL D:5").sorgu);
+  bekle("CAGRI ELİT GARDEN da aynı ada", c("CAGRI ELİT GARDEN E6").yer === "Çağrı Elit Garden");
+  bekle("ELİT GARDEN tek başına da aynı site", c("ELİT GARDEN A-5").yer === "Çağrı Elit Garden");
+  bekle("blok ve daire ayrı alanlara çıkıyor", (() => { const r = c("SAKLI BAHÇE-2 E BLOK D:3"); return r.blok === "E" && r.daire === "3"; })(), JSON.stringify(c("SAKLI BAHÇE-2 E BLOK D:3")));
+  bekle("seri numarası korunuyor", c("SAKLI BAHÇE-2 E BLOK D:3").yer === "Saklı Bahçe 2", c("SAKLI BAHÇE-2 E BLOK D:3").yer);
+  bekle("SAKLI-2 kısaltması da aynı seri", c("SAKLI -2 E:3").yer === "Saklı Bahçe 2", c("SAKLI -2 E:3").yer);
+  bekle("EMİRGAN -4 seri", c("EMİRGAN -4 NO:21  SİT B2").yer === "Emirgan 4", c("EMİRGAN -4 NO:21  SİT B2").yer);
+  bekle("KARAT54 bitişik yazım", c("KARAT54 B7").yer === "Karat 54");
+  bekle("KOÇ CİTY VOQUE / KOÇ CTY TUNÇ aynı site", c("KOÇ CİTY VOQUE NO:8 D:10").yer === "Koç City" && c("KOÇ CTY TUNÇ A BLOK D:3").yer === "Koç City");
+  bekle("UNBAY / ÜNBAY aynı site", c("UNBAY KONAKLARI A1").yer === c("ÜNBAY KONAKLARI MA BLOK DAİRE 2").yer);
+  bekle("yazımı bozuk DAYMONT çözülüyor", c("DAYMONT AB:5").yer === "Bu Yapı Daymint", c("DAYMONT AB:5").yer);
+  bekle("VELENA / VALENA / WELENA aynı site", c("VELENAPARK K: D:7 ÖNDEKİ BLOK").yer === "Velena Park" && c("VALENA PARK  D:6").yer === "Velena Park" && c("WELENAPARK ÖN TARAF D:4").yer === "Velena Park");
+  // Ek almış ad da aynı çıpa.
+  bekle("ZİRVE PARKIN ÜSTÜ → Zirve Park", c("ZİRVE PARKIN ÜSTÜ").yer === "Zirve Park Evleri", c("ZİRVE PARKIN ÜSTÜ").yer);
+  bekle("KUTLU EVLERİ GEÇİNCE → Kutlu Evler", c("KUTLU EVLERİ GEÇİNCE YOKUŞTAN SONRA İLK SAĞDAKİ 2. EV MÜSTAKİL").yer === "Kutlu Evler");
+  // Göreli sözcük: "X karşısı Y" derken yer Y.
+  bekle("ADAPARK KARŞISI ELİZYUM → Elizyum", c("ADAPARK KARŞISI ELİZYUM C BLOK D:3").yer === "Elizyum Garden", c("ADAPARK KARŞISI ELİZYUM C BLOK D:3").yer);
+  bekle("tek site + göreli sözcük yine o site", c("ÇİĞDEM EVLERİN ARKASINDAKİ SARI BİNA D:1").yer === "Çiğdem Evler");
+  // Numaralı sokak: 3xx İstiklal, 5xx Arabacıalanı; kapı numarası sorguda.
+  bekle("317. SOK → İstiklal", c("317. SOK NO:4 CEMİL ÇETİN KOMŞUSU").sorgu === "317. Sokak No:4, İstiklal Mahallesi, Serdivan, Sakarya", c("317. SOK NO:4 CEMİL ÇETİN KOMŞUSU").sorgu);
+  bekle("553. SOKAK → Arabacıalanı", c("553.SOKAK SARI DUBLEX BİR DÜNYA TARAFI").sorgu.includes("Arabacıalanı"));
+  bekle("mahalle yazılıysa o kullanılıyor", c("KÖPRÜBAŞI MAH. ŞEREF SOK. NO:46").sorgu === "Şeref Sokak, Köprübaşı Mahallesi, Serdivan, Sakarya", c("KÖPRÜBAŞI MAH. ŞEREF SOK. NO:46").sorgu);
+  bekle("4 haneli sokak mahalleyle kabul", c("KURUÇEŞME MAH 2401 SOKAK NO70").sorgu === "2401. Sokak No:70, Kuruçeşme Mahallesi, Serdivan, Sakarya", c("KURUÇEŞME MAH 2401 SOKAK NO70").sorgu);
+  bekle("210. SOK mahallesiz çözülmüyor", c("210. SOK NO:9").sorgu === "", c("210. SOK NO:9").sorgu);
+  bekle("kapı numaralı sokak site çıpasını geçiyor", c("GÜL EVLERİN KARŞISI KÖŞE 310. SOK NO:3/2").tur === "sokak", c("GÜL EVLERİN KARŞISI KÖŞE 310. SOK NO:3/2").sorgu);
+  bekle("adlı sokak Türkçe harfleri koruyor", c("ARABAC IALANI MAH.ZARİF SOK. NO:2 KAT:2").sokak === "Zarif Sokak", c("ARABAC IALANI MAH.ZARİF SOK. NO:2 KAT:2").sokak);
+  bekle("ARKA SOKAK sokak adı sayılmıyor", c("ARKA SOKAK NO:3").sorgu === "");
+  bekle("cadde kuralı", c("İSTİKLAL MAH FEVZİCAKMAK CAD. NO:34 B BİNA D:1").sorgu === "Fevzicakmak Caddesi No:34, İstiklal Mahallesi, Serdivan, Sakarya", c("İSTİKLAL MAH FEVZİCAKMAK CAD. NO:34 B BİNA D:1").sorgu);
+  // Sabit nokta.
+  bekle("ADATIP → hastane", c("ADATIP ACİL SOKAĞINDA YUKARI NO:32").yer === "Adatıp Hastanesi");
+  bekle("REYHANA VARMADAN → Reyhan Pastanesi", c("REYHANA VARMADAN GİRİNCE CINAR APT D8").yer === "Reyhan Pastanesi");
+  // Telefon adres metninden ayrılıyor.
+  bekle("baştaki telefon künyeye", c("541 501 67 54 AKKENT VİLALARI NO:11").telefon === "541 501 67 54" && c("541 501 67 54 AKKENT VİLALARI NO:11").yer === "Akkent Sitesi");
+  bekle("parantezli telefon", c("( 05322780286 )        ATASOY VİLLALARI EN SONDA SOLDAKİ VİLLA").telefon === "05322780286");
+  // Çözülemeyen tarif boş sorgu, düşük güven.
+  bekle("KEÇECİLERİN ORASI çözülmüyor", c("KEÇECİLERİN ORASI B A:D4").sorgu === "" && c("KEÇECİLERİN ORASI B A:D4").guven === "dusuk");
+  bekle("yalnızca mahalle düşük güven", c("ARALIK MAH. 2 KÖY EKMEĞİ İSTEYEN").guven !== "yuksek");
+}
 
 bolum("Adres çözümleme");
 

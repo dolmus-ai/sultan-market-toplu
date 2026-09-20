@@ -107,6 +107,13 @@ const PAYLASILIR_DOGRULUK_M = 500;
 const SUPHELI_DOGRULUK_M = 300;
 
 /**
+ * Bu paydan iyi ölçüm gerçek GPS sayılıyor; adrese sabitlenmiş konumu
+ * yalnızca böylesi devralabiliyor. Masaüstünün IP tahmini bu eşiğin
+ * kilometrelerce uzağında kalıyor, adresi ezemiyor.
+ */
+const IYI_DOGRULUK_M = 100;
+
+/**
  * Elindeki ölçüm bu kadar eskiyince yenisi ne olursa olsun kabul ediliyor.
  *
  * Kurye yol alıyor: bir dakika önceki nokta, payı iyi olsa bile artık
@@ -221,6 +228,9 @@ export default function KuryeUygulamasi({
   const [kuryeKonumu, setKuryeKonumu] = useState<Nokta | null>(null);
   /** Konumun hata payı (metre); tarayıcı her ölçümle birlikte veriyor. */
   const [kuryeDogrulugu, setKuryeDogrulugu] = useState<number | null>(null);
+  /** Konum bir teslimat adresine sabitlendi mi? */
+  const sabitKonumRef = useRef(false);
+  const [sabitKonum, setSabitKonum] = useState(false);
   /** Son kabul edilen ölçümün payı ve zamanı — kötüsü iyisini ezmesin diye. */
   const sonDogrulukRef = useRef<number | null>(null);
   const sonOlcumZamaniRef = useRef(0);
@@ -530,6 +540,31 @@ export default function KuryeUygulamasi({
   );
 
   /**
+   * Kuryenin konumunu bir teslimat adresine sabitler.
+   *
+   * Kurye kapının önünde duruyor ve tarayıcı onu kilometrelerce ötede
+   * sanıyorsa — masaüstünde konum IP'den geliyor, VPN varsa büsbütün şaşıyor
+   * — elimizdeki en güvenilir bilgi gittiği adresin koordinatı.
+   *
+   * Sabitlenen nokta kilitleniyor, yoksa tarayıcının kaba tahmini saniyeler
+   * içinde üstüne yazardı. Kilit tek bir şeyle açılıyor: 100 m'den iyi
+   * gerçek bir ölçüm. O noktada cihaz adresten de iyisini biliyor, kurye
+   * bir sonraki durağa geçmiş de olabilir.
+   */
+  function konumuBuradanAl(nokta: Nokta, ad: string) {
+    sabitKonumRef.current = true;
+    setSabitKonum(true);
+    sonDogrulukRef.current = null;
+    sonOlcumZamaniRef.current = 0;
+    kuryeKonumuRef.current = nokta;
+    setKuryeKonumu(nokta);
+    setKuryeDogrulugu(null);
+    setKonumTakibi(true);
+    haritaApi.current?.ucur(nokta, 17);
+    uyar(`Konumunuz ${ad} adresine alındı`);
+  }
+
+  /**
    * Konumu yeniden ölçtürür.
    *
    * Ayrı bir `getCurrentPosition` işe yaramıyor: `watchPosition` açıkken
@@ -545,6 +580,8 @@ export default function KuryeUygulamasi({
       return;
     }
     konumaUcRef.current = true;
+    sabitKonumRef.current = false;
+    setSabitKonum(false);
     // Eldeki ölçüm unutuluyor: yeniden bulmanın amacı zaten onu atmak,
     // yoksa "daha kötü ölçüm elenir" kuralı yeni ölçümü de elerdi.
     sonDogrulukRef.current = null;
@@ -569,6 +606,13 @@ export default function KuryeUygulamasi({
           konum.coords.accuracy != null && !Number.isNaN(konum.coords.accuracy)
             ? konum.coords.accuracy
             : null;
+
+        // Adrese sabitlenmiş konumu ancak gerçekten iyi bir ölçüm devralır.
+        if (sabitKonumRef.current) {
+          if ((dogruluk ?? Infinity) > IYI_DOGRULUK_M) return;
+          sabitKonumRef.current = false;
+          setSabitKonum(false);
+        }
 
         /*
          * Daha kötü ölçüm iyisini ezmesin. Telefon GPS ile Wi-Fi arasında
@@ -1302,6 +1346,10 @@ export default function KuryeUygulamasi({
       ad: ortak.musteri?.ad ?? "Müşteri",
       adresId: ortak.adres?.id ?? null,
       konumVar: ortak.adres?.lat != null,
+      nokta:
+        ortak.adres?.lat != null && ortak.adres.lng != null
+          ? { lat: ortak.adres.lat, lng: ortak.adres.lng }
+          : null,
       teslimEdildi: kayit.tur === "teslimat" && kayit.siparis.durum === "teslim",
     };
   }
@@ -1816,6 +1864,35 @@ export default function KuryeUygulamasi({
                 </motion.button>
               )}
 
+              {/*
+                Kurye teslimat adresinde duruyor ve tarayıcı onu bambaşka bir
+                yerde sanıyorsa (masaüstünde konum IP'den geliyor, VPN varsa
+                büsbütün şaşıyor) en güvenilir bilgi zaten elimizde: gittiği
+                adresin koordinatı. Haritada nokta aramaktan da isabetli.
+              */}
+              {kayitBilgisi(islemKayit).nokta && (
+                <motion.button
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => {
+                    const bilgi = kayitBilgisi(islemKayit);
+                    if (bilgi.nokta) konumuBuradanAl(bilgi.nokta, bilgi.ad);
+                    setIslemKayit(null);
+                  }}
+                  className="mt-2 flex w-full items-center gap-3 rounded-[20px] border border-cizgi bg-yuzey p-3.5 text-left hover:bg-yuzey2"
+                >
+                  <span className="text-xl leading-none">🧍</span>
+                  <span className="flex-1">
+                    <span className="block text-[15px] font-black">
+                      Buradayım
+                    </span>
+                    <span className="block text-[12px] text-gri">
+                      Konumum bu adres olsun
+                    </span>
+                  </span>
+                  <span className="text-gri">›</span>
+                </motion.button>
+              )}
+
               {kayitBilgisi(islemKayit).adresId && (
                 <motion.button
                   whileTap={{ scale: 0.98 }}
@@ -2048,7 +2125,33 @@ export default function KuryeUygulamasi({
         bağlıyor; Yenile ölçümü baştan aldırıyor.
       */}
       <AnimatePresence>
+        {/* Konum bir teslimat adresine sabitlendi. */}
+        {sabitKonum && !konumDuzeltme && (
+          <motion.div
+            key="sabit-konum"
+            initial={{ y: -16, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -16, opacity: 0 }}
+            className="absolute inset-x-3 top-[calc(env(safe-area-inset-top)+80px)] z-30 flex items-center gap-3 rounded-[20px] border border-cizgi bg-yuzey/90 p-3 shadow-yumusak backdrop-blur-2xl"
+          >
+            <span className="text-lg">🧍</span>
+            <p className="flex-1 text-[12px] font-bold leading-snug">
+              Konumunuz teslimat adresine alındı.
+              <span className="block font-semibold text-gri">
+                GPS iyi sinyal bulunca kendiliğinden devralır.
+              </span>
+            </p>
+            <button
+              onClick={konumuYenidenBul}
+              className="shrink-0 rounded-hap bg-yuzey2 px-3 py-1.5 text-[12px] font-black text-gri"
+            >
+              Yenile
+            </button>
+          </motion.div>
+        )}
+
         {!konumDuzeltme &&
+          !sabitKonum &&
           kuryeKonumu &&
           kuryeDogrulugu != null &&
           kuryeDogrulugu > SUPHELI_DOGRULUK_M && (

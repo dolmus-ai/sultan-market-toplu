@@ -16,6 +16,7 @@ import {
   sonucGecerliMi,
   type CozulmusAdres,
 } from "@/lib/adres-obek";
+import { sakaryaCoz } from "@/lib/sakarya";
 
 /**
  * Defterdeki tarif adreslerini haritaya oturtma.
@@ -24,9 +25,10 @@ import {
  * E BLOK D:3". Geocoding bunları olduğu gibi aratınca ya boş dönüyor ya da
  * ilçe merkezine düşüyor. Burada üç aşama var ve kurye hepsini görüyor:
  *
- *  1. **Ayıkla** — adresler kırklı öbekler hâlinde `/api/adres-zeka`'ya
- *     gidiyor, site adı / blok / daire ayrışıyor, temiz bir arama sorgusu
- *     çıkıyor.
+ *  1. **Ayıkla** — önce Sakarya sözlüğü (`sakaryaCoz`): site adları,
+ *     numaralı sokakların mahallesi, sabit noktalar; anahtarsız, anında.
+ *     Sözlüğün çözemediği tarifler kırklı öbeklerle `/api/adres-zeka`'ya
+ *     gidiyor; anahtar yoksa o adım atlanıyor, sözlüğün bulduğuyla devam.
  *  2. **Ara** — aynı siteyi anlatan adresler tek gruba düşüyor ve site bir
  *     kez aranıyor. Hem ucuz (Geocoding istek başına faturalı) hem tutarlı:
  *     aynı sitenin daireleri haritada birbirinden ayrı düşmüyor.
@@ -42,7 +44,7 @@ const ESZAMANLI = 4;
 
 type Durum =
   | { ad: "yukleniyor" }
-  | { ad: "hazir"; adresler: KonumsuzAdres[] }
+  | { ad: "hazir"; adresler: KonumsuzAdres[]; sozlukle: number; kalan: number }
   | { ad: "kapali"; mesaj: string }
   | {
       ad: "calisiyor";
@@ -56,6 +58,8 @@ type Durum =
       oturan: number;
       kalan: { adres: string; sebep: string }[];
       grup: number;
+      /** Claude anahtarı yoktu; sözlüğün çözemedikleri denenmeden kaldı. */
+      anahtarsiz: number;
     }
   | { ad: "hata"; mesaj: string };
 
@@ -87,7 +91,18 @@ export default function KonumTamamla({
   useEffect(() => {
     konumsuzAdresleriGetir(db)
       .then((adresler) => {
-        if (yasiyor.current) setDurum({ ad: "hazir", adresler });
+        if (!yasiyor.current) return;
+        // Sözlük ne kadarını çözüyor — kurye baştan bilsin.
+        const sozlukle = adresler.filter((a) => {
+          const c = sakaryaCoz(a.id, a.adres_metni);
+          return c.sorgu !== "" && c.guven !== "dusuk";
+        }).length;
+        setDurum({
+          ad: "hazir",
+          adresler,
+          sozlukle,
+          kalan: adresler.length - sozlukle,
+        });
       })
       .catch(() => {
         if (yasiyor.current) {
@@ -97,17 +112,28 @@ export default function KonumTamamla({
   }, [db]);
 
   async function calistir(adresler: KonumsuzAdres[]) {
-    /* --------- 1) Ayıkla --------- */
+    /* --------- 1) Ayıkla: önce sözlük --------- */
     const cozumler: CozulmusAdres[] = [];
+    const kalanlar: KonumsuzAdres[] = [];
+    for (const a of adresler) {
+      const c = sakaryaCoz(a.id, a.adres_metni);
+      // Düşük güven (yalnızca mahalle) aranmıyor: mahalle ortasına pin
+      // koymak konumsuzluktan beter, kurye yanlış yere gider.
+      if (c.sorgu && c.guven !== "dusuk") cozumler.push(c);
+      else kalanlar.push(a);
+    }
+
+    /* --------- 1b) Kalanlar için Claude (anahtar varsa) --------- */
+    let anahtarsiz = 0;
     const OBEK = 40;
-    for (let i = 0; i < adresler.length; i += OBEK) {
+    for (let i = 0; i < kalanlar.length; i += OBEK) {
       if (!yasiyor.current) return;
-      const dilim = adresler.slice(i, i + OBEK);
+      const dilim = kalanlar.slice(i, i + OBEK);
       setDurum({
         ad: "calisiyor",
         asama: "ayikla",
         biten: i,
-        toplam: adresler.length,
+        toplam: kalanlar.length,
         oturan: 0,
       });
       try {
@@ -124,10 +150,11 @@ export default function KonumTamamla({
           anahtarsiz?: boolean;
         };
         if (!yanit.ok) {
-          // Anahtar yoksa devam etmenin anlamı yok, hemen söyle.
+          // Anahtar yoksa Claude adımı tümden atlanıyor; sözlüğün bulduğu
+          // yine aranacak, kalanlar raporda "yapay zekâ kapalı" diye çıkacak.
           if (veri.anahtarsiz) {
-            setDurum({ ad: "kapali", mesaj: veri.hata ?? "" });
-            return;
+            anahtarsiz = kalanlar.length;
+            break;
           }
           continue;
         }
@@ -163,7 +190,9 @@ export default function KonumTamamla({
         adres: adres.adres_metni,
         sebep: cozum
           ? "Tarifte aranabilir bir yer adı yok"
-          : "Ayıklanamadı",
+          : anahtarsiz
+            ? "Sözlükte yok; yapay zekâ anahtarı tanımlı değil"
+            : "Ayıklanamadı",
       });
     }
 
@@ -176,7 +205,7 @@ export default function KonumTamamla({
         try {
           const sonuc = await adresiGeokodla(grup.sorgu);
           if (sonuc) {
-            const gecerli = sonucGecerliMi(sonuc);
+            const gecerli = sonucGecerliMi(sonuc, grup.tur);
             if (gecerli.tamam) {
               // Gruptaki herkes aynı noktayı alıyor.
               for (const id of grup.idler) {
@@ -215,7 +244,7 @@ export default function KonumTamamla({
     await Promise.all(Array.from({ length: ESZAMANLI }, () => isci()));
 
     if (!yasiyor.current) return;
-    setDurum({ ad: "bitti", oturan, kalan, grup: gruplar.length });
+    setDurum({ ad: "bitti", oturan, kalan, grup: gruplar.length, anahtarsiz });
     onBitti(oturan);
   }
 
@@ -272,16 +301,18 @@ export default function KonumTamamla({
                     <b className="text-kontrast">
                       {durum.adresler.length} adresin
                     </b>{" "}
-                    konumu yok. Defterdeki tarifler ayıklanıp aranacak; aynı
-                    siteyi anlatanlar tek seferde bulunup hepsine yazılacak.
+                    konumu yok. <b className="text-kontrast">{durum.sozlukle}</b>{" "}
+                    tanesi Sakarya sözlüğüyle çözülüyor — site adları, numaralı
+                    sokakların mahallesi, sabit noktalar. Aynı siteyi anlatanlar
+                    tek seferde bulunup hepsine yazılacak.
                   </p>
                   <p className="mt-2 text-[12px] font-semibold text-gri">
-                    Yapay zekâ maliyeti yaklaşık{" "}
+                    Kalan {durum.kalan} tarif yapay zekâya gider (yaklaşık{" "}
                     <b className="text-kontrast">
-                      ${maliyetTahmini(durum.adresler.length).toFixed(2)}
+                      ${maliyetTahmini(durum.kalan).toFixed(2)}
                     </b>
-                    . Bulunamayanlar listede kalır, haritadan elle
-                    düzeltebilirsiniz.
+                    ); anahtar tanımlı değilse atlanır. Bulunamayanlar listede
+                    kalır, haritadan elle düzeltebilirsiniz.
                   </p>
 
                   <div className="mt-4 rounded-[20px] border border-cizgi bg-yuzey p-3">
@@ -356,6 +387,8 @@ export default function KonumTamamla({
                 {durum.grup} ayrı yer arandı.
                 {durum.kalan.length > 0 &&
                   ` ${durum.kalan.length} adres bulunamadı.`}
+                {durum.anahtarsiz > 0 &&
+                  ` ${durum.anahtarsiz} tarif yapay zekâ anahtarı olmadığı için denenmedi.`}
               </p>
 
               {durum.kalan.length > 0 && (

@@ -84,6 +84,8 @@ export type Obek = {
   idler: string[];
   /** Grubun en iyimser güveni. */
   guven: "yuksek" | "orta" | "dusuk";
+  /** İlk üyenin türü; kaba sonucun kabul edilip edilmeyeceği buna bağlı. */
+  tur: CozulmusAdres["tur"];
 };
 
 /**
@@ -126,6 +128,7 @@ export function obekle(cozumler: CozulmusAdres[]): Obek[] {
       yer: c.yer,
       idler: [],
       guven: c.guven,
+      tur: c.tur,
       sayac: new Map<string, number>(),
     };
     grup.idler.push(c.id);
@@ -144,7 +147,7 @@ export function obekle(cozumler: CozulmusAdres[]): Obek[] {
         enIyi = sorgu;
       }
     }
-    return { sorgu: enIyi, yer: g.yer, idler: g.idler, guven: g.guven };
+    return { sorgu: enIyi, yer: g.yer, idler: g.idler, guven: g.guven, tur: g.tur };
   });
 }
 
@@ -170,18 +173,29 @@ export function metre(
  * adlı siteyi bulmuş olabiliyor) ve yalnızca kaba eşleşme (ilçe merkezine
  * düşmüş, bina bulunamamış). İkisi de kuryeyi yanlış kapıya götürür.
  */
-export function sonucGecerliMi(sonuc: {
-  lat: number;
-  lng: number;
-  /** `/api/geokod` sokak/mahalle düzeyinde kaldıysa true döndürüyor. */
-  kaba?: boolean;
-}): { tamam: boolean; sebep?: string } {
+export function sonucGecerliMi(
+  sonuc: {
+    lat: number;
+    lng: number;
+    /** `/api/geokod` sokak/mahalle düzeyinde kaldıysa true döndürüyor. */
+    kaba?: boolean;
+  },
+  tur: CozulmusAdres["tur"] = "site",
+): { tamam: boolean; sebep?: string } {
   const uzak = metre(MARKET.nokta, { lat: sonuc.lat, lng: sonuc.lng });
   if (uzak > AZAMI_UZAKLIK_M) {
     return {
       tamam: false,
       sebep: `Market ${Math.round(uzak / 1000)} km uzakta`,
     };
+  }
+  /*
+   * Kaba sonuç yalnızca sokak sorgusunda anlamlı: "317. Sokak" arayıp sokağın
+   * ortasını almak doğru cevap. Site adı arayıp sokak düzeyinde kalmak ise
+   * "siteyi bulamadım, civara attım" demek; öyle pin kuryeyi yanıltır.
+   */
+  if (sonuc.kaba && tur !== "sokak") {
+    return { tamam: false, sebep: "Site bulunamadı, yalnızca civarı" };
   }
   return { tamam: true };
 }

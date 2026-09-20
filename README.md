@@ -449,13 +449,27 @@ Serdivan'ın merkezine düşüyor, ki bu konumsuzluktan beter.
 
 **+ → Adresleri haritaya oturt** üç adım işletiyor:
 
-1. **Ayıkla** (`/api/adres-zeka`, Claude Opus 5). Kırklı öbekler hâlinde
-   gidiyor; site adı, blok, kat, daire, sokak ve araya karışmış telefon ayrı
-   alanlara çıkıyor, aranacak temiz sorgu üretiliyor. Sorguya blok ve daire
-   yazılmıyor — Geocoding'i bozuyorlar. Site adı aynı zamanda tekilleştiriliyor:
-   defterde `CAGRI ELİT GARDEN`, `ÇAĞRI ELİT GARDEN` ve `ELİT GARDEN` aynı yer.
-   Yapılandırılmış çıktı kullanılıyor, şema garanti; sistem istemi sabit
-   tutulduğu için önbellekten okunuyor.
+1. **Ayıkla.** Önce **Sakarya sözlüğü** (`src/lib/sakarya.ts`) — anahtarsız,
+   tarayıcıda, anında. Üç kural:
+   - *Site sözlüğü:* defterde geçen ~190 sitenin yazım varyantları tek ada
+     iniyor (`CAGRI ELİT GARDEN`, `ÇAĞRI ELİT GARDEN`, `ELİT GARDEN` → "Çağrı
+     Elit Garden"; `DAYMONT`, `DAYMNT`, `DATYMINT` → "Bu Yapı Daymint"). Ek
+     almış ad da aynı çıpa (`ZİRVE PARKIN ÜSTÜ` → Zirve Park); "X karşısı Y"
+     derken yer Y seçiliyor. Numaralı seriler korunuyor (`EMİRGAN -4`).
+   - *Numaralı sokaklar:* Serdivan'da 3xx numaralı sokaklar İstiklal, 5xx
+     numaralı sokaklar Arabacıalanı Mahallesi'nde; defter bazen yazıyor bazen
+     yazmıyor. Mahalle eklenince Geocoding sokağı buluyor, eklenmeyince
+     Türkiye'nin herhangi bir "317. Sokak"ına düşüyor. Kapı numarası varsa
+     sorguya giriyor ve bu kural site çıpasını geçiyor — en kesin bilgi o.
+   - *Sabit noktalar:* `ADATIP ARKASI`, `KUDÜS CAMİİ YANI`, `REYHANA
+     VARMADAN` — pin kapıya değil ama doğru sokağa düşüyor.
+
+   Blok, kat, daire ve araya karışmış telefon ayrı alanlara çıkıyor; sorguya
+   girmiyorlar. Defterin 1207 konumsuz adresinin 1114'ü (%92) bu sözlükle
+   sorgulanabilir hâle geliyor, 262 ayrı sorguya iniyor. Kalan ~90 tarif
+   gerçekten tarif ("Keçecilerin orası", "Şok'un üstü", "Trafonun arkası");
+   onlar Claude'a gidiyor (`/api/adres-zeka`, kırklı öbekler, yapılandırılmış
+   çıktı). Anahtar yoksa o adım atlanıyor, sözlüğün bulduğuyla devam ediliyor.
 2. **Grupla ve ara.** Aynı yeri anlatanlar tek gruba düşüyor (`obekle`),
    site bir kez aranıyor, oradaki herkes aynı noktayı alıyor. Hem ucuz —
    Geocoding istek başına faturalı — hem tutarlı: aynı sitenin daireleri
@@ -464,15 +478,19 @@ Serdivan'ın merkezine düşüyor, ki bu konumsuzluktan beter.
    (`vilaları`/`villaları`); rakamlar birebir aynı olmak zorunda, yoksa
    `Emirgan 4` ile `Emirgan 6` aynı yer sanılırdı.
 3. **Yaz ve raporla.** Marketten 25 km'den uzağa düşen sonuç reddediliyor —
-   "Saklı Bahçe" adlı site Türkiye'nin her yerinde var. Kabul edilmeyenler ve
-   hiç sorgu çıkmayanlar **elle konulacaklar** listesinde sebebiyle birlikte
-   kalıyor.
+   "Saklı Bahçe" adlı site Türkiye'nin her yerinde var. Kaba sonuç (sokak
+   düzeyi) yalnızca sokak sorgusunda kabul ediliyor: site adı arayıp sokak
+   düzeyinde kalmak "siteyi bulamadım, civara attım" demek. Kabul edilmeyenler
+   ve hiç sorgu çıkmayanlar **elle konulacaklar** listesinde sebebiyle birlikte
+   kalıyor. Konum `adresler` tablosuna yazılıyor; abonelik, teslimat ve sepet
+   pinleri adresten türediği için hepsi kendiliğinden yerine oturuyor.
 
 İşlem yarıda kesilirse sorun olmuyor: yazılan konumlar yazılı kalıyor, yeniden
 açınca kalanlarla devam ediliyor.
 
-`ANTHROPIC_API_KEY` tanımlı değilse uç 503 dönüyor ve ekran bunu açıkça
-söylüyor; uygulamanın kalanı etkilenmiyor. Bu uç bilerek geliştirme
+`ANTHROPIC_API_KEY` tanımlı değilse uç 503 dönüyor; sözlük adımı yine
+çalışıyor, yalnızca sözlüğün çözemediği tarifler "yapay zekâ anahtarı yok"
+notuyla listede kalıyor. Bu uç bilerek geliştirme
 listesinde değil — her çağrısı faturaya yazıldığı için geliştirmede bile
 oturum istiyor. Bin iki yüz adresin Claude tarafı bir seferlik birkaç dolar.
 

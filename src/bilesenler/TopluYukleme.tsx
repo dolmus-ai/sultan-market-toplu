@@ -17,9 +17,12 @@ import {
 import { gunlerYaz } from "@/lib/bicim";
 import type { Urun } from "@/lib/tipler";
 
+/* Sunucudaki `@/lib/toplu` tipleriyle aynı şekil; o dosya exceljs çektiği
+   için istemciye alınmıyor, alanlar burada elle tekrarlanıyor. */
 type AbonelikPlani = {
   gunler: number[];
   kalemler: { ad: string; miktar: number }[];
+  baslik: string | null;
   saat: string | null;
   tutar: number | null;
   not: string | null;
@@ -40,6 +43,7 @@ type Satir = {
   lng: number | null;
   notlar: string | null;
   abonelikler: AbonelikPlani[];
+  konum_aranmasin?: boolean;
   hata: string | null;
 };
 
@@ -128,7 +132,9 @@ function musteriAnahtari(ad: string, telefon: string | null | undefined) {
 
 function planBasligi(plan: AbonelikPlani): string {
   const adlar = plan.kalemler.map((k) => k.ad).filter(Boolean);
-  if (adlar.length === 0) return "Abonelik";
+  // Kalem okunamadıysa çizelge sayfasının adı ("SÜT") başlık oluyor: satırda
+  // neyin abonesi olduğu yazsın diye.
+  if (adlar.length === 0) return plan.baslik ?? "Abonelik";
   // Başlık satırda okunacak: iki kalemden sonrası sayıya dönüyor.
   return adlar.length <= 2
     ? adlar.join(" + ")
@@ -322,7 +328,9 @@ export default function TopluYukleme({
         }
 
         // Konumu olmayan adres, ister yeni ister eski olsun, aranacak.
-        if (!adresKonumlu) {
+        // Adres yerine takma ad yazılmış kayıtlar hariç: arama sonucu
+        // rastgele bir noktaya oturur, market onu elle düzeltecek.
+        if (!adresKonumlu && !satir.konum_aranmasin) {
           konumsuz.push({ adresId, metin: satir.adres_metni });
         }
 

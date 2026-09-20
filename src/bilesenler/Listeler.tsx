@@ -191,12 +191,18 @@ export function AbonelikSatiri({
           </span>
           {bugun && <Etiket ton="kirmizi">Bugün</Etiket>}
         </span>
+        {/*
+          Adres satırın en işe yarar bilgisi: defterden gelen 1200 abonenin
+          çoğunda başlık aynı ("Abonelik"), kurye kişiyi adresinden tanıyor.
+        */}
         <span className="mt-0.5 block truncate text-[13px] text-gri">
+          {abonelik.adres ? adresYaz(abonelik.adres) : "Adres tanımsız"}
+        </span>
+        <span className="mt-1 block truncate text-[12px] font-semibold text-gri">
           {abonelik.baslik} · {gunlerYaz(abonelik.gunler)} ·{" "}
           {saat(abonelik.teslim_saati)}
-        </span>
-        <span className="mt-1 block text-[12px] font-semibold text-gri">
-          {(abonelik.kalemler ?? []).length} kalem
+          {(abonelik.kalemler ?? []).length > 0 &&
+            ` · ${abonelik.kalemler.length} kalem`}
         </span>
       </span>
       <span className="shrink-0 text-right text-[15px] font-black">

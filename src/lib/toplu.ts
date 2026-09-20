@@ -21,6 +21,11 @@ export type AbonelikPlani = {
   /** ISO gün numaraları: Pazartesi 1 … Pazar 7. */
   gunler: number[];
   kalemler: AbonelikKalemiSatiri[];
+  /**
+   * Çizelge sayfasının adı — "SÜT" gibi. Kalem adı okunamadığında aboneliğin
+   * başlığı buradan geliyor ki listede neyin abonesi olduğu yazsın.
+   */
+  baslik: string | null;
   /** "08:00" — yazılmamışsa null, kayıtta varsayılana düşer. */
   saat: string | null;
   tutar: number | null;
@@ -46,6 +51,11 @@ export type TopluSatir = {
   notlar: string | null;
   /** Bu müşteri için kurulacak abonelikler; müşteri listesinde boş. */
   abonelikler: AbonelikPlani[];
+  /**
+   * Adres alanı gerçek adres değil, defterdeki takma ad ("ERDİNÇ AMCA ALT KAT").
+   * Geokodlamaya gönderilirse alakasız bir noktaya oturur; aranmıyor.
+   */
+  konum_aranmasin?: boolean;
   hata: string | null;
 };
 
@@ -395,6 +405,32 @@ export function adSutunuBul(
   return enIyi?.sutun;
 }
 
+/**
+ * Serbest not içine sıkışmış telefon numarasını ayırır.
+ *
+ * Defterde numarası olmayan abonenin telefonu çizelgenin başlıksız sütununa
+ * yazılmış ("546 503 69 96"). Numara künyeye geçsin, notta kalabalık yapmasın.
+ */
+export function telefonAyikla(
+  not: string | null,
+): { telefon: string; kalan: string | null } | null {
+  if (!not) return null;
+  for (const parca of not.split(/[·,;]/)) {
+    const t = parca.trim();
+    if (!/^[\d\s()+-]+$/.test(t)) continue;
+    const rakam = t.replace(/\D/g, "");
+    if (rakam.length < 10 || rakam.length > 12) continue;
+    const kalan =
+      not
+        .split(/[·,;]/)
+        .map((p) => p.trim())
+        .filter((p) => p && p !== t)
+        .join(" · ") || null;
+    return { telefon: t, kalan };
+  }
+  return null;
+}
+
 function cizelgeyiCoz(
   sayfa: Sayfa,
 ): { plan: AbonelikPlani; aboneNo: string }[] {
@@ -402,10 +438,8 @@ function cizelgeyiCoz(
   if (dolu.length < 2) return [];
   const basliklar = dolu[0].satir;
   const eslesme = alanEsle(basliklar);
+  const aboneSutun = eslesme.abone_no ?? 0;
   const gunSutun = basliklar.findIndex((b) => anahtarla(b) === "gun");
-  const notSutun = basliklar.findIndex((b) =>
-    ["not", "notlar", "aciklama"].includes(anahtarla(b)),
-  );
   const saatSutun = basliklar.findIndex((b) =>
     ["saat", "teslimsaati"].includes(anahtarla(b)),
   );
@@ -413,13 +447,35 @@ function cizelgeyiCoz(
     ["tutar", "fiyat"].includes(anahtarla(b)),
   );
 
+  // Başlık satırı veri satırlarından kısa olabiliyor: SÜT sayfasında notlar
+  // hiç başlığı olmayan 6. sütunda duruyor.
+  const enGenis = Math.max(
+    basliklar.length,
+    ...dolu.map((d) => d.satir.length),
+  );
+
+  /*
+   * Başlıksız sütun ürün sayılamaz — adı yok ki kalem olsun. İçindekiler
+   * serbest not: "her hafta süt istiyor", bir de telefon numarası.
+   */
+  const notSutunlari: number[] = [];
+  for (let i = 0; i < enGenis; i++) {
+    if ([aboneSutun, gunSutun, saatSutun, tutarSutun].includes(i)) continue;
+    const a = anahtarla(basliklar[i] ?? "");
+    if (a === "" || ["not", "notlar", "aciklama"].includes(a)) {
+      notSutunlari.push(i);
+    }
+  }
+
   const urunSutunlari = basliklar
     .map((b, i) => ({ ad: b.trim(), i }))
     .filter((s) => !CIZELGE_DISI.has(anahtarla(s.ad)) && s.i !== gunSutun);
 
+  const sayfaAdi = metin(sayfa.ad);
   const sonuc: { plan: AbonelikPlani; aboneNo: string }[] = [];
+
   for (const { satir, sira } of dolu.slice(1)) {
-    const aboneNo = (satir[eslesme.abone_no ?? 0] ?? "").trim();
+    const aboneNo = (satir[aboneSutun] ?? "").trim();
     // Toplam satırı veride değil raporda; abone sayılmamalı.
     if (anahtarla(aboneNo) === "toplam") continue;
 
@@ -427,18 +483,48 @@ function cizelgeyiCoz(
     const kalemler = urunSutunlari
       .map((s) => ({ ad: s.ad, miktar: sayi(satir[s.i]) ?? 0 }))
       .filter((k) => k.miktar > 0);
+    const not =
+      notSutunlari
+        .map((i) => metin(satir[i]))
+        .filter(Boolean)
+        .join(" · ") || null;
 
-    // Ne gün ne miktar varsa satır boş sayılır.
-    if (gunler.length === 0 && kalemler.length === 0) continue;
+    // Ne gün, ne miktar, ne not varsa satır boş sayılır.
+    if (gunler.length === 0 && kalemler.length === 0 && !not) continue;
+
+    /*
+     * Numarası yazılmamış satır bir öncekinin devamı. Defterde iki türlü
+     * karşımıza çıkıyor: aboneye ikinci bir gün ekleniyor ("PERŞEMBE&P.TSİ"
+     * alt satırda), ya da adet bir satır aşağı kaymış oluyor. Eskiden bu
+     * satırlar sessizce düşüyordu; artık üstteki aboneliğe katılıyor.
+     */
+    const onceki = sonuc[sonuc.length - 1];
+    if (!aboneNo) {
+      if (!onceki) continue;
+      for (const g of gunler) {
+        if (!onceki.plan.gunler.includes(g)) onceki.plan.gunler.push(g);
+      }
+      onceki.plan.gunler.sort((a, b) => a - b);
+      for (const k of kalemler) {
+        const ayni = onceki.plan.kalemler.find((x) => x.ad === k.ad);
+        if (ayni) ayni.miktar += k.miktar;
+        else onceki.plan.kalemler.push(k);
+      }
+      if (not) {
+        onceki.plan.not = [onceki.plan.not, not].filter(Boolean).join(" · ");
+      }
+      continue;
+    }
 
     sonuc.push({
       aboneNo,
       plan: {
         gunler,
         kalemler,
+        baslik: sayfaAdi,
         saat: saatSutun >= 0 ? saatCoz(satir[saatSutun]) : null,
         tutar: tutarSutun >= 0 ? sayi(satir[tutarSutun]) : null,
-        not: notSutun >= 0 ? metin(satir[notSutun]) : null,
+        not,
         kaynakSatir: sira,
       },
     });
@@ -479,12 +565,16 @@ export function aboneDefteriCoz(sayfalar: Sayfa[]): TopluSonuc {
     .flatMap(cizelgeyiCoz);
 
   const planlar = new Map<string, AbonelikPlani[]>();
+  // Anahtar sadeleştirilmiş hâl; listede bulunmayan aboneyi kendi adıyla
+  // kaydedebilmek için defterde yazdığı gibi de tutuluyor.
+  const etiketler = new Map<string, string>();
   for (const { aboneNo, plan } of cizelge) {
     const anahtar = anahtarla(aboneNo);
     if (!anahtar) continue;
     const liste = planlar.get(anahtar) ?? [];
     liste.push(plan);
     planlar.set(anahtar, liste);
+    if (!etiketler.has(anahtar)) etiketler.set(anahtar, aboneNo.trim());
   }
 
   const al = (satir: string[], alan: string) =>
@@ -520,6 +610,7 @@ export function aboneDefteriCoz(sayfalar: Sayfa[]): TopluSonuc {
           {
             gunler: [],
             kalemler: [],
+            baslik: null,
             saat: null,
             tutar: null,
             not: null,
@@ -547,11 +638,49 @@ export function aboneDefteriCoz(sayfalar: Sayfa[]): TopluSonuc {
   });
 
   const uyarilar: string[] = [];
+
+  /*
+   * Çizelgede olup abone listesinde olmayanlar. Defterde numara yerine
+   * tarif yazılmış oluyor ("ERDİNÇ AMCA ALT KAT"); marketin bildiği tek
+   * künye bu. Eskiden bu satırlar tümden düşüyordu — artık kendi müşterisi
+   * olarak kaydediliyorlar, adres alanına da aynı tarif yazılıyor.
+   */
   const eslesmeyen = [...planlar.keys()].filter((a) => !kullanilanPlan.has(a));
+  let sonSira = satirlar.reduce((e, s) => Math.max(e, s.sira), 0);
+  for (const anahtar of eslesmeyen) {
+    const kendiPlanlari = planlar.get(anahtar) ?? [];
+    const etiket = etiketler.get(anahtar) ?? anahtar;
+    // Not alanına düşmüş telefon numarasını künyeye taşı.
+    let telefon: string | null = null;
+    for (const plan of kendiPlanlari) {
+      const bulunan = telefonAyikla(plan.not);
+      if (!bulunan) continue;
+      telefon ??= bulunan.telefon;
+      plan.not = bulunan.kalan;
+    }
+    sonSira += 1;
+    satirlar.push({
+      sira: sonSira,
+      abone_no: null,
+      ad: etiket,
+      telefon,
+      adres_metni: etiket,
+      bina: null,
+      kat: null,
+      daire: null,
+      tarif: "Adresi deftere yazılmamış, çizelgedeki tarifle kaydedildi.",
+      lat: null,
+      lng: null,
+      notlar: null,
+      abonelikler: kendiPlanlari,
+      konum_aranmasin: true,
+      hata: null,
+    });
+  }
   if (eslesmeyen.length) {
     uyarilar.push(
-      `${eslesmeyen.length} çizelge satırının abonesi listede bulunamadı, ` +
-        "bu abonelikler kurulmayacak.",
+      `${eslesmeyen.length} çizelge satırının abonesi listede yoktu; ` +
+        "adresleri boş, çizelgedeki adlarıyla kaydedilecek.",
     );
   }
 

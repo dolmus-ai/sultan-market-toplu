@@ -258,7 +258,10 @@ drop policy "muhasebe kilidi" on public.profiles;
   birlikte döner (`rotationAlignment: map`), eğimde yere yatar; yön bilinmiyorsa
   gizlenir.
 - **Pin renkleri:** kırmızı = bekliyor, turuncu = hazırlanıyor, siyah = yolda,
-  yeşil = teslim, gri = iptal. Bekleyen ve yoldaki teslimatlar nabız atar.
+  yeşil = teslim. Bekleyen ve yoldaki teslimatlar nabız atar.
+- **İptal edilen sipariş teslimat sayılmaz:** ne sorgudan gelir ne listede
+  çizilir. Kapanmış kayıt listede kalınca kurye onu da gezilecek bir durak
+  sanıyordu.
 - **Alt panel** (sürüklenebilir, 3 kademeli): Teslimatlar · Abonelikler ·
   Sepetler. Sepetler sekmesi açık sepeti olan müşterinin adını ve sepet
   tutarını listeler; ürün dökümü gösterilmez.
@@ -391,13 +394,18 @@ balon açılırdı.
 Defter yüklendikten sonra abonelik listesi binleri bulabiliyor. Liste ve
 harita buna göre ayarlı:
 
-- Abonelik sorgusu 5000 kayda kadar okuyor; haritadaki pinler de aynı listeden
-  besleniyor.
+- Abonelik sorgusu sayfa sayfa okuyor. PostgREST tek istekte en çok 1000 satır
+  döndürüyor ve `.limit()` bu tavanı yükseltmiyor: liste 1216 abonenin 1000'ini
+  gösteriyordu. `sayfalayarakGetir` 1000'lik dilimlerle `range` atıyor, sabit
+  sıra (`created_at`, `id`) iki dilim arasında kayıt atlanmasını önlüyor.
+  Haritadaki pinler de aynı listeden besleniyor.
 - Abonelikler ve sepetler sekmesinde ad, telefon ya da adresle arayan bir kutu
   var. Ekranda en fazla 100 satır çiziliyor, üstü aramayla bulunuyor.
 - Abonelik ve sepet satırlarında Motion'ın `layout` animasyonu yok: 1215
-  satırda telefonda sekme geçişini 6 saniyeye çıkarıyordu, kaldırınca 0,8
-  saniyeye indi (4x kısılmış işlemcide ölçüldü).
+  satırda telefonda sekme geçişini 6 saniyeye çıkarıyordu, kaldırınca 0,9
+  saniyeye indi (4x kısılmış işlemcide, 4 kayıtlı hâlle kıyaslanarak ölçüldü).
+- Abonelik satırında müşterinin adresi yazıyor: defterden gelen abonelerin
+  çoğunda başlık aynı ("Abonelik"), kurye kişiyi adresinden tanıyor.
 - `/onizleme?abonelik=1215` gerçek hacmi denemek için abone listesini çoğaltır.
 
 ### Satır işlemleri
@@ -427,10 +435,23 @@ bakar), markette teslim planı belli olunca gün işaretlemek yeter. Bir aboneni
 kişinin pazartesi 3, perşembe 2 süt alması kaybolmaz. Gün adları kısaltmasıyla
 da yazılabilir (`P.TESİ`, `P.TSİ`, `PERŞEMBE&P.TSİ`); `TOPLAM` satırı atlanır.
 Ürün sütunundaki ad `urunler` tablosuyla eşleşirse abonelik kalemi olur,
-eşleşmezse miktar aboneliğin notuna yazılır — bilgi kaybolmaz. Çizelgede
-numara yerine ad yazılmışsa o da denenir; hiç eşleşmezse satır kurulmaz ve
-önizlemede kaç tanesinin düştüğü uyarı olarak çıkar. Adı boş bırakılmış abone
-`Abone 12` gibi numarasıyla kaydedilir.
+eşleşmezse miktar aboneliğin notuna yazılır — bilgi kaybolmaz. Kalem
+okunamadığında aboneliğin başlığı çizelge sayfasının adı oluyor, böylece
+satırda "SÜT" yazıyor. `KAR` sütunu ürün sayılmaz; başlığı hiç olmayan sütun
+da ürün değil serbest nottur — defterde "her hafta süt istiyor" ve bir telefon
+numarası orada duruyor, numara müşterinin künyesine taşınır.
+
+Numarası yazılmamış çizelge satırı bir öncekinin devamı sayılır: defterde
+abonenin ikinci günü alt satıra (`PERŞEMBE&P.TSİ`), bazen de adedi bir satır
+aşağı kaymış oluyor. Günler birleştirilir, adetler toplanır.
+
+Çizelgede numara yerine ad yazılmışsa o da denenir. Hiç eşleşmeyen satır
+artık düşmüyor: kişi çizelgedeki adıyla (`ERDİNÇ AMCA ALT KAT`) kendi müşterisi
+olarak kaydedilir, adres alanına da aynı tarif yazılır. Bu tarif gerçek adres
+olmadığı için geokodlamaya gönderilmez — arama sonucu alakasız bir noktaya
+otururdu; market konumu elle düzeltir. Önizlemede kaç tanesinin böyle
+kaydedileceği uyarı olarak çıkar. Adı boş bırakılmış abone `Abone 12` gibi
+numarasıyla kaydedilir.
 
 **Müşteri listesi** — tek sayfa, en az `Ad` ve `Adres` sütunu gerekir. Telefon,
 Bina, Kat, Daire, Tarif, Lat, Lng ve Not isteğe bağlıdır. Başlıklar Türkçe

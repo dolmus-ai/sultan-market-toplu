@@ -324,9 +324,12 @@ export default function KuryeUygulamasi({
   );
 
   const siraliTeslimatlar = useMemo(() => {
+    // İptaller hiçbir katmanda görünmüyor; kapanmış kayıt teslimat listesini
+    // şişiriyordu.
+    const acik = teslimatlar.filter((s) => s.durum !== "iptal");
     const liste = katmanlar.teslimEdilenler
-      ? teslimatlar
-      : teslimatlar.filter((s) => s.durum !== "teslim");
+      ? acik
+      : acik.filter((s) => s.durum !== "teslim");
     if (rotaSirasi.size === 0) return liste;
     return [...liste].sort(
       (a, b) =>

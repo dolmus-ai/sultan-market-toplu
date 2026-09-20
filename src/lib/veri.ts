@@ -57,6 +57,9 @@ export async function siparisleriGetir(
     .or(
       `planlanan_tarih.eq.${tarih},durum.in.(bekliyor,hazirlaniyor,yolda)`,
     )
+    // İptal edilen sipariş teslimat değil: listede kalınca kurye onu da
+    // gezilecek adres sanıyordu.
+    .neq("durum", "iptal")
     .order("oncelik", { ascending: false })
     .order("planlanan_saat", { ascending: true, nullsFirst: false })
     .limit(400);
@@ -65,19 +68,47 @@ export async function siparisleriGetir(
   return (data ?? []) as unknown as Siparis[];
 }
 
+/**
+ * PostgREST tek istekte en çok 1000 satır döndürüyor (`db-max-rows`); `.limit()`
+ * bunu yükseltmiyor, yalnızca aşağı çekiyor. Market defterinde 1200'den fazla
+ * abone var: sınıra takılan liste sessizce kırpılıyordu, abonelikler ekranı
+ * 1216 kaydın 1000'ini gösteriyordu. Bu yüzden sayfa sayfa okuyoruz.
+ */
+const SAYFA_BOYU = 1000;
+
+/** Supabase sorgu kurucusunun `await` edilince verdiği asgari şekli. */
+type SayfaSorgusu = PromiseLike<{ data: unknown; error: unknown }>;
+
+async function sayfalayarakGetir<T>(
+  sorguYap: (bas: number, son: number) => SayfaSorgusu,
+  azami = 20_000,
+): Promise<T[]> {
+  const tumu: T[] = [];
+  for (let bas = 0; bas < azami; bas += SAYFA_BOYU) {
+    const son = Math.min(bas + SAYFA_BOYU, azami) - 1;
+    const { data, error } = await sorguYap(bas, son);
+    if (error) throw error;
+    const parca = (data ?? []) as T[];
+    tumu.push(...parca);
+    // Eksik sayfa geldiyse kayıtlar bitmiştir; bir istek daha atmaya gerek yok.
+    if (parca.length < son - bas + 1) break;
+  }
+  return tumu;
+}
+
 export async function abonelikleriGetir(
   db: SupabaseClient,
 ): Promise<Abonelik[]> {
-  const { data, error } = await db
-    .from("abonelikler")
-    .select(ABONELIK_ALANLARI)
-    .eq("durum", "aktif")
-    // Market defterindeki abone sayısı binlerle ifade ediliyor; 400'lük
-    // eski sınır listenin ve haritanın çoğunu gizliyordu.
-    .limit(5000);
-
-  if (error) throw error;
-  return (data ?? []) as unknown as Abonelik[];
+  return sayfalayarakGetir<Abonelik>((bas, son) =>
+    db
+      .from("abonelikler")
+      .select(ABONELIK_ALANLARI)
+      .eq("durum", "aktif")
+      // Sayfalar arasında kayıt atlanmasın diye sabit bir sıra şart.
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(bas, son),
+  );
 }
 
 export async function sepetleriGetir(db: SupabaseClient): Promise<Sepet[]> {
@@ -323,12 +354,6 @@ export type MevcutMusteri = {
 export async function mevcutMusterileriGetir(
   db: SupabaseClient,
 ): Promise<MevcutMusteri[]> {
-  const { data, error } = await db
-    .from("musteriler")
-    .select("id, ad, telefon, adresler ( id, lat ), abonelikler ( id )")
-    .limit(20000);
-  if (error) throw error;
-
   type Satir = {
     id: string;
     ad: string;
@@ -337,7 +362,19 @@ export async function mevcutMusterileriGetir(
     abonelikler: { id: string }[] | null;
   };
 
-  return ((data ?? []) as unknown as Satir[]).map((m) => {
+  // Burada da 1000'lik PostgREST sınırı geçerli: dizin eksik okunursa
+  // yarıda kalmış bir yükleme tekrarlandığında aynı müşteri ikinci kez
+  // açılıyordu. Defterin ikinci kez yüklenmesi 223 çift kayıt bırakmıştı.
+  const satirlar = await sayfalayarakGetir<Satir>((bas, son) =>
+    db
+      .from("musteriler")
+      .select("id, ad, telefon, adresler ( id, lat ), abonelikler ( id )")
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(bas, son),
+  );
+
+  return satirlar.map((m) => {
     const adres = m.adresler?.[0] ?? null;
     return {
       musteri_id: m.id,

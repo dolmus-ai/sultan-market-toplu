@@ -34,6 +34,7 @@ import {
   aboneSayfasiMi,
   adSutunuBul,
   cizelgeSayfasiMi,
+  telefonAyikla,
   csvAyristir,
   dosyayiCoz,
   gunleriCoz,
@@ -316,12 +317,15 @@ const defter = aboneDefteriCoz([
   {
     ad: "SÜT",
     satirlar: [
-      ["ABONE NO", "GÜN", "SÜT", "YUMURTA", "KAR", "NOT"],
+      ["ABONE NO", "GÜN", "SÜT", "YUMURTA", "KAR"],
       ["0", "P.TESİ", "5", "0", "2.5", "her hafta"],
       ["0", "PERŞEMBE", "2", "", "", ""],
       ["1", "PERŞEMBE&P.TSİ", "3", "1", "1.5", ""],
       ["TOPLAM", "", "10", "", "4", ""],
-      ["YOK BÖYLE BİRİ", "PAZAR", "1", "", "", ""],
+      ["2", "SALI", "", "0", "", ""],
+      ["", "", "4", "", "", ""],
+      ["", "ÇARŞAMBA", "", "", "", ""],
+      ["YOK BÖYLE BİRİ", "PAZAR", "1", "", "", "546 503 69 96"],
     ],
   },
 ]);
@@ -329,9 +333,11 @@ if (!defter.tamam) {
   bekle("defter çözüldü", false, defter.hata);
 } else {
   bekle("biçim abone", defter.bicim === "abone");
-  bekle("3 abone satırı", defter.satirlar.length === 3, `-> ${defter.satirlar.length}`);
-  bekle("adres boş olan atlanıyor", defter.hatali === 1 && defter.gecerli === 2);
-  bekle("3 abonelik kuruldu", defter.abonelik === 3, `-> ${defter.abonelik}`);
+  // Üç defter satırı + çizelgede adıyla geçen eşleşmeyen abone.
+  bekle("4 abone satırı", defter.satirlar.length === 4, `-> ${defter.satirlar.length}`);
+  bekle("adres boş olan atlanıyor", defter.hatali === 1 && defter.gecerli === 3, `-> ${defter.hatali}/${defter.gecerli}`);
+  // Adresi boş abonenin (2 numara) abonelikleri sayıma girmiyor.
+  bekle("4 abonelik kuruldu", defter.abonelik === 4, `-> ${defter.abonelik}`);
   bekle("adı boş abone numarasıyla anıldı", defter.satirlar[1].ad === "Abone 1", `-> ${defter.satirlar[1].ad}`);
   const ilk = defter.satirlar[0];
   bekle("ilk abonenin iki aboneliği var", ilk.abonelikler.length === 2);
@@ -339,11 +345,32 @@ if (!defter.tamam) {
   bekle("kalem miktarı okundu", ilk.abonelikler[0].kalemler.length === 1 && ilk.abonelikler[0].kalemler[0].miktar === 5, JSON.stringify(ilk.abonelikler[0].kalemler));
   bekle("sıfır miktar kalem sayılmıyor", !ilk.abonelikler[0].kalemler.some((k) => k.ad === "YUMURTA"));
   bekle("kâr sütunu ürün sayılmıyor", !ilk.abonelikler[0].kalemler.some((k) => k.ad === "KAR"));
-  bekle("not okundu", ilk.abonelikler[0].not === "her hafta");
+  // Not başlıksız sütunda: defterin SÜT sayfasında da öyle duruyor.
+  bekle("başlıksız sütundaki not okundu", ilk.abonelikler[0].not === "her hafta", JSON.stringify(ilk.abonelikler[0].not));
+  bekle("başlık çizelge sayfasının adı", ilk.abonelikler[0].baslik === "SÜT", `-> ${ilk.abonelikler[0].baslik}`);
   bekle("TOPLAM satırı atlandı", !defter.satirlar.some((r) => r.abonelikler.some((p) => p.kalemler.some((k) => k.miktar === 10))));
   bekle("eşleşmeyen çizelge satırı uyarı verdi", defter.uyarilar.length === 1 && defter.uyarilar[0].includes("1 çizelge"), JSON.stringify(defter.uyarilar));
   const ikinci = defter.satirlar[1];
   bekle("çoklu gün aboneliği", ikinci.abonelikler[0]?.gunler.join() === "1,4");
+
+  // Numarası yazılmamış satır bir öncekinin devamı sayılıyor: defterde adet
+  // bir alt satıra kaymış, ikinci gün de ayrı satıra yazılmış olabiliyor.
+  const ucuncu = defter.satirlar[2];
+  bekle("alt satıra kaymış adet üstteki aboneliğe eklendi", ucuncu.abonelikler[0]?.kalemler.some((k) => k.ad === "SÜT" && k.miktar === 4), JSON.stringify(ucuncu.abonelikler[0]?.kalemler));
+  bekle("devam satırındaki gün eklendi", ucuncu.abonelikler[0]?.gunler.join() === "2,3", `-> ${ucuncu.abonelikler[0]?.gunler.join()}`);
+  bekle("devam satırı ayrı abonelik açmadı", ucuncu.abonelikler.length === 1, `-> ${ucuncu.abonelikler.length}`);
+
+  // Çizelgede adıyla geçip abone listesinde olmayan kişi de kaydediliyor.
+  const yabanci = defter.satirlar[3];
+  bekle("eşleşmeyen çizelge satırı kendi müşterisi oldu", yabanci.ad === "YOK BÖYLE BİRİ", `-> ${yabanci.ad}`);
+  bekle("eşleşmeyenin adresi çizelgedeki tarif", yabanci.adres_metni === "YOK BÖYLE BİRİ" && yabanci.hata === null);
+  bekle("eşleşmeyenin konumu aranmıyor", yabanci.konum_aranmasin === true);
+  bekle("nottaki telefon künyeye taşındı", yabanci.telefon === "546 503 69 96", `-> ${yabanci.telefon}`);
+  bekle("telefon nottan çıkarıldı", yabanci.abonelikler[0]?.not === null, JSON.stringify(yabanci.abonelikler[0]?.not));
+
+  bekle("telefonAyikla notu ayırıyor", JSON.stringify(telefonAyikla("546 503 69 96 · her hafta")) === JSON.stringify({ telefon: "546 503 69 96", kalan: "her hafta" }), JSON.stringify(telefonAyikla("546 503 69 96 · her hafta")));
+  bekle("telefonAyikla kısa sayıya kanmıyor", telefonAyikla("3") === null);
+  bekle("telefonAyikla boş notta null", telefonAyikla(null) === null);
   // Çizelgede satırı olmayan abone de abonelikler listesine giriyor.
   const plansiz = aboneDefteriCoz([
     {

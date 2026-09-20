@@ -11,7 +11,6 @@ import {
   type KonumsuzAdres,
 } from "@/lib/veri";
 import {
-  maliyetTahmini,
   obekle,
   sonucGecerliMi,
   type CozulmusAdres,
@@ -27,8 +26,8 @@ import { sakaryaCoz } from "@/lib/sakarya";
  *
  *  1. **Ayıkla** — önce Sakarya sözlüğü (`sakaryaCoz`): site adları,
  *     numaralı sokakların mahallesi, sabit noktalar; anahtarsız, anında.
- *     Sözlüğün çözemediği tarifler kırklı öbeklerle `/api/adres-zeka`'ya
- *     gidiyor; anahtar yoksa o adım atlanıyor, sözlüğün bulduğuyla devam.
+ *     Sözlüğün çözemediği tarifler aranmıyor, listede kalıyor; market o
+ *     kalem için yapay zekâya ödeme yapmak istemedi.
  *  2. **Ara** — aynı siteyi anlatan adresler tek gruba düşüyor ve site bir
  *     kez aranıyor. Hem ucuz (Geocoding istek başına faturalı) hem tutarlı:
  *     aynı sitenin daireleri haritada birbirinden ayrı düşmüyor.
@@ -45,10 +44,9 @@ const ESZAMANLI = 4;
 type Durum =
   | { ad: "yukleniyor" }
   | { ad: "hazir"; adresler: KonumsuzAdres[]; sozlukle: number; kalan: number }
-  | { ad: "kapali"; mesaj: string }
   | {
       ad: "calisiyor";
-      asama: "ayikla" | "ara";
+      asama: "ara";
       biten: number;
       toplam: number;
       oturan: number;
@@ -58,8 +56,6 @@ type Durum =
       oturan: number;
       kalan: { adres: string; sebep: string }[];
       grup: number;
-      /** Claude anahtarı yoktu; sözlüğün çözemedikleri denenmeden kaldı. */
-      anahtarsiz: number;
     }
   | { ad: "hata"; mesaj: string };
 
@@ -123,46 +119,11 @@ export default function KonumTamamla({
       else kalanlar.push(a);
     }
 
-    /* --------- 1b) Kalanlar için Claude (anahtar varsa) --------- */
-    let anahtarsiz = 0;
-    const OBEK = 40;
-    for (let i = 0; i < kalanlar.length; i += OBEK) {
-      if (!yasiyor.current) return;
-      const dilim = kalanlar.slice(i, i + OBEK);
-      setDurum({
-        ad: "calisiyor",
-        asama: "ayikla",
-        biten: i,
-        toplam: kalanlar.length,
-        oturan: 0,
-      });
-      try {
-        const yanit = await fetch("/api/adres-zeka", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            adresler: dilim.map((a) => ({ id: a.id, metin: a.adres_metni })),
-          }),
-        });
-        const veri = (await yanit.json()) as {
-          cozumler?: CozulmusAdres[];
-          hata?: string;
-          anahtarsiz?: boolean;
-        };
-        if (!yanit.ok) {
-          // Anahtar yoksa Claude adımı tümden atlanıyor; sözlüğün bulduğu
-          // yine aranacak, kalanlar raporda "yapay zekâ kapalı" diye çıkacak.
-          if (veri.anahtarsiz) {
-            anahtarsiz = kalanlar.length;
-            break;
-          }
-          continue;
-        }
-        cozumler.push(...(veri.cozumler ?? []));
-      } catch {
-        /* bu öbek çözülemedi; kalanlar devam etsin */
-      }
-    }
+    /*
+     * Sözlüğün çözemediği tarifler yapay zekâya gitmiyor — market o kalemi
+     * ödemek istemedi. Doğrudan "elle konulacaklar" listesine düşüyorlar;
+     * `/api/adres-zeka` ucu duruyor, istenirse buradan yeniden bağlanır.
+     */
 
     if (!yasiyor.current) return;
     if (cozumler.length === 0) {
@@ -190,9 +151,7 @@ export default function KonumTamamla({
         adres: adres.adres_metni,
         sebep: cozum
           ? "Tarifte aranabilir bir yer adı yok"
-          : anahtarsiz
-            ? "Sözlükte yok; yapay zekâ anahtarı tanımlı değil"
-            : "Ayıklanamadı",
+          : "Sözlükte yok — haritadan elle işaretlenecek",
       });
     }
 
@@ -244,7 +203,7 @@ export default function KonumTamamla({
     await Promise.all(Array.from({ length: ESZAMANLI }, () => isci()));
 
     if (!yasiyor.current) return;
-    setDurum({ ad: "bitti", oturan, kalan, grup: gruplar.length, anahtarsiz });
+    setDurum({ ad: "bitti", oturan, kalan, grup: gruplar.length });
     onBitti(oturan);
   }
 
@@ -262,7 +221,7 @@ export default function KonumTamamla({
         exit={{ y: 40, opacity: 0 }}
         transition={{ type: "spring", stiffness: 420, damping: 36 }}
         onClick={(e) => e.stopPropagation()}
-        className="max-h-[88vh] w-full max-w-lg overflow-y-auto rounded-t-[28px] bg-zemin p-5 pb-8 sm:rounded-[28px]"
+        className="ince-kaydirma max-h-[88vh] w-full max-w-lg overflow-y-auto rounded-t-[28px] border border-cizgi bg-yuzey px-5 pb-[calc(env(safe-area-inset-bottom)+24px)] pt-4 sm:rounded-[28px]"
       >
         <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-cizgi sm:hidden" />
 
@@ -306,13 +265,10 @@ export default function KonumTamamla({
                     sokakların mahallesi, sabit noktalar. Aynı siteyi anlatanlar
                     tek seferde bulunup hepsine yazılacak.
                   </p>
-                  <p className="mt-2 text-[12px] font-semibold text-gri">
-                    Kalan {durum.kalan} tarif yapay zekâya gider (yaklaşık{" "}
-                    <b className="text-kontrast">
-                      ${maliyetTahmini(durum.kalan).toFixed(2)}
-                    </b>
-                    ); anahtar tanımlı değilse atlanır. Bulunamayanlar listede
-                    kalır, haritadan elle düzeltebilirsiniz.
+                  <p className="mt-2 text-[13px] font-semibold leading-relaxed text-gri">
+                    Kalan <b className="text-kontrast">{durum.kalan}</b> tarif
+                    (&ldquo;Keçecilerin orası&rdquo; gibi) aranmıyor; işlem bitince listede
+                    çıkar, haritadan elle işaretlersiniz.
                   </p>
 
                   <div className="mt-4 rounded-[20px] border border-cizgi bg-yuzey p-3">
@@ -348,14 +304,9 @@ export default function KonumTamamla({
               animate={{ opacity: 1 }}
               className="mt-4"
             >
-              <p className="text-[14px] font-bold">
-                {durum.asama === "ayikla"
-                  ? "Tarifler ayıklanıyor…"
-                  : "Konumlar aranıyor…"}
-              </p>
+              <p className="text-[14px] font-bold">Konumlar aranıyor…</p>
               <p className="mt-1 text-[13px] font-semibold text-gri">
-                {durum.biten} / {durum.toplam}
-                {durum.asama === "ara" && ` · ${durum.oturan} adres oturdu`}
+                {durum.biten} / {durum.toplam} yer · {durum.oturan} adres oturdu
               </p>
               <div className="mt-3 h-2 overflow-hidden rounded-full bg-yuzey2">
                 <motion.div
@@ -387,8 +338,6 @@ export default function KonumTamamla({
                 {durum.grup} ayrı yer arandı.
                 {durum.kalan.length > 0 &&
                   ` ${durum.kalan.length} adres bulunamadı.`}
-                {durum.anahtarsiz > 0 &&
-                  ` ${durum.anahtarsiz} tarif yapay zekâ anahtarı olmadığı için denenmedi.`}
               </p>
 
               {durum.kalan.length > 0 && (
@@ -420,7 +369,7 @@ export default function KonumTamamla({
             </motion.div>
           )}
 
-          {(durum.ad === "hata" || durum.ad === "kapali") && (
+          {durum.ad === "hata" && (
             <motion.div
               key="hata"
               initial={{ opacity: 0 }}
@@ -430,13 +379,7 @@ export default function KonumTamamla({
               <p className="rounded-[20px] border border-cizgi bg-yuzey p-3.5 text-[13px] font-semibold leading-relaxed">
                 {durum.mesaj}
               </p>
-              {durum.ad === "kapali" && (
-                <p className="mt-3 text-[12px] font-semibold leading-relaxed text-gri">
-                  Vercel&apos;de <b>ANTHROPIC_API_KEY</b> ortam değişkenini
-                  tanımlayıp yeniden dağıtın. Anahtarı Anthropic Console&apos;dan
-                  alabilirsiniz.
-                </p>
-              )}
+
               <motion.button
                 whileTap={{ scale: 0.98 }}
                 onClick={onKapat}

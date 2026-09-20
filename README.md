@@ -272,9 +272,9 @@ drop policy "muhasebe kilidi" on public.profiles;
   sokak zıplıyordu. Payı daha kötü olan ölçüm, eldeki ölçüm bir dakikadan
   tazeyken yok sayılıyor. Bayatlayınca koşulsuz kabul ediliyor: kurye yol
   almıştır.
-- **Konum imleci:** beyaz halkalı kırmızı nokta ve yön konisi. Koni haritayla
-  birlikte döner (`rotationAlignment: map`), eğimde yere yatar; yön bilinmiyorsa
-  gizlenir.
+- **Konum imleci:** yalnızca yeşil "K" rozeti, ekrana göre hizalı (harita
+  dönünce ya da eğilince dik kalır). Eskiden altında yön konisi ve saydam
+  yeşil bir halka vardı; halka haritada büyük bir leke gibi duruyordu.
 - **Pin renkleri:** kırmızı = bekliyor, turuncu = hazırlanıyor, siyah = yolda,
   yeşil = teslim. Bekleyen ve yoldaki teslimatlar nabız atar.
 - **İptal edilen sipariş teslimat sayılmaz:** ne sorgudan gelir ne listede
@@ -466,10 +466,12 @@ Serdivan'ın merkezine düşüyor, ki bu konumsuzluktan beter.
 
    Blok, kat, daire ve araya karışmış telefon ayrı alanlara çıkıyor; sorguya
    girmiyorlar. Defterin 1207 konumsuz adresinin 1114'ü (%92) bu sözlükle
-   sorgulanabilir hâle geliyor, 262 ayrı sorguya iniyor. Kalan ~90 tarif
+   sorgulanabilir hâle geliyor, 261 ayrı sorguya iniyor. Kalan ~90 tarif
    gerçekten tarif ("Keçecilerin orası", "Şok'un üstü", "Trafonun arkası");
-   onlar Claude'a gidiyor (`/api/adres-zeka`, kırklı öbekler, yapılandırılmış
-   çıktı). Anahtar yoksa o adım atlanıyor, sözlüğün bulduğuyla devam ediliyor.
+   onlar aranmıyor, listede kalıyor, market haritadan elle işaretliyor.
+   `/api/adres-zeka` (Claude ile ayıklama) duruyor ama arayüz artık
+   çağırmıyor: market o kalem için ödeme yapmak istemedi. İstenirse
+   `KonumTamamla` içinden yeniden bağlanır.
 2. **Grupla ve ara.** Aynı yeri anlatanlar tek gruba düşüyor (`obekle`),
    site bir kez aranıyor, oradaki herkes aynı noktayı alıyor. Hem ucuz —
    Geocoding istek başına faturalı — hem tutarlı: aynı sitenin daireleri
@@ -488,9 +490,8 @@ Serdivan'ın merkezine düşüyor, ki bu konumsuzluktan beter.
 İşlem yarıda kesilirse sorun olmuyor: yazılan konumlar yazılı kalıyor, yeniden
 açınca kalanlarla devam ediliyor.
 
-`ANTHROPIC_API_KEY` tanımlı değilse uç 503 dönüyor; sözlük adımı yine
-çalışıyor, yalnızca sözlüğün çözemediği tarifler "yapay zekâ anahtarı yok"
-notuyla listede kalıyor. Bu uç bilerek geliştirme
+`ANTHROPIC_API_KEY` yalnızca `/api/adres-zeka` için; tanımlı değilse uç 503
+dönüyor. Arayüz bu ucu kullanmadığı için uygulamanın kalanı etkilenmiyor. Bu uç bilerek geliştirme
 listesinde değil — her çağrısı faturaya yazıldığı için geliştirmede bile
 oturum istiyor. Bin iki yüz adresin Claude tarafı bir seferlik birkaç dolar.
 

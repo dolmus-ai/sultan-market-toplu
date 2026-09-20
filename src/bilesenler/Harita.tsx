@@ -817,7 +817,6 @@ export default function Harita({
   seciliSecenekId,
   katmanlar,
   kuryeKonumu,
-  kuryeYonu,
   digerKuryeler,
   onSecim,
   onAbonelikSecim,
@@ -839,7 +838,6 @@ export default function Harita({
   const sayacRef = useRef<number | null>(null);
   /** +/- düğmeleriyle hedeflenen zoom; animasyon bitince sıfırlanır. */
   const hedefZoomRef = useRef<number | null>(null);
-  const kuryeMarkerRef = useRef<Marker | null>(null);
   /** Kuryenin "K" rozeti — ekrana göre hizalı, dönmeyen ayrı işaretçi. */
   const kuryeHarfRef = useRef<Marker | null>(null);
   // Güncel geri çağırımları harita olay dinleyicilerine taşımak için.
@@ -1024,8 +1022,6 @@ export default function Harita({
 
       temizle = () => {
         if (sayacRef.current) window.clearTimeout(sayacRef.current);
-        kuryeMarkerRef.current?.remove();
-        kuryeMarkerRef.current = null;
         kuryeHarfRef.current?.remove();
         kuryeHarfRef.current = null;
         atifRef.current = null;
@@ -1287,35 +1283,13 @@ export default function Harita({
       // Harita sökülmüşse yapacak bir şey yok.
       if (!haritaRef.current) return;
       {
-        if (!kuryeMarkerRef.current) {
-          // Yön konisi haritayla dönmeli; bu yüzden ayrı bir işaretçide ve
-          // rotationAlignment: map ile duruyor.
-          const koniKutu = document.createElement("div");
-          koniKutu.style.cssText = "width:132px;height:132px;position:relative";
-          koniKutu.innerHTML = `
-          <svg viewBox="-66 -66 132 132" width="132" height="132" style="overflow:visible">
-            <defs>
-              <radialGradient id="kurye-koni" cx="50%" cy="100%" r="100%">
-                <stop offset="0%" stop-color="${KURYE_RENGI}" stop-opacity=".55"/>
-                <stop offset="55%" stop-color="${KURYE_RENGI}" stop-opacity=".22"/>
-                <stop offset="100%" stop-color="${KURYE_RENGI}" stop-opacity="0"/>
-              </radialGradient>
-            </defs>
-            <path class="kurye-koni" d="M0 0 L-30 -56 A63 63 0 0 1 30 -56 Z"
-                  fill="url(#kurye-koni)"/>
-            <circle cx="0" cy="0" r="19" fill="${KURYE_RENGI}" opacity=".2"/>
-          </svg>`;
-
-          kuryeMarkerRef.current = new MapLibreMarker({
-            element: koniKutu,
-            rotationAlignment: "map",
-            pitchAlignment: "map",
-          })
-            .setLngLat([kuryeKonumu.lng, kuryeKonumu.lat])
-            .addTo(harita);
-
-          // "K" ekrana göre hizalı ayrı işaretçide: harita döndüğünde ya da
-          // eğildiğinde harf yan yatmasın, hep dik ve okunur kalsın.
+        if (!kuryeHarfRef.current) {
+          /*
+           * Yalnızca "K" rozeti. Eskiden altında yön konisi ve saydam yeşil
+           * bir halka vardı; halka haritada büyük yeşil bir leke gibi
+           * duruyordu, kurye "altımdaki yeşil bölge ne" diye sordu. Rozet
+           * ekrana göre hizalı: harita dönünce ya da eğilince dik kalıyor.
+           */
           const harfKutu = document.createElement("div");
           harfKutu.style.cssText = "width:34px;height:34px";
           harfKutu.innerHTML = `
@@ -1332,22 +1306,14 @@ export default function Harita({
             .setLngLat([kuryeKonumu.lng, kuryeKonumu.lat])
             .addTo(harita);
         } else {
-          kuryeMarkerRef.current.setLngLat([kuryeKonumu.lng, kuryeKonumu.lat]);
-          kuryeHarfRef.current?.setLngLat([kuryeKonumu.lng, kuryeKonumu.lat]);
+          kuryeHarfRef.current.setLngLat([kuryeKonumu.lng, kuryeKonumu.lat]);
         }
-
-        // Yön bilinmiyorsa koniyi gizle, imleci sade nokta olarak bırak.
-        const koni = kuryeMarkerRef.current
-          ?.getElement()
-          .querySelector<SVGElement>(".kurye-koni");
-        if (koni) koni.style.display = kuryeYonu == null ? "none" : "";
-        kuryeMarkerRef.current?.setRotation(kuryeYonu ?? 0);
       }
     });
     // `hazir` şart: konum haritadan önce geliyor, efekt boş haritada dönüyor
     // ve konum sabitse (masaüstünde IP tahmini öyle) bir daha hiç çalışmıyor,
     // imleç de hiç çizilmiyordu.
-  }, [hazir, kuryeKonumu, kuryeYonu]);
+  }, [hazir, kuryeKonumu]);
 
   /**
    * Balon bir MapLibre işaretçisine bağlanıyor: konumu harita hesaplıyor,

@@ -72,7 +72,9 @@ export async function abonelikleriGetir(
     .from("abonelikler")
     .select(ABONELIK_ALANLARI)
     .eq("durum", "aktif")
-    .limit(400);
+    // Market defterindeki abone sayısı binlerle ifade ediliyor; 400'lük
+    // eski sınır listenin ve haritanın çoğunu gizliyordu.
+    .limit(5000);
 
   if (error) throw error;
   return (data ?? []) as unknown as Abonelik[];

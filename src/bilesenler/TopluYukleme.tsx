@@ -8,6 +8,8 @@ import {
   abonelikEkle,
   abonelikKalemleriEkle,
   adresEkle,
+  adresiGeokodla,
+  adresKonumuYaz,
   musteriEkle,
   urunleriGetir,
 } from "@/lib/veri";
@@ -54,12 +56,34 @@ type Durum =
   | { ad: "bos" }
   | { ad: "okunuyor" }
   | Onizleme
-  | { ad: "yukleniyor"; toplam: number; biten: number }
-  | { ad: "bitti"; eklenen: number; abonelik: number; atlanan: number }
+  | {
+      ad: "yukleniyor";
+      /** "kayit" müşteri/adres/abonelik yazıyor, "konum" adresleri arıyor. */
+      asama: "kayit" | "konum";
+      toplam: number;
+      biten: number;
+    }
+  | {
+      ad: "bitti";
+      eklenen: number;
+      abonelik: number;
+      atlanan: number;
+      konumlanan: number;
+      konumNotu: string | null;
+    }
   | { ad: "hata"; mesaj: string };
 
 /** Abonelik saati yazılmamışsa kullanılan varsayılan. */
 const VARSAYILAN_SAAT = "08:00";
+
+/**
+ * Aynı anda kaç adres aranacak.
+ *
+ * Google Geocoding saniyede onlarca isteğe izin veriyor; sınır bizim
+ * tarafımızda: dörtten fazlası tarayıcının bağlantı havuzunu doldurup
+ * arayüzü ağırlaştırıyor.
+ */
+const KONUM_ESZAMANLI = 4;
 
 function anahtarla(m: string) {
   const harita: Record<string, string> = {
@@ -138,9 +162,81 @@ export default function TopluYukleme({
     }
   }
 
+  /**
+   * Konumu olmayan adresleri arar ve koordinatı kaydeder.
+   *
+   * İlk yanıt Nominatim'den gelirse durduruluyor: Google anahtarı tanımlı
+   * değil demektir ve yedek servis hem saniyede bir istek kabul ediyor
+   * (binlerce adres saatler sürerdi) hem de bu tür site/blok adreslerini
+   * çoğunlukla bulamıyor. Kayıtlar yerinde kalıyor, konum sonra eklenebiliyor.
+   */
+  async function konumlandir(
+    hedefler: { adresId: string; metin: string }[],
+  ): Promise<{ konumlanan: number; not: string | null }> {
+    if (hedefler.length === 0) return { konumlanan: 0, not: null };
+    setDurum({
+      ad: "yukleniyor",
+      asama: "konum",
+      toplam: hedefler.length,
+      biten: 0,
+    });
+
+    let biten = 0;
+    let konumlanan = 0;
+    let not: string | null = null;
+    let durduruldu = false;
+
+    const sira = [...hedefler];
+    async function isci(ilkMi: boolean) {
+      while (!durduruldu) {
+        const is = sira.shift();
+        if (!is) return;
+        try {
+          const sonuc = await adresiGeokodla(is.metin);
+          if (sonuc) {
+            if (ilkMi && sonuc.motor === "nominatim") {
+              durduruldu = true;
+              not =
+                "Google adres servisi devrede değil; konumlar aranmadı. " +
+                "Anahtar tanımlanınca adresler haritaya oturur.";
+              return;
+            }
+            await adresKonumuYaz(db, is.adresId, sonuc.lat, sonuc.lng);
+            konumlanan++;
+          }
+        } catch {
+          /* bu adres konumlanamadı, sıradakine geç */
+        }
+        biten++;
+        setDurum({
+          ad: "yukleniyor",
+          asama: "konum",
+          toplam: hedefler.length,
+          biten,
+        });
+        ilkMi = false;
+      }
+    }
+
+    // İlk istek tek başına gidiyor: hangi servisin cevapladığını öğrenip
+    // gerekirse kalan binlerce isteği hiç başlatmıyoruz.
+    await isci(true);
+    if (!durduruldu) {
+      await Promise.all(
+        Array.from({ length: KONUM_ESZAMANLI }, () => isci(false)),
+      );
+    }
+    return { konumlanan, not };
+  }
+
   async function yukle(onizleme: Onizleme) {
     const gecerliler = onizleme.satirlar.filter((s) => !s.hata);
-    setDurum({ ad: "yukleniyor", toplam: gecerliler.length, biten: 0 });
+    setDurum({
+      ad: "yukleniyor",
+      asama: "kayit",
+      toplam: gecerliler.length,
+      biten: 0,
+    });
 
     // Ürün listesi yalnızca abonelik kurulacaksa gerekiyor.
     let urunler: Urun[] = [];
@@ -155,6 +251,7 @@ export default function TopluYukleme({
     let eklenen = 0;
     let abonelikSayisi = 0;
     let atlanan = 0;
+    const konumsuz: { adresId: string; metin: string }[] = [];
 
     for (const [i, satir] of gecerliler.entries()) {
       try {
@@ -174,6 +271,10 @@ export default function TopluYukleme({
           lng: satir.lng,
         });
         eklenen++;
+        // Dosyada koordinat yoksa adres sonradan aranacak.
+        if (satir.lat == null) {
+          konumsuz.push({ adresId: adres.id, metin: satir.adres_metni });
+        }
 
         for (const plan of satir.abonelikler) {
           // Eşleşen ürünler kalem olur; eşleşmeyenler nota yazılır ki
@@ -210,10 +311,24 @@ export default function TopluYukleme({
       } catch {
         atlanan++;
       }
-      setDurum({ ad: "yukleniyor", toplam: gecerliler.length, biten: i + 1 });
+      setDurum({
+        ad: "yukleniyor",
+        asama: "kayit",
+        toplam: gecerliler.length,
+        biten: i + 1,
+      });
     }
 
-    setDurum({ ad: "bitti", eklenen, abonelik: abonelikSayisi, atlanan });
+    const { konumlanan, not } = await konumlandir(konumsuz);
+
+    setDurum({
+      ad: "bitti",
+      eklenen,
+      abonelik: abonelikSayisi,
+      atlanan,
+      konumlanan,
+      konumNotu: not,
+    });
     onBitti(eklenen, abonelikSayisi);
   }
 
@@ -431,7 +546,10 @@ export default function TopluYukleme({
               exit={{ opacity: 0 }}
               className="py-10"
             >
-              <p className="text-center text-[15px] font-black">
+              <p className="text-center text-[11px] font-black uppercase tracking-wider text-gri">
+                {durum.asama === "kayit" ? "1 / 2 · Kayıt" : "2 / 2 · Konum"}
+              </p>
+              <p className="mt-1 text-center text-[15px] font-black">
                 {durum.biten} / {durum.toplam}
               </p>
               <div className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-yuzey2">
@@ -444,7 +562,9 @@ export default function TopluYukleme({
                 />
               </div>
               <p className="mt-3 text-center text-[13px] text-gri">
-                Kaydediliyor, sayfayı kapatma.
+                {durum.asama === "kayit"
+                  ? "Kaydediliyor, sayfayı kapatma."
+                  : "Adresler haritada aranıyor, sayfayı kapatma."}
               </p>
             </motion.div>
           )}
@@ -474,9 +594,19 @@ export default function TopluYukleme({
                   {durum.abonelik} abonelik kuruldu
                 </p>
               )}
+              {durum.konumlanan > 0 && (
+                <p className="mt-1 text-[14px] font-bold text-gri">
+                  {durum.konumlanan} adres haritaya oturdu
+                </p>
+              )}
               {durum.atlanan > 0 && (
                 <p className="mt-1 text-[13px] font-semibold text-kirmizi">
                   {durum.atlanan} satır kaydedilemedi
+                </p>
+              )}
+              {durum.konumNotu && (
+                <p className="mt-3 rounded-2xl bg-turuncu/10 px-3.5 py-2.5 text-[12px] font-bold text-turuncu">
+                  {durum.konumNotu}
                 </p>
               )}
             </motion.div>

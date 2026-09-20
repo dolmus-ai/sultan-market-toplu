@@ -344,6 +344,22 @@ if (!defter.tamam) {
   bekle("eşleşmeyen çizelge satırı uyarı verdi", defter.uyarilar.length === 1 && defter.uyarilar[0].includes("1 çizelge"), JSON.stringify(defter.uyarilar));
   const ikinci = defter.satirlar[1];
   bekle("çoklu gün aboneliği", ikinci.abonelikler[0]?.gunler.join() === "1,4");
+  // Çizelgede satırı olmayan abone de abonelikler listesine giriyor.
+  const plansiz = aboneDefteriCoz([
+    {
+      ad: "SERVİS",
+      satirlar: [
+        ["ABONE NO", "", "TEL", "ADRES"],
+        ["7", "PLANSIZ ABONE", "533 000 0000", "ÖRNEK SİTESİ A BLOK"],
+      ],
+    },
+  ]);
+  if (!plansiz.tamam) bekle("plansız abone çözüldü", false, plansiz.hata);
+  else {
+    bekle("çizelgesiz abone de abonelik açıyor", plansiz.abonelik === 1, `-> ${plansiz.abonelik}`);
+    bekle("çizelgesiz aboneliğin günü boş", plansiz.satirlar[0].abonelikler[0]?.gunler.length === 0);
+    bekle("çizelgesiz aboneliğin kalemi yok", plansiz.satirlar[0].abonelikler[0]?.kalemler.length === 0);
+  }
 }
 
 bekle("gün yazımı defter biçiminde", gunleriYaz([1, 4]) === "PAZARTESİ&PERŞEMBE", gunleriYaz([1, 4]));
@@ -356,7 +372,8 @@ if (!sablon.tamam) {
 } else {
   bekle("şablon abone biçiminde", sablon.bicim === "abone");
   bekle("şablonda 3 müşteri", sablon.gecerli === 3, `-> ${sablon.gecerli}`);
-  bekle("şablonda 2 abonelik", sablon.abonelik === 2, `-> ${sablon.abonelik}`);
+  // Çizelgede satırı olan 2 abone + planı olmayan 1 abone = 3.
+  bekle("şablonda 3 abonelik", sablon.abonelik === 3, `-> ${sablon.abonelik}`);
   const s0 = sablon.satirlar[0];
   bekle("şablon saati okundu", s0.abonelikler[0]?.saat === "08:00", JSON.stringify(s0.abonelikler[0]));
   bekle("şablon tutarı okundu", s0.abonelikler[0]?.tutar === 250);

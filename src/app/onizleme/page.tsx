@@ -161,8 +161,40 @@ const SEPETLER: Sepet[] = [1, 4, 7].map((i) => ({
   })),
 }));
 
-export default function OnizlemeSayfasi() {
+/**
+ * Defter yüklendikten sonraki gerçek hacmi denemek için çoğaltılmış abone
+ * listesi: `/onizleme?abonelik=1215`. Market defterinde binden fazla abone
+ * var; listenin ve haritanın o yükte akıcı kalması buradan ölçülüyor.
+ */
+function cogalt(adet: number): Abonelik[] {
+  if (adet <= ABONELIKLER.length) return ABONELIKLER;
+  return Array.from({ length: adet }, (_, i) => {
+    const temel = ABONELIKLER[i % ABONELIKLER.length];
+    const musteri = temel.musteri!;
+    const adres = temel.adres!;
+    return {
+      ...temel,
+      id: `abonelik-hacim-${i}`,
+      musteri: { ...musteri, id: `musteri-hacim-${i}`, ad: `Abone ${i + 1}` },
+      adres: {
+        ...adres,
+        id: `adres-hacim-${i}`,
+        // Pinler üst üste binmesin: markete yakın bir ızgaraya dağıtılıyor.
+        lat: 40.7784889 + (Math.floor(i / 40) - 15) * 0.0016,
+        lng: 30.3518378 + ((i % 40) - 20) * 0.0021,
+      },
+    };
+  });
+}
+
+export default async function OnizlemeSayfasi({
+  searchParams,
+}: {
+  searchParams: Promise<{ abonelik?: string }>;
+}) {
   if (process.env.NODE_ENV === "production") notFound();
+  const { abonelik } = await searchParams;
+  const abonelikler = cogalt(Number(abonelik) || 0);
 
   return (
     <KuryeUygulamasi
@@ -175,7 +207,7 @@ export default function OnizlemeSayfasi() {
         vardiyada: true,
       }}
       baslangicTeslimatlar={TESLIMATLAR}
-      baslangicAbonelikler={ABONELIKLER}
+      baslangicAbonelikler={abonelikler}
       baslangicSepetler={SEPETLER}
       baslangicYontemler={[
         { kod: "nakit", ad: "Nakit", para_alinir: true, sira: 10, aktif: true },

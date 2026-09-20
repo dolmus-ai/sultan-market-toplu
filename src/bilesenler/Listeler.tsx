@@ -163,8 +163,10 @@ export function AbonelikSatiri({
 }) {
   const tutar = kayitTutari(abonelik);
   return (
+    // `layout` yok: abonelik listesi binlerce satıra çıkabiliyor ve Motion'ın
+    // yerleşim animasyonu her satırı ölçtüğü için telefonda sekme geçişini
+    // saniyelere çıkarıyordu. Bu liste zaten yeniden sıralanmıyor.
     <motion.button
-      layout
       onClick={onTikla}
       whileTap={{ scale: 0.985 }}
       className={`flex w-full items-center gap-3 rounded-[20px] border p-3 text-left transition-colors ${
@@ -223,8 +225,8 @@ export function SepetSatiri({
   onIslemler?: () => void;
 }) {
   return (
+    // Abonelik satırıyla aynı sebeple `layout` yok.
     <motion.button
-      layout
       onClick={onTikla}
       whileTap={{ scale: 0.985 }}
       className={`flex w-full items-center gap-3 rounded-[20px] border p-3 text-left transition-colors ${
@@ -243,6 +245,63 @@ export function SepetSatiri({
       </span>
       {onIslemler && !secimModu && <IslemDugmesi onTikla={onIslemler} />}
     </motion.button>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Liste arama kutusu                                                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Uzun listelerde ad, telefon ya da adresle süzme.
+ *
+ * Defter yüklendikten sonra abonelik listesi binleri buluyor; kuryenin
+ * aradığı kişiyi kaydırarak bulması mümkün değil.
+ */
+export function ListeArama({
+  deger,
+  yerTutucu,
+  sonuc,
+  toplam,
+  onDegis,
+}: {
+  deger: string;
+  yerTutucu: string;
+  /** Süzmeden sonra kalan kayıt sayısı. */
+  sonuc: number;
+  toplam: number;
+  onDegis: (d: string) => void;
+}) {
+  return (
+    <div className="sticky top-0 z-10 -mt-1 bg-yuzey pb-2 pt-1">
+      <div className="relative">
+        <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[14px] text-gri">
+          🔎
+        </span>
+        <input
+          value={deger}
+          onChange={(e) => onDegis(e.target.value)}
+          placeholder={yerTutucu}
+          className="h-11 w-full rounded-2xl border border-cizgi bg-yuzey2 pl-10 pr-10 text-[14px] font-semibold outline-none placeholder:font-medium placeholder:text-gri focus:border-kirmizi"
+        />
+        {deger && (
+          <button
+            onClick={() => onDegis("")}
+            aria-label="Aramayı temizle"
+            className="absolute right-2.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-[15px] font-black text-gri hover:bg-yuzey"
+          >
+            ×
+          </button>
+        )}
+      </div>
+      {toplam > 0 && (
+        <p className="mt-1.5 px-1 text-[11px] font-bold text-gri">
+          {sonuc === toplam
+            ? `${toplam} kayıt`
+            : `${sonuc} / ${toplam} kayıt`}
+        </p>
+      )}
+    </div>
   );
 }
 

@@ -26,6 +26,7 @@ import VardiyaOzeti from "./VardiyaOzeti";
 import NavigasyonPaneli, { type NavigasyonDurumu } from "./NavigasyonPaneli";
 import {
   AbonelikSatiri,
+  ListeArama,
   SepetSatiri,
   TeslimatSatiri,
 } from "./Listeler";
@@ -82,6 +83,32 @@ const SEKMELER: { anahtar: Sekme; ad: string }[] = [
 ];
 
 const AKTIF_DURUMLAR: SiparisDurumu[] = ["bekliyor", "hazirlaniyor", "yolda"];
+
+/**
+ * Tek seferde çizilen en fazla satır.
+ *
+ * Market defterindeki abone sayısı binleri buluyor; hepsini birden çizmek
+ * telefonda sekme geçişini saniyelere çıkarıyordu. Aranan kayda arama
+ * kutusundan ulaşılıyor, liste kısa kalıyor.
+ */
+const AZAMI_SATIR = 100;
+
+/** Ad, telefon ya da adres metninde arama. */
+function kayitAra(
+  kayit: {
+    musteri: { ad: string; telefon: string | null } | null;
+    adres: { adres_metni: string } | null;
+  },
+  anahtar: string,
+): boolean {
+  const icerir = (m: string | null | undefined) =>
+    (m ?? "").toLocaleLowerCase("tr").includes(anahtar);
+  return (
+    icerir(kayit.musteri?.ad) ||
+    icerir(kayit.musteri?.telefon) ||
+    icerir(kayit.adres?.adres_metni)
+  );
+}
 
 const TERCIH_ANAHTARI = "sultan-tercih";
 
@@ -154,6 +181,8 @@ export default function KuryeUygulamasi({
   const [secimModu, setSecimModu] = useState(false);
   const [secilenler, setSecilenler] = useState<string[]>([]);
   const [indiriliyor, setIndiriliyor] = useState(false);
+  /** Abonelik ve sepet listelerinde ad/telefon/adres araması. */
+  const [arama, setArama] = useState("");
   const [rota, setRota] = useState<RotaSonucu | null>(null);
   const [rotaHesapla, setRotaHesapla] = useState(false);
 
@@ -556,6 +585,19 @@ export default function KuryeUygulamasi({
     }
   }, [aktifTeslimatlar]);
 
+  /* ------------------------- Liste süzme ------------------------- */
+  const aramaAnahtari = arama.trim().toLocaleLowerCase("tr");
+
+  const suzulmusAbonelikler = useMemo(() => {
+    if (!aramaAnahtari) return abonelikler;
+    return abonelikler.filter((a) => kayitAra(a, aramaAnahtari));
+  }, [abonelikler, aramaAnahtari]);
+
+  const suzulmusSepetler = useMemo(() => {
+    if (!aramaAnahtari) return sepetler;
+    return sepetler.filter((s) => kayitAra(s, aramaAnahtari));
+  }, [sepetler, aramaAnahtari]);
+
   /* ------------------------- Navigasyon ------------------------- */
   const navSecili = useMemo(
     () => navSecenekler.find((s) => s.id === navSeciliId) ?? navSecenekler[0] ?? null,
@@ -754,12 +796,13 @@ export default function KuryeUygulamasi({
     const suz = <T extends { id: string }>(liste: T[]) =>
       secili ? liste.filter((k) => secilenler.includes(k.id)) : liste;
 
+    // Arama açıksa ekranda görünen liste iniyor; seçim her zaman öncelikli.
     const kayitlar =
       sekme === "teslimatlar"
         ? suz(siraliTeslimatlar)
         : sekme === "abonelikler"
-          ? suz(abonelikler)
-          : suz(sepetler);
+          ? suz(suzulmusAbonelikler)
+          : suz(suzulmusSepetler);
 
     if (kayitlar.length === 0) {
       uyar("İndirilecek kayıt yok.");
@@ -2047,6 +2090,7 @@ export default function KuryeUygulamasi({
                     setSeciliId(null);
                     // Seçim kimlikleri sekmeye özel; karışmasın diye sıfırlanıyor.
                     setSecilenler([]);
+                    setArama("");
                     if (panel === "kapali") setPanel("yari");
                   }}
                   className={`relative shrink-0 rounded-hap px-3.5 py-2 text-[13px] font-bold transition-colors ${
@@ -2165,7 +2209,14 @@ export default function KuryeUygulamasi({
 
               {sekme === "abonelikler" && (
                 <>
-                  {abonelikler.map((a) => (
+                  <ListeArama
+                    deger={arama}
+                    yerTutucu="Ad, telefon ya da adres"
+                    sonuc={suzulmusAbonelikler.length}
+                    toplam={abonelikler.length}
+                    onDegis={setArama}
+                  />
+                  {suzulmusAbonelikler.slice(0, AZAMI_SATIR).map((a) => (
                     <AbonelikSatiri
                       key={a.id}
                       abonelik={a}
@@ -2187,15 +2238,33 @@ export default function KuryeUygulamasi({
                       }
                     />
                   ))}
+                  {suzulmusAbonelikler.length > AZAMI_SATIR && (
+                    <p className="px-1 pt-1 text-[12px] font-semibold text-gri">
+                      İlk {AZAMI_SATIR} kayıt gösteriliyor. Aradığını bulmak
+                      için yukarıdaki kutuya yaz.
+                    </p>
+                  )}
                   {abonelikler.length === 0 && (
                     <Bos mesaj="Aktif abonelik yok." />
+                  )}
+                  {abonelikler.length > 0 && suzulmusAbonelikler.length === 0 && (
+                    <Bos mesaj="Aramaya uyan abonelik yok." />
                   )}
                 </>
               )}
 
               {sekme === "sepetler" && (
                 <>
-                  {sepetler.map((s) => (
+                  {sepetler.length > 20 && (
+                    <ListeArama
+                      deger={arama}
+                      yerTutucu="Ad, telefon ya da adres"
+                      sonuc={suzulmusSepetler.length}
+                      toplam={sepetler.length}
+                      onDegis={setArama}
+                    />
+                  )}
+                  {suzulmusSepetler.slice(0, AZAMI_SATIR).map((s) => (
                     <SepetSatiri
                       key={s.id}
                       sepet={s}
@@ -2216,7 +2285,15 @@ export default function KuryeUygulamasi({
                       }
                     />
                   ))}
+                  {suzulmusSepetler.length > AZAMI_SATIR && (
+                    <p className="px-1 pt-1 text-[12px] font-semibold text-gri">
+                      İlk {AZAMI_SATIR} kayıt gösteriliyor.
+                    </p>
+                  )}
                   {sepetler.length === 0 && <Bos mesaj="Açık sepet yok." />}
+                  {sepetler.length > 0 && suzulmusSepetler.length === 0 && (
+                    <Bos mesaj="Aramaya uyan sepet yok." />
+                  )}
                 </>
               )}
 

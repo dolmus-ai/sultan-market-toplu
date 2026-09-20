@@ -502,10 +502,30 @@ export function aboneDefteriCoz(sayfalar: Sayfa[]): TopluSonuc {
     const anahtar = aboneNo ? anahtarla(aboneNo) : "";
     const adAnahtar = ad ? anahtarla(ad) : "";
     // Çizelgede numara yerine ad yazılmış olabilir; ikisini de deniyoruz.
-    const abonelikler = planlar.get(anahtar) ?? planlar.get(adAnahtar) ?? [];
-    if (abonelikler.length) {
+    const cizelgeden = planlar.get(anahtar) ?? planlar.get(adAnahtar) ?? [];
+    if (cizelgeden.length) {
       kullanilanPlan.add(planlar.has(anahtar) ? anahtar : adAnahtar);
     }
+
+    /*
+     * Defterdeki herkes abone: SERVİS sayfası zaten servis listesi. Çizelgede
+     * satırı olmayanlara günsüz bir abonelik açılıyor — kayıt abonelikler
+     * listesinde ve haritada görünsün diye. Günü boş olduğu için kendiliğinden
+     * sipariş üretmiyor (`abonelikBugunMu` haftalıkta günlere bakıyor);
+     * markette teslim planı belli olunca gün işaretlenmesi yetiyor.
+     */
+    const abonelikler: AbonelikPlani[] = cizelgeden.length
+      ? cizelgeden
+      : [
+          {
+            gunler: [],
+            kalemler: [],
+            saat: null,
+            tutar: null,
+            not: null,
+            kaynakSatir: sira,
+          },
+        ];
 
     return {
       sira,

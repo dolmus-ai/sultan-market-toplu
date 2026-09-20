@@ -386,6 +386,20 @@ Parmak 8 pikselden fazla kayarsa bu bir sürüklemedir, uzun basış iptal olur.
 Uzun basıştan sonra gelen `click` yutulur; yoksa hem teslim işaretlenir hem
 balon açılırdı.
 
+### Uzun listeler
+
+Defter yüklendikten sonra abonelik listesi binleri bulabiliyor. Liste ve
+harita buna göre ayarlı:
+
+- Abonelik sorgusu 5000 kayda kadar okuyor; haritadaki pinler de aynı listeden
+  besleniyor.
+- Abonelikler ve sepetler sekmesinde ad, telefon ya da adresle arayan bir kutu
+  var. Ekranda en fazla 100 satır çiziliyor, üstü aramayla bulunuyor.
+- Abonelik ve sepet satırlarında Motion'ın `layout` animasyonu yok: 1215
+  satırda telefonda sekme geçişini 6 saniyeye çıkarıyordu, kaldırınca 0,8
+  saniyeye indi (4x kısılmış işlemcide ölçüldü).
+- `/onizleme?abonelik=1215` gerçek hacmi denemek için abone listesini çoğaltır.
+
 ### Satır işlemleri
 
 Teslimat, abonelik ve sepet satırlarının sağındaki **⋯** düğmesi düzenleme,
@@ -404,8 +418,13 @@ kural hem arayüzde hem RLS politikasında var.
 | `SERVİS` | `ABONE NO`, müşteri adı (başlığı boş olabilir), `TEL`, `ADRES` — ayrıca `BİNA`, `KAT`, `DAİRE`, `TARİF`, `LAT`, `LNG` |
 | `ÇİZELGE` | `ABONE NO`, `GÜN`, ürün sütunları (başlık ürün adı, hücre miktar), `SAAT`, `TUTAR`, `NOT` |
 
-Her `SERVİS` satırı bir müşteri ve adres açar. Her `ÇİZELGE` satırı, abone
-numarasından eşleşen müşteriye bir **abonelik** kurar. Gün adları kısaltmasıyla
+Her `SERVİS` satırı bir müşteri, bir adres ve bir **abonelik** açar —
+defterdeki herkes abonedir. `ÇİZELGE` sayfasında satırı olanların aboneliği o
+satırdaki gün ve miktarlarla kurulur; olmayanlarınki günü boş açılır. Günü boş
+abonelik kendiliğinden sipariş üretmez (`abonelikBugunMu` haftalıkta günlere
+bakar), markette teslim planı belli olunca gün işaretlemek yeter. Bir abonenin
+çizelgede birden çok satırı varsa her satır ayrı abonelik olur; böylece aynı
+kişinin pazartesi 3, perşembe 2 süt alması kaybolmaz. Gün adları kısaltmasıyla
 da yazılabilir (`P.TESİ`, `P.TSİ`, `PERŞEMBE&P.TSİ`); `TOPLAM` satırı atlanır.
 Ürün sütunundaki ad `urunler` tablosuyla eşleşirse abonelik kalemi olur,
 eşleşmezse miktar aboneliğin notuna yazılır — bilgi kaybolmaz. Çizelgede
@@ -423,6 +442,14 @@ Dosya sunucuda çözümlenir (`src/lib/toplu.ts`), kayıt istemciden kuryenin
 kendi oturumuyla atılır. Yükleme öncesi kaç müşteri, kaç abonelik kurulacağı
 ve kaç satırın atlanacağı gösterilir. "Örnek dosyayı indir" abone defteri
 biçiminde doldurulmuş bir `.xlsx` verir (`GET /api/toplu-musteri`).
+
+Yükleme iki aşamalı. Önce kayıtlar yazılır, sonra dosyada koordinatı olmayan
+adresler `/api/geokod` ile aranır ve bulunanların konumu kaydedilir — pinlerin
+haritaya oturması için. Arama dörder istek paralel gider. İlk yanıt
+Nominatim'den gelirse aşama orada durur ve "Google adres servisi devrede
+değil" denir: yedek servis saniyede bir istek kabul ettiği için binlerce adres
+saatler sürerdi ve site/blok adreslerini zaten çoğunlukla bulamaz. Kayıtlar
+yerinde kalır, konum sonradan eklenebilir.
 
 ### Excel'e indir
 

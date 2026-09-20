@@ -35,6 +35,7 @@ import {
 } from "@/lib/harita-stili";
 import { haritaDurumRengi } from "@/lib/bicim";
 import type { Tema } from "@/lib/harita-stili";
+import { SAKARYA_SINIRI } from "@/lib/alan";
 import { MARKET } from "@/lib/market";
 import {
   BINA_KARO_KAYNAGI,
@@ -920,6 +921,15 @@ export default function Harita({
         dragRotate: true,
         pitchWithRotate: true,
         maxPitch: 75,
+        /*
+         * Kurye Sakarya dışına çıkmıyor; harita da çıkmasın. MapLibre
+         * görüntüyü kutunun içinde tutuyor ve uzaklaşmayı da kendiliğinden
+         * kısıtlıyor: viewport kutuyu aşamıyor. Bu kısıt ekran ölçüsüne göre
+         * hesaplanıyor, yani telefonda ve masaüstünde ayrı ayrı doğru
+         * davranıyor — elle bir `minZoom` vermeye gerek yok, verilen değer
+         * MapLibre'ın kendi sınırının altında kalıp hiç devreye girmiyordu.
+         */
+        maxBounds: SAKARYA_SINIRI,
       });
       haritaRef.current = harita;
       // Liberty stili, sprite'ında bulunmayan POI ikonlarına atıf yapıyor

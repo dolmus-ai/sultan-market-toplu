@@ -283,6 +283,18 @@ drop policy "muhasebe kilidi" on public.profiles;
 - **Alt panel** (sürüklenebilir, 3 kademeli): Teslimatlar · Abonelikler ·
   Sepetler. Sepetler sekmesi açık sepeti olan müşterinin adını ve sepet
   tutarını listeler; ürün dökümü gösterilmez.
+- **Gezilebilir alan Sakarya ili:** harita `maxBounds` ile Sakarya'yı çevreleyen
+  kutuya kilitli (`src/lib/alan.ts`). Kurye il dışına teslimat yapmıyor; oraya
+  kayma yalnızca kaza oluyordu — parmak kaydı, ekran Bolu'ya gitti, geri dönmek
+  uğraş oldu. Kutu dikdörtgen, il sınırının kendisi değil: bir çerçeve zorunlu
+  olarak komşu illerden parçalar da kapsar.
+  Uzaklaşma sınırını MapLibre kendisi koyuyor (görüntü kutuyu aşamıyor) ve bunu
+  ekran ölçüsünden hesapladığı için telefonda ve masaüstünde ayrı ayrı doğru
+  davranıyor — elle `minZoom` vermeye gerek yok; ölçüldü, verilen değer
+  MapLibre'ın kendi sınırının altında kalıp hiç devreye girmiyordu.
+  **3B'de ufuk kutunun dışını gösterir** — perspektifin doğası, ufka kadar her
+  şey görünür. Kısıtlanan şey merkez: kurye haritayı il dışına götüremiyor,
+  yalnızca uzakta komşu ili görüyor (pitch 0/45/60/75'te ölçüldü).
 - **Market pini:** deponun kendisi haritada sabit işaretli; kurye konumu
   yoksa rotalar buradan başlar.
 - **Teslimat detayı:** sepet kalemleri, tutar, ödeme yöntemi, kapı tarifi,

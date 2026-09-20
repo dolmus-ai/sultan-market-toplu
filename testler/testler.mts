@@ -51,6 +51,7 @@ import {
   yerAnahtari,
 } from "../src/lib/adres-obek.ts";
 import { sakaryaCoz } from "../src/lib/sakarya.ts";
+import { SAKARYA_SINIRI, sinirIcinde } from "../src/lib/alan.ts";
 import {
   GoogleOturumHatasi,
   googleHataMetni,
@@ -509,6 +510,24 @@ bekle("temel stil bina katmanı", temel.layers.some((k) => k.id === "bina-3b" &&
 bekle("glyph adresi kendi sunucumuz", temel.glyphs === "https://kurye.ornek/maplibre/fonts/{fontstack}/{range}.pbf");
 const binasiz = googleTemelStili("aydinlik", "", "https://kurye.ornek");
 bekle("bina kaynağı boşsa katman yok", !binasiz.layers.some((k) => k.id === "bina-3b") && Object.keys(binasiz.sources).length === 0);
+
+bolum("Harita alanı");
+
+{
+  const [[bati, guney], [dogu, kuzey]] = SAKARYA_SINIRI;
+  bekle("market kutunun içinde", sinirIcinde({ lat: 40.7784889, lng: 30.3518378 }));
+  // İlin uçları: Karasu kıyısı, Taraklı, Pamukova, Akyazı.
+  bekle("Karasu kıyısı içeride", sinirIcinde({ lat: 41.1, lng: 30.68 }));
+  bekle("Taraklı içeride", sinirIcinde({ lat: 40.4, lng: 30.5 }));
+  bekle("Pamukova içeride", sinirIcinde({ lat: 40.5, lng: 30.17 }));
+  bekle("Akyazı içeride", sinirIcinde({ lat: 40.68, lng: 30.62 }));
+  // Komşu iller dışarıda kalmalı.
+  bekle("İstanbul dışarıda", !sinirIcinde({ lat: 41.0082, lng: 28.9784 }));
+  bekle("Bolu dışarıda", !sinirIcinde({ lat: 40.7356, lng: 31.6061 }));
+  bekle("Bursa dışarıda", !sinirIcinde({ lat: 40.1826, lng: 29.0665 }));
+  bekle("kutu batıdan doğuya, güneyden kuzeye", bati < dogu && guney < kuzey);
+
+}
 
 bolum("Sakarya çözücü");
 

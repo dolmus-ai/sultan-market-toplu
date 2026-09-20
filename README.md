@@ -420,6 +420,44 @@ konum düzeltme ve silme sunuyor. Silme onay istiyor. Teslim edilmiş sipariş
 silinemez — tahsilat kaydı ona bağlı ve silinseydi kasa geçmişi de yok olurdu;
 kural hem arayüzde hem RLS politikasında var.
 
+### Adresleri haritaya oturt
+
+Defterdeki adreslerin çoğu adres değil tarif: 1216 adresin 1118'inde sokak adı
+bile geçmiyor. Yazılanlar kuryenin kafasındaki işaretler — `SAKLI BAHÇE-2 E
+BLOK D:3`, `DAMLA ECZANE ÜSTÜ DAİRE-1`, `KEÇECİLERİN ORASI B A:D4`, hatta
+`541 501 67 54 AKKENT VİLALARI NO:11` gibi başına telefon karışmış olanlar.
+Bunları olduğu gibi Geocoding'e vermek işe yaramıyor: ya boş dönüyor ya da pin
+Serdivan'ın merkezine düşüyor, ki bu konumsuzluktan beter.
+
+**+ → Adresleri haritaya oturt** üç adım işletiyor:
+
+1. **Ayıkla** (`/api/adres-zeka`, Claude Opus 5). Kırklı öbekler hâlinde
+   gidiyor; site adı, blok, kat, daire, sokak ve araya karışmış telefon ayrı
+   alanlara çıkıyor, aranacak temiz sorgu üretiliyor. Sorguya blok ve daire
+   yazılmıyor — Geocoding'i bozuyorlar. Site adı aynı zamanda tekilleştiriliyor:
+   defterde `CAGRI ELİT GARDEN`, `ÇAĞRI ELİT GARDEN` ve `ELİT GARDEN` aynı yer.
+   Yapılandırılmış çıktı kullanılıyor, şema garanti; sistem istemi sabit
+   tutulduğu için önbellekten okunuyor.
+2. **Grupla ve ara.** Aynı yeri anlatanlar tek gruba düşüyor (`obekle`),
+   site bir kez aranıyor, oradaki herkes aynı noktayı alıyor. Hem ucuz —
+   Geocoding istek başına faturalı — hem tutarlı: aynı sitenin daireleri
+   haritada birbirinden ayrı düşmüyor. Gruplama sadeleştirilmiş ada göre,
+   üstüne bir harf uzaklıktakiler de birleştirilerek yapılıyor
+   (`vilaları`/`villaları`); rakamlar birebir aynı olmak zorunda, yoksa
+   `Emirgan 4` ile `Emirgan 6` aynı yer sanılırdı.
+3. **Yaz ve raporla.** Marketten 25 km'den uzağa düşen sonuç reddediliyor —
+   "Saklı Bahçe" adlı site Türkiye'nin her yerinde var. Kabul edilmeyenler ve
+   hiç sorgu çıkmayanlar **elle konulacaklar** listesinde sebebiyle birlikte
+   kalıyor.
+
+İşlem yarıda kesilirse sorun olmuyor: yazılan konumlar yazılı kalıyor, yeniden
+açınca kalanlarla devam ediliyor.
+
+`ANTHROPIC_API_KEY` tanımlı değilse uç 503 dönüyor ve ekran bunu açıkça
+söylüyor; uygulamanın kalanı etkilenmiyor. Bu uç bilerek geliştirme
+listesinde değil — her çağrısı faturaya yazıldığı için geliştirmede bile
+oturum istiyor. Bin iki yüz adresin Claude tarafı bir seferlik birkaç dolar.
+
 ### Excel'den toplu yükle
 
 İki biçim tanınıyor; hangisi olduğu dosyadan anlaşılıyor ve önizlemede yazıyor.

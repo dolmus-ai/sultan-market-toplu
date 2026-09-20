@@ -38,8 +38,10 @@ export default async function proxy(istek: NextRequest) {
 
   const yol = istek.nextUrl.pathname;
   // /onizleme ve onu besleyen servisler yalnızca geliştirme ortamında açık.
-  // Buradakilerin hiçbiri veritabanına dokunmuyor: rota hesabı ve Excel
-  // biçimlendirme. Üretimde hepsi oturum arkasında.
+  // Buradakilerin hiçbiri veritabanına dokunmuyor ve hiçbiri para harcamıyor:
+  // rota hesabı ve Excel biçimlendirme. Üretimde hepsi oturum arkasında.
+  // `/api/adres-zeka` bilerek listede değil: her çağrısı Claude faturasına
+  // yazılıyor, geliştirmede bile oturum istiyor.
   const gelistirmeAcik =
     process.env.NODE_ENV !== "production" &&
     (yol.startsWith("/onizleme") ||

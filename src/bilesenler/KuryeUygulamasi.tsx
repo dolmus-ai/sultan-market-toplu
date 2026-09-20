@@ -21,6 +21,7 @@ import KayitEkle, {
   type EklenenKayit,
 } from "./KayitEkle";
 import HaritaBalonu, { type BalonKayit } from "./HaritaBalonu";
+import KonumTamamla from "./KonumTamamla";
 import TopluYukleme from "./TopluYukleme";
 import VardiyaOzeti from "./VardiyaOzeti";
 import NavigasyonPaneli, { type NavigasyonDurumu } from "./NavigasyonPaneli";
@@ -153,6 +154,7 @@ export default function KuryeUygulamasi({
   const [ekleMenu, setEkleMenu] = useState(false);
   const [kayitEkle, setKayitEkle] = useState(false);
   const [topluYukleme, setTopluYukleme] = useState(false);
+  const [konumTamamla, setKonumTamamla] = useState(false);
   /** Satır menüsü açık olan kayıt. */
   const [islemKayit, setIslemKayit] = useState<EklenenKayit | null>(null);
   const [duzenlenen, setDuzenlenen] = useState<DuzenlenenKayit | null>(null);
@@ -1845,6 +1847,15 @@ export default function KuryeUygulamasi({
                     setTopluYukleme(true);
                   },
                 },
+                {
+                  simge: "📍",
+                  baslik: "Adresleri haritaya oturt",
+                  alt: "Defterdeki tarifleri yapay zekâyla konuma çevir",
+                  tikla: () => {
+                    setEkleMenu(false);
+                    setKonumTamamla(true);
+                  },
+                },
               ].map((s2, i) => (
                 <motion.button
                   key={s2.baslik}
@@ -1890,6 +1901,19 @@ export default function KuryeUygulamasi({
               setDuzenlenen(null);
             }}
             onEklendi={kayitEklendi}
+          />
+        )}
+        {konumTamamla && (
+          <KonumTamamla
+            key="konum-tamamla"
+            db={db}
+            onKapat={() => setKonumTamamla(false)}
+            onBitti={(oturan) => {
+              if (oturan > 0) {
+                uyar(`${oturan} adres haritaya oturdu`);
+                void listeleriTazele();
+              }
+            }}
           />
         )}
         {topluYukleme && (

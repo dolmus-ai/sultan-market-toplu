@@ -95,6 +95,29 @@ export const GOOGLE_GEOKOD_ANAHTARI = (() => {
   return "";
 })();
 
+/**
+ * Claude API anahtarı — defterdeki tarif adresleri çözmek için.
+ *
+ * Market defterinde adreslerin çoğu tarif: "KEÇECİLERİN ORASI B A:D4",
+ * "TERAS PARK VİLALARIN ARKASINDAKİ PEMBE MÜSTAKİL". Geocoding bunları
+ * olduğu gibi aratınca ya bir şey bulamıyor ya da ilçe merkezine düşüyor.
+ * Claude önce tarifi ayıklıyor — site adı, blok, daire ayrı ayrı — sonra
+ * aranacak temiz sorguyu üretiyor; Geocoding'e o gidiyor.
+ *
+ * Sunucu anahtarı, tarayıcıya gitmiyor. Boşsa özellik kapalı kalıyor ve
+ * uygulama bunu açıkça söylüyor; başka hiçbir yeri etkilemiyor.
+ */
+export const CLAUDE_ANAHTARI = (() => {
+  const temiz = process.env.ANTHROPIC_API_KEY?.trim();
+  if (temiz) return temiz;
+  if (process.env.NODE_ENV !== "production") {
+    console.warn(
+      "[ortam] ANTHROPIC_API_KEY boş, adres çözümleme kapalı kalacak.",
+    );
+  }
+  return "";
+})();
+
 /** Harita zemininin stil adresi (varsayılan: OpenFreeMap Liberty). */
 export const HARITA_STILI = ortamMetni(
   "NEXT_PUBLIC_HARITA_STILI",

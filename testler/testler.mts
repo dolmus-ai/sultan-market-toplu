@@ -43,6 +43,14 @@ import {
 } from "../src/lib/toplu.ts";
 import { abonelikleriYaz, aboneSablonu, gunleriYaz } from "../src/lib/excel.ts";
 import {
+  maliyetTahmini,
+  metre,
+  obekle,
+  sonucGecerliMi,
+  uzaklik,
+  yerAnahtari,
+} from "../src/lib/adres-obek.ts";
+import {
   GoogleOturumHatasi,
   googleHataMetni,
   googleStilKurallari,
@@ -500,6 +508,76 @@ bekle("temel stil bina katmanı", temel.layers.some((k) => k.id === "bina-3b" &&
 bekle("glyph adresi kendi sunucumuz", temel.glyphs === "https://kurye.ornek/maplibre/fonts/{fontstack}/{range}.pbf");
 const binasiz = googleTemelStili("aydinlik", "", "https://kurye.ornek");
 bekle("bina kaynağı boşsa katman yok", !binasiz.layers.some((k) => k.id === "bina-3b") && Object.keys(binasiz.sources).length === 0);
+
+bolum("Adres çözümleme");
+
+bekle("yer anahtarı Türkçe harfleri sadeleştiriyor", yerAnahtari("Çağrı Elit Garden") === "cagrielitgarden");
+bekle("yer anahtarı boşluk ve noktalamayı atıyor", yerAnahtari("Saklı Bahçe-2") === "saklibahce2");
+bekle("uzaklık aynı kelimede sıfır", uzaklik("abc", "abc") === 0);
+bekle("uzaklık tek harf farkı", uzaklik("vilalari", "villalari") === 1);
+bekle("uzaklık iki harf farkı", uzaklik("abcd", "axcy") === 2);
+
+const coz = (
+  id: string,
+  yer: string | null,
+  sorgu: string,
+  guven: "yuksek" | "orta" | "dusuk" = "yuksek",
+) => ({
+  id, yer, sorgu, guven,
+  blok: null, kat: null, daire: null, sokak: null, telefon: null,
+  tur: "site" as const,
+});
+
+{
+  const gruplar = obekle([
+    coz("1", "Çağrı Elit Garden", "Çağrı Elit Garden, Serdivan, Sakarya"),
+    coz("2", "Çagri Elit Garden", "Çağrı Elit Garden, Serdivan, Sakarya"),
+    coz("3", "Saklı Bahçe 2", "Saklı Bahçe 2, Serdivan, Sakarya"),
+  ]);
+  bekle("aynı yer tek gruba düştü", gruplar.length === 2, `-> ${gruplar.length}`);
+  const buyuk = gruplar.find((g) => g.idler.length === 2);
+  bekle("yazım farkı olan ikisi birleşti", buyuk?.idler.join() === "1,2", JSON.stringify(gruplar.map((g) => g.idler)));
+}
+
+{
+  // Bir harften fazla fark ayrı yer sayılır: "Emirgan 4" ile "Emirgan 6" aynı değil.
+  const gruplar = obekle([
+    coz("1", "Emirgan 4", "Emirgan 4, Serdivan, Sakarya"),
+    coz("2", "Emirgan 6", "Emirgan 6, Serdivan, Sakarya"),
+  ]);
+  bekle("numarası farklı site ayrı kaldı", gruplar.length === 2, `-> ${gruplar.length}`);
+}
+
+{
+  // Kısa adlar birleştirilmiyor: tek harf farkı kısa adda anlam değiştirir.
+  const gruplar = obekle([coz("1", "Gül", "Gül, Serdivan"), coz("2", "Gün", "Gün, Serdivan")]);
+  bekle("kısa adlar birleşmiyor", gruplar.length === 2, `-> ${gruplar.length}`);
+}
+
+{
+  const gruplar = obekle([coz("1", null, ""), coz("2", "Tonoz Evler", "Tonoz Evler, Serdivan")]);
+  bekle("sorgusu boş adres gruba girmiyor", gruplar.length === 1 && gruplar[0].idler.join() === "2");
+}
+
+{
+  // Grubun sorgusu üyelerin en çok yazdığı hâl olmalı.
+  const gruplar = obekle([
+    coz("1", "Safir Park", "Safir Park, Serdivan, Sakarya"),
+    coz("2", "Safir Park", "Safir Park, Serdivan, Sakarya"),
+    coz("3", "Safir Park", "Safirpark Sitesi, Serdivan"),
+  ]);
+  bekle("grup sorgusu çoğunluğun hâli", gruplar[0]?.sorgu === "Safir Park, Serdivan, Sakarya", gruplar[0]?.sorgu);
+  bekle("grubun güveni en iyimseri", gruplar[0]?.guven === "yuksek");
+}
+
+// Market Serdivan'da; yakın nokta kabul, uzak nokta ret.
+bekle("markete yakın sonuç kabul", sonucGecerliMi({ lat: 40.78, lng: 30.35 }).tamam);
+bekle("İstanbul'daki aynı adlı site reddedildi", !sonucGecerliMi({ lat: 41.0082, lng: 28.9784 }).tamam);
+bekle("ret sebebi kilometre yazıyor", (sonucGecerliMi({ lat: 41.0082, lng: 28.9784 }).sebep ?? "").includes("km"));
+bekle("market ile arası sıfır metre", Math.round(metre({ lat: 40.7784889, lng: 30.3518378 }, { lat: 40.7784889, lng: 30.3518378 })) === 0);
+
+bekle("1216 adresin maliyeti birkaç dolar", maliyetTahmini(1216) > 0.5 && maliyetTahmini(1216) < 5, `$${maliyetTahmini(1216).toFixed(2)}`);
+bekle("sıfır adres sıfır maliyet", maliyetTahmini(0) === 0);
 
 /* ------------------------------------------------------------------ */
 console.log(`\n${"=".repeat(52)}`);

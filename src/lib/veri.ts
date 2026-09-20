@@ -699,6 +699,40 @@ export async function adresKonumuYaz(
   if (error) throw error;
 }
 
+/** Konumu olmayan adresler — defter yüklendikten sonra haritaya oturtulacaklar. */
+export type KonumsuzAdres = {
+  id: string;
+  adres_metni: string;
+  musteri_ad: string | null;
+};
+
+export async function konumsuzAdresleriGetir(
+  db: SupabaseClient,
+): Promise<KonumsuzAdres[]> {
+  type Satir = {
+    id: string;
+    adres_metni: string;
+    musteri: { ad: string } | { ad: string }[] | null;
+  };
+  const satirlar = await sayfalayarakGetir<Satir>((bas, son) =>
+    db
+      .from("adresler")
+      .select("id, adres_metni, musteri:musteriler ( ad )")
+      .is("lat", null)
+      .neq("adres_metni", "")
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(bas, son),
+  );
+  return satirlar.map((a) => ({
+    id: a.id,
+    adres_metni: a.adres_metni,
+    musteri_ad: Array.isArray(a.musteri)
+      ? (a.musteri[0]?.ad ?? null)
+      : (a.musteri?.ad ?? null),
+  }));
+}
+
 export type GeokodSonucu = {
   lat: number;
   lng: number;

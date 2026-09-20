@@ -232,6 +232,10 @@ export default function KuryeUygulamasi({
    */
   const elleAyarliRef = useRef(false);
   const [elleAyarli, setElleAyarli] = useState(false);
+  /** Artınca konum izleyicisi söküp yeniden kuruluyor. */
+  const [konumTazeleme, setKonumTazeleme] = useState(0);
+  /** Yeniden ölçümden sonra gelen ilk konuma kamera uçsun. */
+  const konumaUcRef = useRef(false);
   const [kuryeYonu, setKuryeYonu] = useState<number | null>(null);
   const [konumTakibi, setKonumTakibi] = useState(false);
   const [aci, setAci] = useState({ bearing: -12, pitch: 45 });
@@ -532,6 +536,29 @@ export default function KuryeUygulamasi({
     [],
   );
 
+  /**
+   * Konumu yeniden ölçtürür.
+   *
+   * Ayrı bir `getCurrentPosition` işe yaramıyor: `watchPosition` açıkken
+   * `maximumAge: 0` isteği cihazın yeni ölçüm üretmesini bekliyor ve konum
+   * IP'den geliyorsa o ölçüm hiç gelmiyor — düğme sessizce asılı kalıyordu.
+   * Bunun yerine izleyici söküp yeniden kuruluyor; tarayıcı yeni izleyiciye
+   * elindeki en iyi ölçümü hemen veriyor. Elle işaretlenmiş konumun kilidi
+   * de açılıyor: kurye "yeniden bul" dediyse ölçümü istiyor demektir.
+   */
+  function konumuYenidenBul() {
+    if (!("geolocation" in navigator)) {
+      uyar("Tarayıcı konum vermiyor.");
+      return;
+    }
+    elleAyarliRef.current = false;
+    setElleAyarli(false);
+    konumaUcRef.current = true;
+    setKonumTakibi(true);
+    uyar("Konum yeniden aranıyor…");
+    setKonumTazeleme((n) => n + 1);
+  }
+
   /* ------------------------- Canlı konum ------------------------- */
   useEffect(() => {
     if (!("geolocation" in navigator)) return;
@@ -557,6 +584,20 @@ export default function KuryeUygulamasi({
 
         setKuryeKonumu(nokta);
         setKuryeDogrulugu(dogruluk);
+
+        if (konumaUcRef.current) {
+          konumaUcRef.current = false;
+          haritaApi.current?.ucur(nokta, 17);
+          uyar(
+            dogruluk != null && dogruluk > SUPHELI_DOGRULUK_M
+              ? `Konum ±${
+                  dogruluk >= 1000
+                    ? `${(dogruluk / 1000).toFixed(1)} km`
+                    : `${Math.round(dogruluk)} m`
+                } payla bulundu`
+              : "Konum güncellendi",
+          );
+        }
         const yon =
           konum.coords.heading != null && !Number.isNaN(konum.coords.heading)
             ? konum.coords.heading
@@ -630,7 +671,10 @@ export default function KuryeUygulamasi({
     );
 
     return () => navigator.geolocation.clearWatch(izleyici);
-  }, [db, kurye, seslendir]);
+    // `konumTazeleme` artınca izleyici söküp yeniden kuruluyor; tarayıcı yeni
+    // izleyiciye elindeki ölçümü hemen veriyor. "Yeniden bul" bunun üzerine
+    // kurulu.
+  }, [db, kurye, seslendir, konumTazeleme, uyar]);
 
   /* İlk açılışta teslimatlara odaklan */
   const ilkOdakRef = useRef(false);
@@ -1470,7 +1514,6 @@ export default function KuryeUygulamasi({
         katmanlar={katmanlar}
         kuryeKonumu={kuryeKonumu}
         kuryeYonu={kuryeYonu}
-        kuryeDogrulugu={kuryeDogrulugu}
         digerKuryeler={digerKuryeler}
         onSecim={(id) => {
           const s = teslimatlar.find((x) => x.id === id);
@@ -1663,12 +1706,13 @@ export default function KuryeUygulamasi({
         onEgim={() => haritaApi.current?.egimDegistir()}
         onYakinlastir={(yon) => haritaApi.current?.yakinlastir(yon)}
         onKonum={() => {
+          // Konuma uçmak yetmiyor: şaşmış bir ölçümün üstüne uçmak kuryeyi
+          // yine yanlış yere götürür. Düğme ölçümü de tazeliyor.
           if (kuryeKonumu) {
             haritaApi.current?.ucur(kuryeKonumu, 17);
             setKonumTakibi(true);
-          } else {
-            uyar("Konum alınamadı. Tarayıcı izinlerini kontrol edin.");
           }
+          konumuYenidenBul();
         }}
         onKatmanPaneli={setKatmanPaneli}
         onKatman={(k) => setKatmanlar((o) => ({ ...o, [k]: !o[k] }))}
@@ -2032,12 +2076,17 @@ export default function KuryeUygulamasi({
                 {kuryeDogrulugu >= 1000
                   ? `${(kuryeDogrulugu / 1000).toFixed(1)} km`
                   : `${Math.round(kuryeDogrulugu)} m`}{" "}
-                hata payıyla bulundu; haritadaki yeşil çember bu payı
-                gösteriyor.
+                hata payıyla bulundu.
                 <span className="block font-semibold text-gri">
                   Telefondan açınca GPS devreye girer.
                 </span>
               </p>
+              <button
+                onClick={konumuYenidenBul}
+                className="shrink-0 rounded-hap bg-yuzey2 px-3 py-1.5 text-[12px] font-black text-gri"
+              >
+                Yenile
+              </button>
               <button
                 onClick={() => setKendiKonumSec(true)}
                 className="shrink-0 rounded-hap bg-kontrast px-3 py-1.5 text-[12px] font-black text-white"
@@ -2085,6 +2134,13 @@ export default function KuryeUygulamasi({
                 GPS iyi sinyal bulunca kendiliğinden devralır.
               </span>
             </p>
+            {/* Elle işaretledikten sonra da yeniden ölçtürebilmeli. */}
+            <button
+              onClick={konumuYenidenBul}
+              className="shrink-0 rounded-hap bg-yuzey2 px-3 py-1.5 text-[12px] font-black text-gri"
+            >
+              Yenile
+            </button>
             <button
               onClick={() => setKendiKonumSec(true)}
               className="shrink-0 rounded-hap bg-yuzey2 px-3 py-1.5 text-[12px] font-black text-gri"

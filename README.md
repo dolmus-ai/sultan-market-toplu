@@ -256,13 +256,15 @@ drop policy "muhasebe kilidi" on public.profiles;
   seçilir.
 - **Konumun hata payı:** tarayıcı her ölçümle birlikte bir doğruluk yarıçapı
   veriyor — telefonun GPS'inde ~10 m, masaüstünde ya da VPN arkasında
-  Wi-Fi/IP tahmininde kilometreler. İkisini de aynı kesinlikte nokta çizmek
-  yalan oluyordu: kurye kendini bambaşka bir yerde görüp "konum yanlış"
-  diyordu. Artık pay 25 m'yi geçince imlecin çevresine yeşil bir çember
-  çiziliyor (`cemberNoktalari`, coğrafi çokgen — yakınlaştırınca da eğik
-  haritada da metre olarak doğru), 300 m'yi geçince de payı yazan bir uyarı
-  çıkıyor. 500 m'den kötü konum `kurye_konumlari` tablosuna hiç yazılmıyor:
-  diğer kuryeye yanlış yer göstermektense hiç göstermemek yeğ.
+  Wi-Fi/IP tahmininde kilometreler. Pay 300 m'yi geçince imlecin üstünde
+  payı yazan bir şerit çıkıyor, yanında **Yenile** ve **Düzelt**. Haritada
+  ayrıca bir şey çizilmiyor: imleç sade kalsın diye. 500 m'den kötü konum
+  `kurye_konumlari` tablosuna hiç yazılmıyor — diğer kuryeye yanlış yer
+  göstermektense hiç göstermemek yeğ.
+- **Konumu yeniden ölçme:** sağ alttaki konum düğmesi ve şerit üzerindeki
+  **Yenile**, `maximumAge: 0` ile cihaza yeniden ölçtürüyor. `watchPosition`
+  cihazın elindeki en iyi tahmini veriyor ve o tahmin bir kez şaştıysa
+  kendiliğinden düzelmeyebiliyor; önbellekteki ölçümü reddetmek tek çıkar yol.
 - **Konumu elle işaretleme:** hata payı uyarısındaki **Düzelt** ile kurye
   bulunduğu yeri haritada gösteriyor. İşaretlenen nokta kilitleniyor: kaba
   ölçümler onu ezmiyor, ancak 100 m'den iyi gerçek bir GPS ölçümü gelince

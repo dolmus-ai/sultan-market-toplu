@@ -405,10 +405,15 @@ harita buna göre ayarlı:
   satırda telefonda sekme geçişini 6 saniyeye çıkarıyordu, kaldırınca 0,9
   saniyeye indi (4x kısılmış işlemcide, 4 kayıtlı hâlle kıyaslanarak ölçüldü).
 - Abonelik satırında müşterinin adresi yazıyor: defterden gelen abonelerin
-  çoğunda başlık aynı ("Abonelik"), kurye kişiyi adresinden tanıyor.
+  çoğunda başlık aynı ("Abonelik"), kurye kişiyi adresinden tanıyor. Teslim
+  saatinin yanında telefonu da var — defterin `TEL` sütunundan geliyor.
 - `/onizleme?abonelik=1215` gerçek hacmi denemek için abone listesini çoğaltır.
 
 ### Satır işlemleri
+
+Düzenleme kartında **Telefon** alanı var: telefon aboneliğin değil müşterinin
+alanı olduğu için `musteriler` tablosuna yazılıyor, kayıt sorgusundan önce
+kaydediliyor ki dönen satır yeni numarayla gelsin. Üç kayıt türünde de çıkıyor.
 
 Teslimat, abonelik ve sepet satırlarının sağındaki **⋯** düğmesi düzenleme,
 konum düzeltme ve silme sunuyor. Silme onay istiyor. Teslim edilmiş sipariş

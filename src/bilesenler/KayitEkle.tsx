@@ -13,6 +13,7 @@ import {
   musteriAdresleri,
   musteriEkle,
   musterileriAra,
+  musteriDuzenle,
   sepetDuzenle,
   sepetEkle,
   siparisDuzenle,
@@ -149,6 +150,20 @@ export default function KayitEkle({
   const [baslik, setBaslik] = useState(
     duzenlenen?.tur === "abonelik" ? duzenlenen.abonelik.baslik : "Abonelik",
   );
+
+  /*
+   * Telefon müşterinin alanı ama kurye kaydı düzenlerken orada arıyor:
+   * defterden gelen 1200 abonenin numarası da böyle düzeltilebiliyor.
+   */
+  const duzenlenenMusteri =
+    duzenlenen?.tur === "teslimat"
+      ? duzenlenen.siparis.musteri
+      : duzenlenen?.tur === "abonelik"
+        ? duzenlenen.abonelik.musteri
+        : duzenlenen?.tur === "sepet"
+          ? duzenlenen.sepet.musteri
+          : null;
+  const [telefon, setTelefon] = useState(duzenlenenMusteri?.telefon ?? "");
   const [siklik, setSiklik] = useState<AbonelikSikligi>(
     duzenlenen?.tur === "abonelik" ? duzenlenen.abonelik.siklik : "haftalik",
   );
@@ -291,10 +306,22 @@ export default function KayitEkle({
     }
   }
 
+  /** Telefon değiştiyse müşteriye yazar; kayıt sorgusu güncel hâlini döndürür. */
+  async function telefonuYaz() {
+    if (!duzenlenenMusteri) return;
+    const yeni = telefon.trim() || null;
+    if (yeni === (duzenlenenMusteri.telefon ?? null)) return;
+    await musteriDuzenle(db, duzenlenenMusteri.id, { telefon: yeni });
+  }
+
   async function kaydet() {
     setHata(null);
     setIslemde(true);
     try {
+      // Kayıt sorgusundan önce: dönen satır müşteriyi de getiriyor, böylece
+      // liste yeni numarayla tazeleniyor.
+      if (duzenleme) await telefonuYaz();
+
       if (duzenlenen?.tur === "teslimat") {
         const siparis = await siparisDuzenle(db, duzenlenen.siparis.id, {
           tutar: sayisalTutar,
@@ -885,6 +912,19 @@ export default function KayitEkle({
                     />
                   </Alan>
                 </>
+              )}
+
+              {duzenleme && duzenlenenMusteri && (
+                <Alan etiket="Telefon">
+                  <input
+                    type="tel"
+                    value={telefon}
+                    onChange={(e) => setTelefon(e.target.value)}
+                    inputMode="tel"
+                    placeholder="533 000 00 00"
+                    className={GIRDI}
+                  />
+                </Alan>
               )}
 
               {tur !== "sepet" && (

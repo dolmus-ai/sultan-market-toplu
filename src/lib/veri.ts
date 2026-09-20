@@ -410,6 +410,27 @@ export async function musteriEkle(
   return data as Musteri;
 }
 
+/**
+ * Müşterinin künyesini günceller.
+ *
+ * Telefon aboneliğin değil müşterinin alanı; kurye abonelik kartından
+ * düzenlediğinde de buraya yazılıyor.
+ */
+export async function musteriDuzenle(
+  db: SupabaseClient,
+  id: string,
+  yama: { ad?: string; telefon?: string | null; notlar?: string | null },
+): Promise<Musteri> {
+  const { data, error } = await db
+    .from("musteriler")
+    .update(yama)
+    .eq("id", id)
+    .select("id, ad, telefon, notlar")
+    .single();
+  if (error) throw error;
+  return data as Musteri;
+}
+
 export type YeniAdres = {
   musteri_id: string;
   baslik?: string;

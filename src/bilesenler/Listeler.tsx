@@ -201,6 +201,8 @@ export function AbonelikSatiri({
         <span className="mt-1 block truncate text-[12px] font-semibold text-gri">
           {abonelik.baslik} · {gunlerYaz(abonelik.gunler)} ·{" "}
           {saat(abonelik.teslim_saati)}
+          {/* Telefon saatin yanında: kurye kapıda çalmadan önce buradan arıyor. */}
+          {abonelik.musteri?.telefon && ` · ${abonelik.musteri.telefon}`}
           {(abonelik.kalemler ?? []).length > 0 &&
             ` · ${abonelik.kalemler.length} kalem`}
         </span>

@@ -10,6 +10,7 @@ import {
   adresEkle,
   adresiGeokodla,
   adresKonumuYaz,
+  mevcutMusterileriGetir,
   musteriEkle,
   urunleriGetir,
 } from "@/lib/veri";
@@ -66,6 +67,8 @@ type Durum =
   | {
       ad: "bitti";
       eklenen: number;
+      /** Zaten kayıtlı olduğu için yeniden açılmayan müşteri sayısı. */
+      mevcut: number;
       abonelik: number;
       atlanan: number;
       konumlanan: number;
@@ -110,6 +113,17 @@ function urunBul(urunler: Urun[], ad: string): Urun | undefined {
     urunler.find((u) => anahtarla(u.ad).includes(a)) ??
     urunler.find((u) => a.includes(anahtarla(u.ad)))
   );
+}
+
+/**
+ * Müşteri dizin anahtarı: sadeleştirilmiş ad + telefonun rakamları.
+ *
+ * Telefon defterde "533 591 91 80", "5335919180" gibi farklı yazılabiliyor;
+ * yalnızca rakamlara bakınca aynı kişi aynı anahtara düşüyor. Telefonu
+ * olmayan kayıtlar için ad tek başına yetiyor.
+ */
+function musteriAnahtari(ad: string, telefon: string | null | undefined) {
+  return `${anahtarla(ad)}|${(telefon ?? "").replace(/\D/g, "")}`;
 }
 
 function planBasligi(plan: AbonelikPlani): string {
@@ -248,35 +262,71 @@ export default function TopluYukleme({
       }
     }
 
+    /*
+     * Kayıtlı müşteriler dizini. Binlerce satırlık yükleme yarıda kesilirse
+     * dosya baştan veriliyor; dizin olmadan girenler ikinci kez eklenirdi.
+     * Bulunan müşteri yeniden açılmıyor, eksiği tamamlanıyor: aboneliği
+     * yoksa kuruluyor, adresinin konumu yoksa aranıyor.
+     */
+    const dizin = new Map<string, Awaited<ReturnType<typeof mevcutMusterileriGetir>>[number]>();
+    try {
+      for (const m of await mevcutMusterileriGetir(db)) {
+        dizin.set(musteriAnahtari(m.ad, m.telefon), m);
+      }
+    } catch {
+      /* dizin okunamadı: yükleme yine çalışır, tekrar kaydı olabilir */
+    }
+
     let eklenen = 0;
+    let mevcutSayisi = 0;
     let abonelikSayisi = 0;
     let atlanan = 0;
     const konumsuz: { adresId: string; metin: string }[] = [];
 
     for (const [i, satir] of gecerliler.entries()) {
       try {
-        const musteri = await musteriEkle(db, {
-          ad: satir.ad,
-          telefon: satir.telefon,
-          notlar: satir.notlar,
-        });
-        const adres = await adresEkle(db, {
-          musteri_id: musteri.id,
-          adres_metni: satir.adres_metni,
-          bina: satir.bina,
-          kat: satir.kat,
-          daire: satir.daire,
-          tarif: satir.tarif,
-          lat: satir.lat,
-          lng: satir.lng,
-        });
-        eklenen++;
-        // Dosyada koordinat yoksa adres sonradan aranacak.
-        if (satir.lat == null) {
-          konumsuz.push({ adresId: adres.id, metin: satir.adres_metni });
+        const eski = dizin.get(musteriAnahtari(satir.ad, satir.telefon));
+
+        let musteriId: string;
+        let adresId: string;
+        let adresKonumlu: boolean;
+        let abonelikGerekli: boolean;
+
+        if (eski?.adres_id) {
+          musteriId = eski.musteri_id;
+          adresId = eski.adres_id;
+          adresKonumlu = eski.konumlu;
+          abonelikGerekli = eski.abonelik_sayisi === 0;
+          mevcutSayisi++;
+        } else {
+          const musteri = await musteriEkle(db, {
+            ad: satir.ad,
+            telefon: satir.telefon,
+            notlar: satir.notlar,
+          });
+          const adres = await adresEkle(db, {
+            musteri_id: musteri.id,
+            adres_metni: satir.adres_metni,
+            bina: satir.bina,
+            kat: satir.kat,
+            daire: satir.daire,
+            tarif: satir.tarif,
+            lat: satir.lat,
+            lng: satir.lng,
+          });
+          musteriId = musteri.id;
+          adresId = adres.id;
+          adresKonumlu = satir.lat != null;
+          abonelikGerekli = true;
+          eklenen++;
         }
 
-        for (const plan of satir.abonelikler) {
+        // Konumu olmayan adres, ister yeni ister eski olsun, aranacak.
+        if (!adresKonumlu) {
+          konumsuz.push({ adresId, metin: satir.adres_metni });
+        }
+
+        for (const plan of abonelikGerekli ? satir.abonelikler : []) {
           // Eşleşen ürünler kalem olur; eşleşmeyenler nota yazılır ki
           // miktar bilgisi dosyadan uygulamaya geçerken kaybolmasın.
           const kalemler: { urun_id: string; miktar: number }[] = [];
@@ -288,8 +338,8 @@ export default function TopluYukleme({
           }
 
           const abonelik = await abonelikEkle(db, {
-            musteri_id: musteri.id,
-            adres_id: adres.id,
+            musteri_id: musteriId,
+            adres_id: adresId,
             baslik: planBasligi(plan),
             siklik: "haftalik",
             gunler: plan.gunler,
@@ -324,12 +374,13 @@ export default function TopluYukleme({
     setDurum({
       ad: "bitti",
       eklenen,
+      mevcut: mevcutSayisi,
       abonelik: abonelikSayisi,
       atlanan,
       konumlanan,
       konumNotu: not,
     });
-    onBitti(eklenen, abonelikSayisi);
+    onBitti(eklenen + mevcutSayisi, abonelikSayisi);
   }
 
   return (
@@ -589,6 +640,11 @@ export default function TopluYukleme({
               <p className="mt-4 text-[17px] font-black">
                 {durum.eklenen} müşteri eklendi
               </p>
+              {durum.mevcut > 0 && (
+                <p className="mt-1 text-[14px] font-bold text-gri">
+                  {durum.mevcut} müşteri zaten kayıtlıydı, üstüne yazılmadı
+                </p>
+              )}
               {durum.abonelik > 0 && (
                 <p className="mt-1 text-[14px] font-bold text-gri">
                   {durum.abonelik} abonelik kuruldu

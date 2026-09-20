@@ -438,6 +438,11 @@ karakter, boşluk ve büyük/küçük harf farkını yok sayarak eşleşir ("Ad 
 "Cep", "Açık Adres", "Enlem"/"Boylam" hepsi tanınır). `.csv` dosyaları hep bu
 biçimde okunur.
 
+Yükleme yarıda kesilirse dosyanın tamamı yeniden verilebilir: ad ve telefonun
+rakamları eşleşen müşteri yeniden açılmaz. Mevcut kayıtta eksik ne varsa
+tamamlanır — aboneliği yoksa kurulur, adresinin konumu yoksa aranır. Bitişte
+kaç kişinin eklendiği, kaçının zaten kayıtlı olduğu ayrı ayrı yazar.
+
 Dosya sunucuda çözümlenir (`src/lib/toplu.ts`), kayıt istemciden kuryenin
 kendi oturumuyla atılır. Yükleme öncesi kaç müşteri, kaç abonelik kurulacağı
 ve kaç satırın atlanacağı gösterilir. "Örnek dosyayı indir" abone defteri
@@ -550,8 +555,16 @@ restart identity cascade;
 
 `public.gunun_siparislerini_uret(date)` aktif aboneliklerden o günün
 siparişlerini üretir — sıklık (günlük / haftalık / iki haftalık / aylık),
-gün listesi ve başlangıç–bitiş aralığı dikkate alınır; aynı abonelik için
-aynı güne ikinci sipariş açılmaz. Market **07:30**'da açıldığı için cron
+gün listesi ve başlangıç–bitiş aralığı dikkate alınır.
+
+Bir abonelik iki durumda atlanır: o güne zaten sipariş açılmışsa ya da
+**önceki siparişi hâlâ teslim edilmemişse**. İkincisi olmadan teslim
+edilmeyen sipariş kapanmadığı için her gün bir yenisi ekleniyordu ve kuryenin
+listesinde aynı müşteri onlarca kez birikiyordu. Kurye siparişi teslim
+ettiğinde ya da "teslim edilemedi" diye kapattığında sıradaki gün yeniden
+üretilir. Yani bir aboneliğin aynı anda en fazla bir açık siparişi olur.
+
+Market **07:30**'da açıldığı için cron
 yarım saat önce, **07:00 (Europe/Istanbul)** çalışır:
 
 ```sql

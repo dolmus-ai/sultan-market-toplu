@@ -302,6 +302,54 @@ export async function musteriAdresleri(
   return (data ?? []) as Adres[];
 }
 
+/** Toplu yüklemede yeniden ekleme yapmamak için mevcut kayıtların özeti. */
+export type MevcutMusteri = {
+  musteri_id: string;
+  ad: string;
+  telefon: string | null;
+  /** İlk adres; toplu yüklemede müşteri başına tek adres açılıyor. */
+  adres_id: string | null;
+  konumlu: boolean;
+  abonelik_sayisi: number;
+};
+
+/**
+ * Kayıtlı müşterilerin ad/telefon dizini.
+ *
+ * Toplu yükleme yarıda kesilirse (binlerce satırda olağan) dosyanın tamamı
+ * yeniden verilir. Dizin olmadan aynı kişiler ikinci kez eklenirdi; bununla
+ * mevcut kayıt bulunup üstüne tamamlanıyor.
+ */
+export async function mevcutMusterileriGetir(
+  db: SupabaseClient,
+): Promise<MevcutMusteri[]> {
+  const { data, error } = await db
+    .from("musteriler")
+    .select("id, ad, telefon, adresler ( id, lat ), abonelikler ( id )")
+    .limit(20000);
+  if (error) throw error;
+
+  type Satir = {
+    id: string;
+    ad: string;
+    telefon: string | null;
+    adresler: { id: string; lat: number | null }[] | null;
+    abonelikler: { id: string }[] | null;
+  };
+
+  return ((data ?? []) as unknown as Satir[]).map((m) => {
+    const adres = m.adresler?.[0] ?? null;
+    return {
+      musteri_id: m.id,
+      ad: m.ad,
+      telefon: m.telefon,
+      adres_id: adres?.id ?? null,
+      konumlu: adres?.lat != null,
+      abonelik_sayisi: m.abonelikler?.length ?? 0,
+    };
+  });
+}
+
 export type YeniMusteri = {
   ad: string;
   telefon?: string | null;

@@ -107,13 +107,12 @@ const PAYLASILIR_DOGRULUK_M = 500;
 const SUPHELI_DOGRULUK_M = 300;
 
 /**
- * Bu paydan iyi ölçüm gerçek GPS sayılıyor.
+ * Elindeki ölçüm bu kadar eskiyince yenisi ne olursa olsun kabul ediliyor.
  *
- * Elle işaretlenmiş konumu yalnızca böyle bir ölçüm ezebiliyor: kurye
- * telefonu cebinden çıkarıp dışarı adım attığında cihaz onun elle koyduğu
- * noktadan daha iyisini biliyor, ama masaüstünün IP tahmini bilmiyor.
+ * Kurye yol alıyor: bir dakika önceki nokta, payı iyi olsa bile artık
+ * bulunduğu yer değil.
  */
-const IYI_DOGRULUK_M = 100;
+const OLCUM_TAZELIK_MS = 60_000;
 
 /** Ad, telefon ya da adres metninde arama. */
 function kayitAra(
@@ -222,16 +221,10 @@ export default function KuryeUygulamasi({
   const [kuryeKonumu, setKuryeKonumu] = useState<Nokta | null>(null);
   /** Konumun hata payı (metre); tarayıcı her ölçümle birlikte veriyor. */
   const [kuryeDogrulugu, setKuryeDogrulugu] = useState<number | null>(null);
-  /** Kurye kendi konumunu haritadan işaretliyor. */
-  const [kendiKonumSec, setKendiKonumSec] = useState(false);
-  /*
-   * Konum elle konulduysa tarayıcının kaba tahmini onu ezmesin. Ref, çünkü
-   * `watchPosition` geri çağırımı bir kez kuruluyor ve state'in eski hâlini
-   * görürdü. Gerçek GPS devreye girerse kilit kendiliğinden açılıyor:
-   * o noktada cihaz elle konulan noktadan daha iyisini biliyor.
-   */
-  const elleAyarliRef = useRef(false);
-  const [elleAyarli, setElleAyarli] = useState(false);
+  /** Son kabul edilen ölçümün payı ve zamanı — kötüsü iyisini ezmesin diye. */
+  const sonDogrulukRef = useRef<number | null>(null);
+  const sonOlcumZamaniRef = useRef(0);
+  const kuryeKonumuRef = useRef<Nokta | null>(null);
   /** Artınca konum izleyicisi söküp yeniden kuruluyor. */
   const [konumTazeleme, setKonumTazeleme] = useState(0);
   /** Yeniden ölçümden sonra gelen ilk konuma kamera uçsun. */
@@ -551,9 +544,11 @@ export default function KuryeUygulamasi({
       uyar("Tarayıcı konum vermiyor.");
       return;
     }
-    elleAyarliRef.current = false;
-    setElleAyarli(false);
     konumaUcRef.current = true;
+    // Eldeki ölçüm unutuluyor: yeniden bulmanın amacı zaten onu atmak,
+    // yoksa "daha kötü ölçüm elenir" kuralı yeni ölçümü de elerdi.
+    sonDogrulukRef.current = null;
+    sonOlcumZamaniRef.current = 0;
     setKonumTakibi(true);
     uyar("Konum yeniden aranıyor…");
     setKonumTazeleme((n) => n + 1);
@@ -575,12 +570,20 @@ export default function KuryeUygulamasi({
             ? konum.coords.accuracy
             : null;
 
-        // Elle işaretlenmiş konum, ancak gerçekten iyi bir ölçümle değişir.
-        if (elleAyarliRef.current) {
-          if ((dogruluk ?? Infinity) > IYI_DOGRULUK_M) return;
-          elleAyarliRef.current = false;
-          setElleAyarli(false);
-        }
+        /*
+         * Daha kötü ölçüm iyisini ezmesin. Telefon GPS ile Wi-Fi arasında
+         * gidip geliyor: 15 m'lik ölçümün hemen ardından 800 m'lik biri
+         * gelince imleç sokak sokak zıplıyordu. Eldeki ölçüm bayatlayınca
+         * (kurye yol almıştır) yenisi koşulsuz kabul ediliyor.
+         */
+        const simdiki = Date.now();
+        const taze = simdiki - sonOlcumZamaniRef.current < OLCUM_TAZELIK_MS;
+        const dahaKotu =
+          (dogruluk ?? Infinity) > (sonDogrulukRef.current ?? Infinity);
+        if (kuryeKonumuRef.current && taze && dahaKotu) return;
+        sonDogrulukRef.current = dogruluk;
+        sonOlcumZamaniRef.current = simdiki;
+        kuryeKonumuRef.current = nokta;
 
         setKuryeKonumu(nokta);
         setKuryeDogrulugu(dogruluk);
@@ -1603,19 +1606,6 @@ export default function KuryeUygulamasi({
         }}
         onHaritaTikla={(nokta) => {
           if (konumDuzeltme) return void konumuKaydet(nokta);
-          if (kendiKonumSec) {
-            // Elle konulan noktanın hata payı yok: kurye nerede olduğunu
-            // tarayıcıdan iyi biliyor.
-            setKuryeKonumu(nokta);
-            setKuryeDogrulugu(null);
-            elleAyarliRef.current = true;
-            setElleAyarli(true);
-            setKendiKonumSec(false);
-            setKonumTakibi(true);
-            haritaApi.current?.ucur(nokta, 16);
-            uyar("Konumunuz işaretlendi");
-            return;
-          }
           setBalonSecim(null);
         }}
         onAciDegisti={(bearing, pitch) => setAci({ bearing, pitch })}
@@ -2055,11 +2045,10 @@ export default function KuryeUygulamasi({
         Tarayıcı konumu telefonda GPS'ten, masaüstünde Wi-Fi/IP tahmininden
         veriyor; ikincisi kilometrelerce şaşabiliyor ve kurye haritada kendini
         bambaşka bir yerde görüyor. Hata payını yazmak şikâyeti sebebine
-        bağlıyor; haritada da aynı payın çemberi duruyor.
+        bağlıyor; Yenile ölçümü baştan aldırıyor.
       */}
       <AnimatePresence>
         {!konumDuzeltme &&
-          !kendiKonumSec &&
           kuryeKonumu &&
           kuryeDogrulugu != null &&
           kuryeDogrulugu > SUPHELI_DOGRULUK_M && (
@@ -2083,72 +2072,13 @@ export default function KuryeUygulamasi({
               </p>
               <button
                 onClick={konumuYenidenBul}
-                className="shrink-0 rounded-hap bg-yuzey2 px-3 py-1.5 text-[12px] font-black text-gri"
-              >
-                Yenile
-              </button>
-              <button
-                onClick={() => setKendiKonumSec(true)}
                 className="shrink-0 rounded-hap bg-kontrast px-3 py-1.5 text-[12px] font-black text-white"
               >
-                Düzelt
+                Yenile
               </button>
             </motion.div>
           )}
 
-        {/* Kurye kendi konumunu haritada işaretliyor. */}
-        {kendiKonumSec && (
-          <motion.div
-            key="kendi-konum"
-            initial={{ y: -16, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: -16, opacity: 0 }}
-            className="absolute inset-x-3 top-[calc(env(safe-area-inset-top)+80px)] z-30 flex items-center gap-3 rounded-[20px] bg-kontrast p-3 text-white shadow-yumusak"
-          >
-            <span className="text-lg">🧍</span>
-            <p className="flex-1 text-[13px] font-bold">
-              Bulunduğunuz yeri haritada işaretleyin.
-            </p>
-            <button
-              onClick={() => setKendiKonumSec(false)}
-              className="rounded-hap bg-yuzey/20 px-3 py-1.5 text-[12px] font-black"
-            >
-              Vazgeç
-            </button>
-          </motion.div>
-        )}
-
-        {/* Elle işaretli konum — otomatiğe dönüş elinizin altında. */}
-        {elleAyarli && !kendiKonumSec && !konumDuzeltme && (
-          <motion.div
-            key="elle-konum"
-            initial={{ y: -16, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: -16, opacity: 0 }}
-            className="absolute inset-x-3 top-[calc(env(safe-area-inset-top)+80px)] z-30 flex items-center gap-3 rounded-[20px] border border-cizgi bg-yuzey/90 p-3 shadow-yumusak backdrop-blur-2xl"
-          >
-            <span className="text-lg">🧍</span>
-            <p className="flex-1 text-[12px] font-bold leading-snug">
-              Konumunuz elle işaretli.
-              <span className="block font-semibold text-gri">
-                GPS iyi sinyal bulunca kendiliğinden devralır.
-              </span>
-            </p>
-            {/* Elle işaretledikten sonra da yeniden ölçtürebilmeli. */}
-            <button
-              onClick={konumuYenidenBul}
-              className="shrink-0 rounded-hap bg-yuzey2 px-3 py-1.5 text-[12px] font-black text-gri"
-            >
-              Yenile
-            </button>
-            <button
-              onClick={() => setKendiKonumSec(true)}
-              className="shrink-0 rounded-hap bg-yuzey2 px-3 py-1.5 text-[12px] font-black text-gri"
-            >
-              Değiştir
-            </button>
-          </motion.div>
-        )}
       </AnimatePresence>
 
       {/* Konum düzeltme uyarısı */}

@@ -262,14 +262,16 @@ drop policy "muhasebe kilidi" on public.profiles;
   `kurye_konumlari` tablosuna hiç yazılmıyor — diğer kuryeye yanlış yer
   göstermektense hiç göstermemek yeğ.
 - **Konumu yeniden ölçme:** sağ alttaki konum düğmesi ve şerit üzerindeki
-  **Yenile**, `maximumAge: 0` ile cihaza yeniden ölçtürüyor. `watchPosition`
-  cihazın elindeki en iyi tahmini veriyor ve o tahmin bir kez şaştıysa
-  kendiliğinden düzelmeyebiliyor; önbellekteki ölçümü reddetmek tek çıkar yol.
-- **Konumu elle işaretleme:** hata payı uyarısındaki **Düzelt** ile kurye
-  bulunduğu yeri haritada gösteriyor. İşaretlenen nokta kilitleniyor: kaba
-  ölçümler onu ezmiyor, ancak 100 m'den iyi gerçek bir GPS ölçümü gelince
-  kilit kendiliğinden açılıyor — o noktada cihaz elle konulandan iyisini
-  biliyor.
+  **Yenile**, konum izleyicisini söküp yeniden kuruyor; tarayıcı yeni
+  izleyiciye elindeki en iyi ölçümü hemen veriyor. Ayrı bir
+  `getCurrentPosition` çağrısı işe yaramıyor: `watchPosition` açıkken
+  `maximumAge: 0` isteği cihazın yeni ölçüm üretmesini bekliyor ve konum
+  IP'den geliyorsa o ölçüm hiç gelmiyor — istek sessizce asılı kalıyor.
+- **Kötü ölçüm iyisini ezmiyor:** telefon GPS ile Wi-Fi arasında gidip
+  geliyor; 15 m'lik ölçümün hemen ardından 800 m'lik biri gelince imleç sokak
+  sokak zıplıyordu. Payı daha kötü olan ölçüm, eldeki ölçüm bir dakikadan
+  tazeyken yok sayılıyor. Bayatlayınca koşulsuz kabul ediliyor: kurye yol
+  almıştır.
 - **Konum imleci:** beyaz halkalı kırmızı nokta ve yön konisi. Koni haritayla
   birlikte döner (`rotationAlignment: map`), eğimde yere yatar; yön bilinmiyorsa
   gizlenir.

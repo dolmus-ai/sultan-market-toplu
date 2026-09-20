@@ -511,6 +511,26 @@ dönüyor. Arayüz bu ucu kullanmadığı için uygulamanın kalanı etkilenmiyo
 listesinde değil — her çağrısı faturaya yazıldığı için geliştirmede bile
 oturum istiyor. Bin iki yüz adresin Claude tarafı bir seferlik birkaç dolar.
 
+### Yeni sürümün ekrana gelmesi
+
+Kurye uygulamayı günlerce açık bırakıyor. Tarayıcı açık sekmede yeni servis
+çalışanını kendiliğinden aramadığı için yayına alınan bir düzeltme ekranda hiç
+görünmüyordu: market "değişiklik gelmedi" diye yazdı, oysa dağıtım tamamdı ve
+üretim paketinde kaldırılan metin gerçekten yoktu. `ServisCalisani` üç şey
+yapıyor:
+
+- Kayıttan hemen sonra bir kez `registration.update()`.
+- Sekme öne geldiğinde (`visibilitychange`, `focus`) yine `update()`.
+- Yeni çalışan devralınca (`controllerchange`) sayfa **bir kez** yenileniyor;
+  yoksa yeni kabuk eski JS ile çalışmaya devam ediyor. İlk kurulumdaki
+  `clients.claim()` de aynı olayı tetiklediği için o ilk devralma atlanıyor —
+  bayrak olayın içinde güncelleniyor, sabit tutulunca ilk ziyaretin ardından
+  aynı sekmede çıkan güncellemeler hiç yakalanmıyordu (ölçüldü).
+
+`sw.js` tarafında çevrimdışı kabuk her başarılı açılışta tazeleniyor. Yalnızca
+kurulumda alınsaydı bayatlardı: dosya değişmediği sürece `install` bir daha
+çalışmıyor, eski kabuk da artık var olmayan JS parçalarına işaret ediyor.
+
 ### Excel'den toplu yükle
 
 İki biçim tanınıyor; hangisi olduğu dosyadan anlaşılıyor ve önizlemede yazıyor.

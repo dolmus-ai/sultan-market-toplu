@@ -11,7 +11,12 @@ const KABUK = ["/giris", "/ikon/amblem.svg", "/manifest.webmanifest"];
 
 self.addEventListener("install", (olay) => {
   olay.waitUntil(
-    caches.open(SURUM).then((c) => c.addAll(KABUK)).then(() => self.skipWaiting()),
+    caches
+      .open(SURUM)
+      // `cache: "reload"` şart: kabuk tarayıcı önbelleğinden değil ağdan
+      // gelsin, yoksa yeni servis çalışanı eski kabuğu kopyalıyor.
+      .then((c) => c.addAll(KABUK.map((u) => new Request(u, { cache: "reload" }))))
+      .then(() => self.skipWaiting()),
   );
 });
 
@@ -54,7 +59,21 @@ self.addEventListener("fetch", (olay) => {
   // Sayfalar: önce ağ, düşerse önbellekten kabuk.
   if (istek.mode === "navigate") {
     olay.respondWith(
-      fetch(istek).catch(() => caches.match("/giris").then((y) => y ?? Response.error())),
+      fetch(istek)
+        .then((yanit) => {
+          /*
+           * Çevrimdışı yedeği her başarılı açılışta tazele. Kabuk yalnızca
+           * kurulumda alınsaydı bayatlardı: bu dosya değişmediği sürece
+           * `install` bir daha çalışmıyor, eski kabuk da artık var olmayan
+           * eski JS parçalarına işaret ediyor. Çevrimdışı açılış kırılırdı.
+           */
+          if (yanit.ok && url.pathname === "/giris") {
+            const kopya = yanit.clone();
+            caches.open(SURUM).then((c) => c.put("/giris", kopya));
+          }
+          return yanit;
+        })
+        .catch(() => caches.match("/giris").then((y) => y ?? Response.error())),
     );
   }
 });

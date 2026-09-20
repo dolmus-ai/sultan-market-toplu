@@ -428,6 +428,30 @@ export async function abonelikEkle(
   return data as unknown as Abonelik;
 }
 
+/**
+ * Abonelik kalemlerini yazar.
+ *
+ * Ayrı durmasının sebebi `abonelikEkle`nin tek satırlık kaydı dönmesi:
+ * kalemler ancak abonelik kimliği belli olunca yazılabiliyor. Kalem
+ * yazılamazsa abonelik yine de ayakta kalsın diye hata yukarı atılmıyor,
+ * çağıran tarafta bildiriliyor.
+ */
+export async function abonelikKalemleriEkle(
+  db: SupabaseClient,
+  abonelik_id: string,
+  kalemler: { urun_id: string; miktar: number }[],
+): Promise<void> {
+  if (kalemler.length === 0) return;
+  const { error } = await db.from("abonelik_kalemleri").insert(
+    kalemler.map((k) => ({
+      abonelik_id,
+      urun_id: k.urun_id,
+      miktar: k.miktar,
+    })),
+  );
+  if (error) throw error;
+}
+
 export async function sepetEkle(
   db: SupabaseClient,
   yeni: { musteri_id: string; adres_id: string | null; tutar: number },

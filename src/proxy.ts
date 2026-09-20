@@ -37,12 +37,16 @@ export default async function proxy(istek: NextRequest) {
   }
 
   const yol = istek.nextUrl.pathname;
-  // /onizleme ve onu besleyen rota servisi yalnızca geliştirme ortamında açık.
+  // /onizleme ve onu besleyen servisler yalnızca geliştirme ortamında açık.
+  // Buradakilerin hiçbiri veritabanına dokunmuyor: rota hesabı ve Excel
+  // biçimlendirme. Üretimde hepsi oturum arkasında.
   const gelistirmeAcik =
     process.env.NODE_ENV !== "production" &&
     (yol.startsWith("/onizleme") ||
       yol.startsWith("/api/rota") ||
-      yol.startsWith("/api/navigasyon"));
+      yol.startsWith("/api/navigasyon") ||
+      yol.startsWith("/api/disa-aktar") ||
+      yol.startsWith("/api/toplu-musteri"));
   const acikYol = yol.startsWith("/giris") || gelistirmeAcik;
 
   if (!user && !acikYol) {

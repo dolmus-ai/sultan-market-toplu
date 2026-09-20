@@ -29,7 +29,18 @@ import {
 } from "../src/lib/navigasyon.ts";
 import { MARKET, acilisDakikasi, marketAcikMi } from "../src/lib/market.ts";
 import { kayitTutari, yontemKodu } from "../src/lib/veri.ts";
-import { csvAyristir, dosyayiCoz, satirlariCikar } from "../src/lib/toplu.ts";
+import {
+  aboneDefteriCoz,
+  aboneSayfasiMi,
+  adSutunuBul,
+  cizelgeSayfasiMi,
+  csvAyristir,
+  dosyayiCoz,
+  gunleriCoz,
+  saatCoz,
+  satirlariCikar,
+} from "../src/lib/toplu.ts";
+import { abonelikleriYaz, aboneSablonu, gunleriYaz } from "../src/lib/excel.ts";
 import {
   GoogleOturumHatasi,
   googleHataMetni,
@@ -263,6 +274,124 @@ const yanlisBaslik = satirlariCikar(csvAyristir("Foo;Bar\n1;2"));
 bekle("başlıksız dosya reddedildi", yanlisBaslik.tamam === false);
 const bozuk = await dosyayiCoz("x.xlsx", Buffer.from("bu excel degil"));
 bekle("bozuk xlsx reddedildi", bozuk.tamam === false);
+
+/* ------------------------------------------------------------------ */
+bolum("Abone defteri");
+
+bekle("gün adı tam yazılmış", gunleriCoz("PAZARTESİ").join() === "1");
+bekle("gün adı kısaltılmış", gunleriCoz("P.TESİ").join() === "1" && gunleriCoz("P.TSİ").join() === "1");
+bekle("perşembe", gunleriCoz("PERŞEMBE ").join() === "4");
+bekle("çoklu gün & ile", gunleriCoz("PERŞEMBE&P.TSİ").join() === "1,4");
+bekle("cumartesi cuma ile karışmıyor", gunleriCoz("CUMARTESİ").join() === "6" && gunleriCoz("CUMA").join() === "5");
+bekle("pazar pazartesi ile karışmıyor", gunleriCoz("PAZAR").join() === "7");
+bekle("tanınmayan gün atlanıyor", gunleriCoz("HERGÜN").length === 0);
+bekle("boş gün", gunleriCoz("").length === 0 && gunleriCoz(null).length === 0);
+
+bekle("saat çözümü", saatCoz("8:30") === "08:30" && saatCoz("08:30:00") === "08:30");
+bekle("geçersiz saat", saatCoz("abc") === null && saatCoz("99:99") === null);
+
+bekle("abone sayfası tanındı", aboneSayfasiMi(["ABONE NO", "", "TEL", "ADRES"]));
+bekle("çizelge sayfası tanındı", cizelgeSayfasiMi(["ABONE NO", "GÜN", "SÜT", "YUMURTA"]));
+bekle("müşteri sayfası abone sanılmıyor", !aboneSayfasiMi(["Ad", "Telefon", "Adres"]));
+
+bekle(
+  "başlıksız ad sütunu içeriğinden bulundu",
+  adSutunuBul(["ABONE NO", "", "TEL", "ADRES"], [["0", "ELİF EKİCİ", "533", "X"], ["1", "LEYLA", "533", "Y"]], new Set([0, 2, 3])) === 1,
+);
+bekle(
+  "tek harfli artık sütun ad sanılmıyor",
+  adSutunuBul(["ABONE NO", "ADRES", ""], [["0", "X", ""], ["1", "Y", ""], ["2", "Z", "T"]], new Set([0, 1])) === undefined,
+);
+
+const defter = aboneDefteriCoz([
+  {
+    ad: "SERVİS",
+    satirlar: [
+      ["ABONE NO", "", "TEL", "ADRES"],
+      ["0", "ELİF EKİCİ", "533 591 91 80", "ÜNBAY KONAKLARI MB BLOK D:1"],
+      ["1", "", "533 777 4358", "ÇİĞDEM EVLER B BLOK D:3"],
+      ["2", "İSMAİL GÖKÇE", "", ""],
+    ],
+  },
+  {
+    ad: "SÜT",
+    satirlar: [
+      ["ABONE NO", "GÜN", "SÜT", "YUMURTA", "KAR", "NOT"],
+      ["0", "P.TESİ", "5", "0", "2.5", "her hafta"],
+      ["0", "PERŞEMBE", "2", "", "", ""],
+      ["1", "PERŞEMBE&P.TSİ", "3", "1", "1.5", ""],
+      ["TOPLAM", "", "10", "", "4", ""],
+      ["YOK BÖYLE BİRİ", "PAZAR", "1", "", "", ""],
+    ],
+  },
+]);
+if (!defter.tamam) {
+  bekle("defter çözüldü", false, defter.hata);
+} else {
+  bekle("biçim abone", defter.bicim === "abone");
+  bekle("3 abone satırı", defter.satirlar.length === 3, `-> ${defter.satirlar.length}`);
+  bekle("adres boş olan atlanıyor", defter.hatali === 1 && defter.gecerli === 2);
+  bekle("3 abonelik kuruldu", defter.abonelik === 3, `-> ${defter.abonelik}`);
+  bekle("adı boş abone numarasıyla anıldı", defter.satirlar[1].ad === "Abone 1", `-> ${defter.satirlar[1].ad}`);
+  const ilk = defter.satirlar[0];
+  bekle("ilk abonenin iki aboneliği var", ilk.abonelikler.length === 2);
+  bekle("gün çözüldü", ilk.abonelikler[0].gunler.join() === "1");
+  bekle("kalem miktarı okundu", ilk.abonelikler[0].kalemler.length === 1 && ilk.abonelikler[0].kalemler[0].miktar === 5, JSON.stringify(ilk.abonelikler[0].kalemler));
+  bekle("sıfır miktar kalem sayılmıyor", !ilk.abonelikler[0].kalemler.some((k) => k.ad === "YUMURTA"));
+  bekle("kâr sütunu ürün sayılmıyor", !ilk.abonelikler[0].kalemler.some((k) => k.ad === "KAR"));
+  bekle("not okundu", ilk.abonelikler[0].not === "her hafta");
+  bekle("TOPLAM satırı atlandı", !defter.satirlar.some((r) => r.abonelikler.some((p) => p.kalemler.some((k) => k.miktar === 10))));
+  bekle("eşleşmeyen çizelge satırı uyarı verdi", defter.uyarilar.length === 1 && defter.uyarilar[0].includes("1 çizelge"), JSON.stringify(defter.uyarilar));
+  const ikinci = defter.satirlar[1];
+  bekle("çoklu gün aboneliği", ikinci.abonelikler[0]?.gunler.join() === "1,4");
+}
+
+bekle("gün yazımı defter biçiminde", gunleriYaz([1, 4]) === "PAZARTESİ&PERŞEMBE", gunleriYaz([1, 4]));
+bekle("boş gün yazımı", gunleriYaz([]) === "" && gunleriYaz(null) === "");
+
+/* Şablon ve dışa aktarma gidiş-dönüş */
+const sablon = await dosyayiCoz("sablon.xlsx", await aboneSablonu());
+if (!sablon.tamam) {
+  bekle("şablon geri okundu", false, sablon.hata);
+} else {
+  bekle("şablon abone biçiminde", sablon.bicim === "abone");
+  bekle("şablonda 3 müşteri", sablon.gecerli === 3, `-> ${sablon.gecerli}`);
+  bekle("şablonda 2 abonelik", sablon.abonelik === 2, `-> ${sablon.abonelik}`);
+  const s0 = sablon.satirlar[0];
+  bekle("şablon saati okundu", s0.abonelikler[0]?.saat === "08:00", JSON.stringify(s0.abonelikler[0]));
+  bekle("şablon tutarı okundu", s0.abonelikler[0]?.tutar === 250);
+  bekle("şablon günleri okundu", s0.abonelikler[0]?.gunler.join() === "1,4");
+  bekle("şablon kalemi okundu", s0.abonelikler[0]?.kalemler.some((k) => k.ad === "SÜT" && k.miktar === 5));
+  bekle("şablonda koordinatlı örnek var", sablon.satirlar.some((r) => r.lat === 40.7825 && r.lng === 30.354));
+}
+
+const disari = await abonelikleriYaz([
+  {
+    musteri: { ad: "AYŞE YILDIRIM", telefon: "532 000 0000" },
+    adres: { adres_metni: "Orhangazi Sok.", bina: "14", kat: "1", daire: "2", tarif: "beyaz bina", lat: 40.7825, lng: 30.354 },
+    baslik: "Süt",
+    gunler: [1, 4],
+    teslim_saati: "08:30",
+    tutar: 120,
+    notlar: "zile basma",
+    kalemler: [{ miktar: 3, urun: { ad: "SÜT" } }],
+  },
+]);
+const geri = await dosyayiCoz("cikti.xlsx", disari);
+if (!geri.tamam) {
+  bekle("dışa aktarılan dosya geri okundu", false, geri.hata);
+} else {
+  bekle("çıktı abone biçiminde geri okundu", geri.bicim === "abone" && geri.gecerli === 1, `-> ${geri.bicim}/${geri.gecerli}`);
+  const g = geri.satirlar[0];
+  bekle("ad korundu", g.ad === "AYŞE YILDIRIM", g.ad);
+  bekle("telefon korundu", g.telefon === "532 000 0000");
+  bekle("adres metni korundu", g.adres_metni === "Orhangazi Sok.", g.adres_metni);
+  bekle("kapı bilgisi ayrı sütunlarda korundu", g.bina === "14" && g.kat === "1" && g.daire === "2" && g.tarif === "beyaz bina", JSON.stringify([g.bina, g.kat, g.daire, g.tarif]));
+  bekle("koordinat korundu", g.lat === 40.7825 && g.lng === 30.354, JSON.stringify([g.lat, g.lng]));
+  bekle("abonelik korundu", g.abonelikler.length === 1 && g.abonelikler[0].gunler.join() === "1,4");
+  bekle("saat ve tutar korundu", g.abonelikler[0].saat === "08:30" && g.abonelikler[0].tutar === 120, JSON.stringify(g.abonelikler[0]));
+  bekle("kalem korundu", g.abonelikler[0].kalemler[0]?.ad === "SÜT" && g.abonelikler[0].kalemler[0]?.miktar === 3);
+}
 
 /* ------------------------------------------------------------------ */
 bolum("En hızlı rota ve sapma");

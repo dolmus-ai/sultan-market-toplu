@@ -44,9 +44,11 @@ import {
 import { adimCumlesi, konus, sesiKes } from "@/lib/ses";
 import {
   abonelikBugunMu,
+  abonelikleriGetir,
   abonelikSil,
   odemeYontemiEkle,
   sepetiSiparise,
+  sepetleriGetir,
   odemeYontemiKaldir,
   sepetSil,
   siparisSil,
@@ -151,6 +153,7 @@ export default function KuryeUygulamasi({
 
   const [secimModu, setSecimModu] = useState(false);
   const [secilenler, setSecilenler] = useState<string[]>([]);
+  const [indiriliyor, setIndiriliyor] = useState(false);
   const [rota, setRota] = useState<RotaSonucu | null>(null);
   const [rotaHesapla, setRotaHesapla] = useState(false);
 
@@ -397,6 +400,21 @@ export default function KuryeUygulamasi({
       .order("oncelik", { ascending: false })
       .limit(400);
     if (data) setTeslimatlar(data as unknown as Siparis[]);
+  }, [db]);
+
+  /**
+   * Abonelik ve sepet listelerini baştan okur.
+   *
+   * Teslimatların canlı akışı var, bu ikisinin yok: toplu yüklemeden sonra
+   * yeni kayıtların görünmesi için elle tazeleniyor.
+   */
+  const listeleriTazele = useCallback(async () => {
+    const [yeniAbonelikler, yeniSepetler] = await Promise.all([
+      abonelikleriGetir(db),
+      sepetleriGetir(db),
+    ]);
+    setAbonelikler(yeniAbonelikler);
+    setSepetler(yeniSepetler);
   }, [db]);
 
   useEffect(() => {
@@ -706,7 +724,9 @@ export default function KuryeUygulamasi({
 
   /* ------------------------- Etkileşimler ------------------------- */
   function pinSecildi(id: string) {
-    if (secimModu) {
+    // Seçim kimlikleri sekmeye özel; abonelik listesi açıkken haritadan
+    // teslimat işaretlemek listeyle uyuşmayan bir seçim üretirdi.
+    if (secimModu && sekme === "teslimatlar") {
       secimDegistir(id);
       return;
     }
@@ -721,6 +741,51 @@ export default function KuryeUygulamasi({
     setSecilenler((onceki) =>
       onceki.includes(id) ? onceki.filter((x) => x !== id) : [...onceki, id],
     );
+  }
+
+  /**
+   * Açık sekmenin listesini Excel'e indirir.
+   *
+   * Seçim modunda işaretli kayıtlar, değilse listenin tamamı gidiyor.
+   * Dosyayı sunucu yazıyor: exceljs istemci paketini kabartmasın diye.
+   */
+  async function excelIndir() {
+    const secili = secimModu && secilenler.length > 0;
+    const suz = <T extends { id: string }>(liste: T[]) =>
+      secili ? liste.filter((k) => secilenler.includes(k.id)) : liste;
+
+    const kayitlar =
+      sekme === "teslimatlar"
+        ? suz(siraliTeslimatlar)
+        : sekme === "abonelikler"
+          ? suz(abonelikler)
+          : suz(sepetler);
+
+    if (kayitlar.length === 0) {
+      uyar("İndirilecek kayıt yok.");
+      return;
+    }
+
+    setIndiriliyor(true);
+    try {
+      const yanit = await fetch("/api/disa-aktar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tur: sekme, kayitlar }),
+      });
+      if (!yanit.ok) throw new Error("indir");
+      const bag = URL.createObjectURL(await yanit.blob());
+      const a = document.createElement("a");
+      a.href = bag;
+      a.download = `sultan-market-${sekme}-${bugununTarihi()}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(bag);
+      uyar(`${kayitlar.length} kayıt indirildi`);
+    } catch {
+      uyar("Excel dosyası indirilemedi.");
+    } finally {
+      setIndiriliyor(false);
+    }
   }
 
   async function rotayiOlustur() {
@@ -1786,13 +1851,17 @@ export default function KuryeUygulamasi({
             key="toplu-yukleme"
             db={db}
             onKapat={() => setTopluYukleme(false)}
-            onBitti={(eklenen) =>
+            onBitti={(eklenen, abonelik) => {
               uyar(
                 eklenen > 0
-                  ? `${eklenen} müşteri eklendi`
+                  ? `${eklenen} müşteri${abonelik > 0 ? `, ${abonelik} abonelik` : ""} eklendi`
                   : "Hiçbir satır eklenemedi",
-              )
-            }
+              );
+              if (eklenen > 0) {
+                void listeleriTazele();
+                void teslimatlariTazele();
+              }
+            }}
           />
         )}
       </AnimatePresence>
@@ -1831,24 +1900,34 @@ export default function KuryeUygulamasi({
             className="absolute inset-x-3 bottom-4 z-40 flex items-center gap-2 rounded-[22px] bg-kontrast p-2 pl-4 text-white shadow-yuzen"
           >
             <p className="flex-1 text-[13px] font-extrabold">
-              {secilenler.length} durak seçildi
+              {secilenler.length}{" "}
+              {sekme === "teslimatlar" ? "durak" : "kayıt"} seçildi
             </p>
             <button
               onClick={() => {
                 setSecimModu(false);
                 setSecilenler([]);
               }}
-              className="rounded-hap bg-yuzey/10 px-3.5 py-2.5 text-[12px] font-bold"
+              className="rounded-hap bg-yuzey/10 px-3 py-2.5 text-[12px] font-bold"
             >
               Vazgeç
             </button>
             <button
-              onClick={rotayiOlustur}
-              disabled={rotaHesapla || secilenler.length < 2}
-              className="rounded-hap bg-kirmizi px-4 py-2.5 text-[12px] font-black disabled:opacity-50"
+              onClick={() => void excelIndir()}
+              disabled={indiriliyor || secilenler.length === 0}
+              className="rounded-hap bg-yuzey/10 px-3 py-2.5 text-[12px] font-black disabled:opacity-50"
             >
-              {rotaHesapla ? "Hesaplanıyor…" : "En kısa yolu bul"}
+              {indiriliyor ? "…" : "Excel"}
             </button>
+            {sekme === "teslimatlar" && (
+              <button
+                onClick={rotayiOlustur}
+                disabled={rotaHesapla || secilenler.length < 2}
+                className="rounded-hap bg-kirmizi px-3.5 py-2.5 text-[12px] font-black disabled:opacity-50"
+              >
+                {rotaHesapla ? "Hesaplanıyor…" : "En kısa yol"}
+              </button>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -1966,6 +2045,8 @@ export default function KuryeUygulamasi({
                     e.stopPropagation();
                     setSekme(s.anahtar);
                     setSeciliId(null);
+                    // Seçim kimlikleri sekmeye özel; karışmasın diye sıfırlanıyor.
+                    setSecilenler([]);
                     if (panel === "kapali") setPanel("yari");
                   }}
                   className={`relative shrink-0 rounded-hap px-3.5 py-2 text-[13px] font-bold transition-colors ${
@@ -1994,13 +2075,25 @@ export default function KuryeUygulamasi({
             >
               +
             </motion.button>
+            <motion.button
+              whileTap={{ scale: 0.92 }}
+              onClick={(e) => {
+                e.stopPropagation();
+                void excelIndir();
+              }}
+              disabled={indiriliyor}
+              aria-label="Excel'e indir"
+              title="Excel'e indir"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-yuzey2 text-[15px] font-black text-gri disabled:opacity-50"
+            >
+              {indiriliyor ? "…" : "⤓"}
+            </motion.button>
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 setSecimModu((o) => !o);
                 setSecilenler([]);
                 setSeciliId(null);
-                setSekme("teslimatlar");
                 setPanel("yari");
               }}
               className={`shrink-0 rounded-hap px-3 py-2 text-[12px] font-black transition-colors ${
@@ -2010,8 +2103,8 @@ export default function KuryeUygulamasi({
               }`}
             >
               {/* Dar ekranda tek kelime; sekme şeridine yer kalsın. */}
-              <span className="hidden xs:inline">Toplu rota</span>
-              <span className="xs:hidden">Rota</span>
+              <span className="hidden xs:inline">Toplu seç</span>
+              <span className="xs:hidden">Seç</span>
             </button>
           </div>
         }
@@ -2077,7 +2170,10 @@ export default function KuryeUygulamasi({
                       key={a.id}
                       abonelik={a}
                       bugun={bugunAbonelikler.some((b) => b.id === a.id)}
+                      secimModu={secimModu}
+                      isaretli={secilenler.includes(a.id)}
                       onTikla={() => {
+                        if (secimModu) return secimDegistir(a.id);
                         if (a.adres?.lat != null) {
                           haritaApi.current?.ucur({
                             lat: a.adres.lat,
@@ -2103,7 +2199,10 @@ export default function KuryeUygulamasi({
                     <SepetSatiri
                       key={s.id}
                       sepet={s}
+                      secimModu={secimModu}
+                      isaretli={secilenler.includes(s.id)}
                       onTikla={() => {
+                        if (secimModu) return secimDegistir(s.id);
                         if (s.adres?.lat != null) {
                           haritaApi.current?.ucur({
                             lat: s.adres.lat,

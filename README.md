@@ -393,14 +393,48 @@ konum düzeltme ve silme sunuyor. Silme onay istiyor. Teslim edilmiş sipariş
 silinemez — tahsilat kaydı ona bağlı ve silinseydi kasa geçmişi de yok olurdu;
 kural hem arayüzde hem RLS politikasında var.
 
-**Excel'den toplu yükle** — .xlsx ya da .csv dosyasından müşteri + adres aktarır.
-İlk satır başlık olmalı; en az `Ad` ve `Adres` sütunu gerekir. Telefon, Bina,
-Kat, Daire, Tarif, Lat, Lng ve Not isteğe bağlıdır ve başlıklar Türkçe karakter,
-boşluk ve büyük/küçük harf farkını yok sayarak eşleşir ("Ad Soyad", "Cep",
-"Açık Adres", "Enlem"/"Boylam" hepsi tanınır). Dosya sunucuda çözümlenir
-(`src/lib/toplu.ts`), kayıt istemciden kuryenin kendi oturumuyla atılır.
-Yükleme öncesi kaç satırın geçerli, kaçının atlanacağı gösterilir. Ekrandaki
-"Örnek dosyayı indir" doğru başlıklara sahip bir CSV verir.
+### Excel'den toplu yükle
+
+İki biçim tanınıyor; hangisi olduğu dosyadan anlaşılıyor ve önizlemede yazıyor.
+
+**Abone defteri** — marketin elindeki defterin şekli, iki sayfa:
+
+| Sayfa | Sütunlar |
+| --- | --- |
+| `SERVİS` | `ABONE NO`, müşteri adı (başlığı boş olabilir), `TEL`, `ADRES` — ayrıca `BİNA`, `KAT`, `DAİRE`, `TARİF`, `LAT`, `LNG` |
+| `ÇİZELGE` | `ABONE NO`, `GÜN`, ürün sütunları (başlık ürün adı, hücre miktar), `SAAT`, `TUTAR`, `NOT` |
+
+Her `SERVİS` satırı bir müşteri ve adres açar. Her `ÇİZELGE` satırı, abone
+numarasından eşleşen müşteriye bir **abonelik** kurar. Gün adları kısaltmasıyla
+da yazılabilir (`P.TESİ`, `P.TSİ`, `PERŞEMBE&P.TSİ`); `TOPLAM` satırı atlanır.
+Ürün sütunundaki ad `urunler` tablosuyla eşleşirse abonelik kalemi olur,
+eşleşmezse miktar aboneliğin notuna yazılır — bilgi kaybolmaz. Çizelgede
+numara yerine ad yazılmışsa o da denenir; hiç eşleşmezse satır kurulmaz ve
+önizlemede kaç tanesinin düştüğü uyarı olarak çıkar. Adı boş bırakılmış abone
+`Abone 12` gibi numarasıyla kaydedilir.
+
+**Müşteri listesi** — tek sayfa, en az `Ad` ve `Adres` sütunu gerekir. Telefon,
+Bina, Kat, Daire, Tarif, Lat, Lng ve Not isteğe bağlıdır. Başlıklar Türkçe
+karakter, boşluk ve büyük/küçük harf farkını yok sayarak eşleşir ("Ad Soyad",
+"Cep", "Açık Adres", "Enlem"/"Boylam" hepsi tanınır). `.csv` dosyaları hep bu
+biçimde okunur.
+
+Dosya sunucuda çözümlenir (`src/lib/toplu.ts`), kayıt istemciden kuryenin
+kendi oturumuyla atılır. Yükleme öncesi kaç müşteri, kaç abonelik kurulacağı
+ve kaç satırın atlanacağı gösterilir. "Örnek dosyayı indir" abone defteri
+biçiminde doldurulmuş bir `.xlsx` verir (`GET /api/toplu-musteri`).
+
+### Excel'e indir
+
+Alt paneldeki **⤓** düğmesi açık sekmenin listesini Excel'e aktarır:
+teslimatlar, abonelikler ve sepetler için ayrı ayrı. "Toplu seç" ile satırlar
+işaretlenmişse yalnızca işaretliler, değilse listenin tamamı iner. Dosyayı
+sunucu yazıyor (`POST /api/disa-aktar`, `src/lib/excel.ts`); exceljs istemci
+paketine girmesin diye.
+
+Abonelik çıktısı yukarıdaki **abone defteri biçiminde** yazılıyor: aynı dosya
+indirilip Excel'de düzenlenip toplu yüklemeden geri verilebiliyor. Kapı
+bilgisi ve koordinatlar da sütun olarak gittiği için gidiş-dönüşte kaybolmuyor.
 
 ## Rota ve navigasyon
 

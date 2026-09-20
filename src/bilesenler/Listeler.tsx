@@ -16,6 +16,23 @@ import { kayitTutari } from "@/lib/veri";
 import type { Abonelik, Sepet, Siparis } from "@/lib/tipler";
 
 /* ------------------------------------------------------------------ */
+/* Ortak seçim kutusu                                                  */
+/* ------------------------------------------------------------------ */
+
+/** Toplu seçim onay kutusu — üç listede de aynı görünüyor. */
+function SecimKutusu({ isaretli }: { isaretli: boolean }) {
+  return (
+    <span
+      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+        isaretli ? "border-kirmizi bg-kirmizi text-white" : "border-cizgi bg-yuzey"
+      }`}
+    >
+      {isaretli && <span className="text-xs font-black">✓</span>}
+    </span>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Teslimat satırı                                                     */
 /* ------------------------------------------------------------------ */
 
@@ -60,15 +77,7 @@ export function TeslimatSatiri({
       {/* Sıra veya durum göstergesi */}
       <span className="relative flex h-11 w-11 shrink-0 items-center justify-center">
         {secimModu ? (
-          <span
-            className={`flex h-7 w-7 items-center justify-center rounded-full border-2 transition-colors ${
-              isaretli
-                ? "border-kirmizi bg-kirmizi text-white"
-                : "border-cizgi bg-yuzey"
-            }`}
-          >
-            {isaretli && <span className="text-xs font-black">✓</span>}
-          </span>
+          <SecimKutusu isaretli={isaretli} />
         ) : sira ? (
           <span className="flex h-9 w-9 items-center justify-center rounded-full bg-kontrast text-sm font-black text-white">
             {sira}
@@ -140,11 +149,15 @@ export function TeslimatSatiri({
 export function AbonelikSatiri({
   abonelik,
   bugun,
+  secimModu = false,
+  isaretli = false,
   onTikla,
   onIslemler,
 }: {
   abonelik: Abonelik;
   bugun: boolean;
+  secimModu?: boolean;
+  isaretli?: boolean;
   onTikla: () => void;
   onIslemler?: () => void;
 }) {
@@ -154,10 +167,20 @@ export function AbonelikSatiri({
       layout
       onClick={onTikla}
       whileTap={{ scale: 0.985 }}
-      className="flex w-full items-center gap-3 rounded-[20px] border border-cizgi bg-yuzey p-3 text-left hover:bg-yuzey2"
+      className={`flex w-full items-center gap-3 rounded-[20px] border p-3 text-left transition-colors ${
+        isaretli
+          ? "border-kirmizi bg-kirmizi-sis"
+          : "border-cizgi bg-yuzey hover:bg-yuzey2"
+      }`}
     >
-      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-[3px] border-kontrast bg-yuzey">
-        <span className="h-2.5 w-2.5 rounded-full bg-kirmizi" />
+      <span className="flex h-11 w-11 shrink-0 items-center justify-center">
+        {secimModu ? (
+          <SecimKutusu isaretli={isaretli} />
+        ) : (
+          <span className="flex h-11 w-11 items-center justify-center rounded-full border-[3px] border-kontrast bg-yuzey">
+            <span className="h-2.5 w-2.5 rounded-full bg-kirmizi" />
+          </span>
+        )}
       </span>
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-2">
@@ -177,7 +200,7 @@ export function AbonelikSatiri({
       <span className="shrink-0 text-right text-[15px] font-black">
         {para(tutar)}
       </span>
-      {onIslemler && <IslemDugmesi onTikla={onIslemler} />}
+      {onIslemler && !secimModu && <IslemDugmesi onTikla={onIslemler} />}
     </motion.button>
   );
 }
@@ -188,10 +211,14 @@ export function AbonelikSatiri({
 
 export function SepetSatiri({
   sepet,
+  secimModu = false,
+  isaretli = false,
   onTikla,
   onIslemler,
 }: {
   sepet: Sepet;
+  secimModu?: boolean;
+  isaretli?: boolean;
   onTikla: () => void;
   onIslemler?: () => void;
 }) {
@@ -200,8 +227,13 @@ export function SepetSatiri({
       layout
       onClick={onTikla}
       whileTap={{ scale: 0.985 }}
-      className="flex w-full items-center gap-3 rounded-[20px] border border-cizgi bg-yuzey p-3 text-left hover:bg-yuzey2"
+      className={`flex w-full items-center gap-3 rounded-[20px] border p-3 text-left transition-colors ${
+        isaretli
+          ? "border-kirmizi bg-kirmizi-sis"
+          : "border-cizgi bg-yuzey hover:bg-yuzey2"
+      }`}
     >
+      {secimModu && <SecimKutusu isaretli={isaretli} />}
       <span className="min-w-0 flex-1 truncate text-[15px] font-bold">
         {sepet.musteri?.ad ?? "Müşteri"}
       </span>
@@ -209,7 +241,7 @@ export function SepetSatiri({
       <span className="shrink-0 text-[15px] font-black">
         {para(kayitTutari(sepet))}
       </span>
-      {onIslemler && <IslemDugmesi onTikla={onIslemler} />}
+      {onIslemler && !secimModu && <IslemDugmesi onTikla={onIslemler} />}
     </motion.button>
   );
 }

@@ -4,10 +4,28 @@ import { useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { adresEkle, musteriEkle } from "@/lib/veri";
+import {
+  abonelikEkle,
+  abonelikKalemleriEkle,
+  adresEkle,
+  musteriEkle,
+  urunleriGetir,
+} from "@/lib/veri";
+import { gunlerYaz } from "@/lib/bicim";
+import type { Urun } from "@/lib/tipler";
+
+type AbonelikPlani = {
+  gunler: number[];
+  kalemler: { ad: string; miktar: number }[];
+  saat: string | null;
+  tutar: number | null;
+  not: string | null;
+  kaynakSatir: number;
+};
 
 type Satir = {
   sira: number;
+  abone_no: string | null;
   ad: string;
   telefon: string | null;
   adres_metni: string;
@@ -18,23 +36,66 @@ type Satir = {
   lat: number | null;
   lng: number | null;
   notlar: string | null;
+  abonelikler: AbonelikPlani[];
   hata: string | null;
+};
+
+type Onizleme = {
+  ad: "onizleme";
+  bicim: "musteri" | "abone";
+  satirlar: Satir[];
+  gecerli: number;
+  hatali: number;
+  abonelik: number;
+  uyarilar: string[];
 };
 
 type Durum =
   | { ad: "bos" }
   | { ad: "okunuyor" }
-  | { ad: "onizleme"; satirlar: Satir[]; gecerli: number; hatali: number }
+  | Onizleme
   | { ad: "yukleniyor"; toplam: number; biten: number }
-  | { ad: "bitti"; eklenen: number; atlanan: number }
+  | { ad: "bitti"; eklenen: number; abonelik: number; atlanan: number }
   | { ad: "hata"; mesaj: string };
 
-/** Kullanıcının indirebileceği örnek dosya — beklenen sütun başlıkları. */
-const ORNEK_CSV = [
-  "Ad;Telefon;Adres;Bina;Kat;Daire;Tarif;Lat;Lng;Not",
-  "Ayşe Yıldırım;0532 118 4471;Arabacıalanı Mah. Orhangazi Sok.;14;1;2;Beyaz bina;40.7825;30.3540;",
-  "Mehmet Korkmaz;0533 240 9182;Arabacıalanı Mah. Atatürk Cad.;61;2;3;;;;Zil çalışmıyor",
-].join("\n");
+/** Abonelik saati yazılmamışsa kullanılan varsayılan. */
+const VARSAYILAN_SAAT = "08:00";
+
+function anahtarla(m: string) {
+  const harita: Record<string, string> = {
+    "ç": "c", "ğ": "g", "ı": "i", "ö": "o", "ş": "s", "ü": "u",
+  };
+  return m
+    .toLocaleLowerCase("tr")
+    .replace(/[çğıöşü]/g, (h) => harita[h] ?? h)
+    .replace(/[^a-z0-9]/g, "");
+}
+
+/**
+ * Çizelgedeki sütun adını ürün kaydıyla eşler.
+ *
+ * Defterde "SÜT" yazıyor, üründe "Tam Yağlı Süt 1 L". Tam eşitlik aramak
+ * çoğu satırı kaçırırdı; iki yönlü içerme kontrolü yapıyoruz. Eşleşme
+ * bulunamazsa miktar kaybolmasın diye aboneliğin notuna yazılıyor.
+ */
+function urunBul(urunler: Urun[], ad: string): Urun | undefined {
+  const a = anahtarla(ad);
+  if (!a) return undefined;
+  return (
+    urunler.find((u) => anahtarla(u.ad) === a) ??
+    urunler.find((u) => anahtarla(u.ad).includes(a)) ??
+    urunler.find((u) => a.includes(anahtarla(u.ad)))
+  );
+}
+
+function planBasligi(plan: AbonelikPlani): string {
+  const adlar = plan.kalemler.map((k) => k.ad).filter(Boolean);
+  if (adlar.length === 0) return "Abonelik";
+  // Başlık satırda okunacak: iki kalemden sonrası sayıya dönüyor.
+  return adlar.length <= 2
+    ? adlar.join(" + ")
+    : `${adlar[0]} +${adlar.length - 1}`;
+}
 
 export default function TopluYukleme({
   db,
@@ -44,7 +105,7 @@ export default function TopluYukleme({
   db: SupabaseClient;
   onKapat: () => void;
   /** Yükleme bitince ana ekran verisini tazelemek için. */
-  onBitti: (eklenen: number) => void;
+  onBitti: (eklenen: number, abonelik: number) => void;
 }) {
   const [durum, setDurum] = useState<Durum>({ ad: "bos" });
   const dosyaRef = useRef<HTMLInputElement>(null);
@@ -65,21 +126,36 @@ export default function TopluYukleme({
       }
       setDurum({
         ad: "onizleme",
+        bicim: (veri.bicim as "musteri" | "abone") ?? "musteri",
         satirlar: veri.satirlar as Satir[],
         gecerli: veri.gecerli as number,
         hatali: veri.hatali as number,
+        abonelik: (veri.abonelik as number) ?? 0,
+        uyarilar: (veri.uyarilar as string[]) ?? [],
       });
     } catch {
       setDurum({ ad: "hata", mesaj: "Sunucuya ulaşılamadı." });
     }
   }
 
-  async function yukle(satirlar: Satir[]) {
-    const gecerliler = satirlar.filter((s) => !s.hata);
+  async function yukle(onizleme: Onizleme) {
+    const gecerliler = onizleme.satirlar.filter((s) => !s.hata);
     setDurum({ ad: "yukleniyor", toplam: gecerliler.length, biten: 0 });
 
+    // Ürün listesi yalnızca abonelik kurulacaksa gerekiyor.
+    let urunler: Urun[] = [];
+    if (onizleme.abonelik > 0) {
+      try {
+        urunler = await urunleriGetir(db);
+      } catch {
+        urunler = [];
+      }
+    }
+
     let eklenen = 0;
+    let abonelikSayisi = 0;
     let atlanan = 0;
+
     for (const [i, satir] of gecerliler.entries()) {
       try {
         const musteri = await musteriEkle(db, {
@@ -87,7 +163,7 @@ export default function TopluYukleme({
           telefon: satir.telefon,
           notlar: satir.notlar,
         });
-        await adresEkle(db, {
+        const adres = await adresEkle(db, {
           musteri_id: musteri.id,
           adres_metni: satir.adres_metni,
           bina: satir.bina,
@@ -98,26 +174,47 @@ export default function TopluYukleme({
           lng: satir.lng,
         });
         eklenen++;
+
+        for (const plan of satir.abonelikler) {
+          // Eşleşen ürünler kalem olur; eşleşmeyenler nota yazılır ki
+          // miktar bilgisi dosyadan uygulamaya geçerken kaybolmasın.
+          const kalemler: { urun_id: string; miktar: number }[] = [];
+          const eslesmeyen: string[] = [];
+          for (const k of plan.kalemler) {
+            const urun = urunBul(urunler, k.ad);
+            if (urun) kalemler.push({ urun_id: urun.id, miktar: k.miktar });
+            else eslesmeyen.push(`${k.miktar} ${k.ad}`);
+          }
+
+          const abonelik = await abonelikEkle(db, {
+            musteri_id: musteri.id,
+            adres_id: adres.id,
+            baslik: planBasligi(plan),
+            siklik: "haftalik",
+            gunler: plan.gunler,
+            teslim_saati: plan.saat ?? VARSAYILAN_SAAT,
+            tutar: plan.tutar ?? 0,
+            notlar: [plan.not, eslesmeyen.join(", ")]
+              .filter(Boolean)
+              .join(" · "),
+          });
+          if (kalemler.length) {
+            try {
+              await abonelikKalemleriEkle(db, abonelik.id, kalemler);
+            } catch {
+              /* abonelik ayakta, kalem yazılamadı */
+            }
+          }
+          abonelikSayisi++;
+        }
       } catch {
         atlanan++;
       }
       setDurum({ ad: "yukleniyor", toplam: gecerliler.length, biten: i + 1 });
     }
 
-    setDurum({ ad: "bitti", eklenen, atlanan });
-    onBitti(eklenen);
-  }
-
-  function ornekIndir() {
-    // BOM, Excel'in Türkçe karakterleri doğru açması için.
-    const bag = URL.createObjectURL(
-      new Blob(["﻿" + ORNEK_CSV], { type: "text/csv;charset=utf-8" }),
-    );
-    const a = document.createElement("a");
-    a.href = bag;
-    a.download = "sultan-market-musteri-sablonu.csv";
-    a.click();
-    URL.revokeObjectURL(bag);
+    setDurum({ ad: "bitti", eklenen, abonelik: abonelikSayisi, atlanan });
+    onBitti(eklenen, abonelikSayisi);
   }
 
   return (
@@ -142,7 +239,7 @@ export default function TopluYukleme({
           Toplu yükleme
         </p>
         <h2 className="mt-0.5 text-xl font-extrabold tracking-tight">
-          Excel&apos;den müşteri ve adres
+          Excel&apos;den abone ve müşteri
         </h2>
 
         <input
@@ -182,19 +279,31 @@ export default function TopluYukleme({
                 <span className="text-[12px] text-gri">.xlsx veya .csv</span>
               </motion.button>
 
-              <button
-                onClick={ornekIndir}
-                className="mt-3 w-full rounded-hap bg-yuzey2 py-3 text-[13px] font-bold text-gri"
+              <a
+                href="/api/toplu-musteri"
+                download
+                className="mt-3 flex h-12 w-full items-center justify-center rounded-hap bg-yuzey2 text-[13px] font-bold text-gri"
               >
                 Örnek dosyayı indir
-              </button>
+              </a>
 
-              <p className="mt-3 px-1 text-[12px] leading-relaxed text-gri">
-                İlk satır başlık olmalı. <b>Ad</b> ve <b>Adres</b> zorunlu;
-                Telefon, Bina, Kat, Daire, Tarif, Lat, Lng ve Not isteğe bağlı.
-                Lat/Lng yazılmazsa adres haritada görünmez, sonra
-                işaretlenebilir.
-              </p>
+              <div className="mt-3 space-y-2 px-1 text-[12px] leading-relaxed text-gri">
+                <p>
+                  <b>Abone defteri</b> — iki sayfa. <b>SERVİS</b> sayfasında
+                  abone listesi (ABONE NO, ad, TEL, ADRES), <b>ÇİZELGE</b>
+                  sayfasında haftalık plan (ABONE NO, GÜN ve ürün sütunları).
+                  Her çizelge satırı bir abonelik kurar.
+                </p>
+                <p>
+                  <b>Müşteri listesi</b> — tek sayfa, <b>Ad</b> ve{" "}
+                  <b>Adres</b> sütunları zorunlu. Telefon, Bina, Kat, Daire,
+                  Tarif, Lat, Lng ve Not isteğe bağlı.
+                </p>
+                <p>
+                  Lat/Lng yazılmazsa adres haritada görünmez, sonradan
+                  işaretlenebilir.
+                </p>
+              </div>
 
               {durum.ad === "hata" && (
                 <p className="mt-3 rounded-2xl bg-kirmizi-sis px-4 py-3 text-[13px] font-bold text-kirmizi">
@@ -232,16 +341,34 @@ export default function TopluYukleme({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
             >
-              <div className="mt-4 flex gap-2">
-                <Kutu sayi={durum.gecerli} etiket="Yüklenecek" ton="yesil" />
+              <p className="mt-3 text-[12px] font-bold text-gri">
+                {durum.bicim === "abone"
+                  ? "Abone defteri tanındı."
+                  : "Müşteri listesi tanındı."}
+              </p>
+
+              <div className="mt-2 flex gap-2">
+                <Kutu sayi={durum.gecerli} etiket="Müşteri" ton="yesil" />
+                {durum.bicim === "abone" && (
+                  <Kutu sayi={durum.abonelik} etiket="Abonelik" ton="siyah" />
+                )}
                 <Kutu sayi={durum.hatali} etiket="Atlanacak" ton="kirmizi" />
               </div>
+
+              {durum.uyarilar.map((u) => (
+                <p
+                  key={u}
+                  className="mt-2 rounded-2xl bg-turuncu/10 px-3.5 py-2.5 text-[12px] font-bold text-turuncu"
+                >
+                  {u}
+                </p>
+              ))}
 
               <ul className="ince-kaydirma mt-3 max-h-56 divide-y divide-cizgi overflow-y-auto rounded-[20px] border border-cizgi bg-yuzey">
                 {durum.satirlar.slice(0, 200).map((s) => (
                   <li key={s.sira} className="flex items-center gap-3 px-3.5 py-2.5">
                     <span className="w-7 shrink-0 text-[11px] font-black text-gri">
-                      {s.sira}
+                      {s.abone_no ?? s.sira}
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[13px] font-bold">
@@ -250,6 +377,18 @@ export default function TopluYukleme({
                       <span className="block truncate text-[11px] text-gri">
                         {s.adres_metni || "—"}
                       </span>
+                      {s.abonelikler.map((p) => (
+                        <span
+                          key={p.kaynakSatir}
+                          className="mt-0.5 block truncate text-[11px] font-bold text-kirmizi"
+                        >
+                          {gunlerYaz(p.gunler)}
+                          {p.kalemler.length > 0 &&
+                            ` · ${p.kalemler
+                              .map((k) => `${k.miktar} ${k.ad}`)
+                              .join(", ")}`}
+                        </span>
+                      ))}
                     </span>
                     {s.hata ? (
                       <span className="shrink-0 rounded-hap bg-kirmizi px-2 py-0.5 text-[10px] font-black uppercase text-white">
@@ -274,10 +413,11 @@ export default function TopluYukleme({
               <motion.button
                 whileTap={{ scale: 0.97 }}
                 disabled={durum.gecerli === 0}
-                onClick={() => void yukle(durum.satirlar)}
+                onClick={() => void yukle(durum)}
                 className="mt-4 h-14 w-full rounded-hap bg-kirmizi text-[15px] font-black text-white disabled:opacity-50"
               >
                 {durum.gecerli} müşteriyi yükle
+                {durum.abonelik > 0 && ` · ${durum.abonelik} abonelik`}
               </motion.button>
             </motion.div>
           )}
@@ -304,7 +444,7 @@ export default function TopluYukleme({
                 />
               </div>
               <p className="mt-3 text-center text-[13px] text-gri">
-                Müşteriler kaydediliyor, sayfayı kapatma.
+                Kaydediliyor, sayfayı kapatma.
               </p>
             </motion.div>
           )}
@@ -329,6 +469,11 @@ export default function TopluYukleme({
               <p className="mt-4 text-[17px] font-black">
                 {durum.eklenen} müşteri eklendi
               </p>
+              {durum.abonelik > 0 && (
+                <p className="mt-1 text-[14px] font-bold text-gri">
+                  {durum.abonelik} abonelik kuruldu
+                </p>
+              )}
               {durum.atlanan > 0 && (
                 <p className="mt-1 text-[13px] font-semibold text-kirmizi">
                   {durum.atlanan} satır kaydedilemedi
@@ -356,17 +501,16 @@ function Kutu({
 }: {
   sayi: number;
   etiket: string;
-  ton: "yesil" | "kirmizi";
+  ton: "yesil" | "kirmizi" | "siyah";
 }) {
+  const renkler = {
+    yesil: "text-yesil",
+    kirmizi: "text-kirmizi",
+    siyah: "text-metin",
+  };
   return (
     <div className="flex-1 rounded-[20px] border border-cizgi bg-yuzey p-3 text-center">
-      <p
-        className={`text-[22px] font-black ${
-          ton === "yesil" ? "text-yesil" : "text-kirmizi"
-        }`}
-      >
-        {sayi}
-      </p>
+      <p className={`text-[22px] font-black ${renkler[ton]}`}>{sayi}</p>
       <p className="text-[11px] font-bold uppercase tracking-wide text-gri">
         {etiket}
       </p>

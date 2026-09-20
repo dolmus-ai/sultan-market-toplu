@@ -256,11 +256,15 @@ drop policy "muhasebe kilidi" on public.profiles;
   seçilir.
 - **Konumun hata payı:** tarayıcı her ölçümle birlikte bir doğruluk yarıçapı
   veriyor — telefonun GPS'inde ~10 m, masaüstünde ya da VPN arkasında
-  Wi-Fi/IP tahmininde kilometreler. Pay 300 m'yi geçince imlecin üstünde
-  payı yazan bir şerit çıkıyor, yanında **Yenile** ve **Düzelt**. Haritada
-  ayrıca bir şey çizilmiyor: imleç sade kalsın diye. 500 m'den kötü konum
-  `kurye_konumlari` tablosuna hiç yazılmıyor — diğer kuryeye yanlış yer
-  göstermektense hiç göstermemek yeğ.
+  Wi-Fi/IP tahmininde kilometreler. Bu pay ekranda sürekli duran bir şeritle
+  gösteriliyordu; şerit sağdaki harita düğmelerinin üstüne oturup
+  yakınlaştırma **+**'sını örttüğü için kaldırıldı. Pay artık yalnızca konum
+  düğmesine basılınca bildirimde yazıyor ("Konum ±5,7 km payla bulundu").
+  500 m'den kötü konum `kurye_konumlari` tablosuna hiç yazılmıyor — diğer
+  kuryeye yanlış yer göstermektense hiç göstermemek yeğ.
+- **Şeritler harita düğmelerini örtmüyor:** üstteki uyarı şeritleri
+  `right-[68px]` ile bitiyor; sağdaki kontrol sütunu `right-3` + 44 px
+  genişlikte, aradaki pay şeridin düğmeleri kapatmasını engelliyor.
 - **Konumu yeniden ölçme:** sağ alttaki konum düğmesi ve şerit üzerindeki
   **Yenile**, konum izleyicisini söküp yeniden kuruyor; tarayıcı yeni
   izleyiciye elindeki en iyi ölçümü hemen veriyor. Ayrı bir

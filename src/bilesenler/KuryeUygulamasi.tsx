@@ -226,8 +226,6 @@ export default function KuryeUygulamasi({
   const [katmanPaneli, setKatmanPaneli] = useState(false);
 
   const [kuryeKonumu, setKuryeKonumu] = useState<Nokta | null>(null);
-  /** Konumun hata payı (metre); tarayıcı her ölçümle birlikte veriyor. */
-  const [kuryeDogrulugu, setKuryeDogrulugu] = useState<number | null>(null);
   /** Konum bir teslimat adresine sabitlendi mi? */
   const sabitKonumRef = useRef(false);
   const [sabitKonum, setSabitKonum] = useState(false);
@@ -558,7 +556,6 @@ export default function KuryeUygulamasi({
     sonOlcumZamaniRef.current = 0;
     kuryeKonumuRef.current = nokta;
     setKuryeKonumu(nokta);
-    setKuryeDogrulugu(null);
     setKonumTakibi(true);
     haritaApi.current?.ucur(nokta, 17);
     uyar(`Konumunuz ${ad} adresine alındı`);
@@ -630,7 +627,6 @@ export default function KuryeUygulamasi({
         kuryeKonumuRef.current = nokta;
 
         setKuryeKonumu(nokta);
-        setKuryeDogrulugu(dogruluk);
 
         if (konumaUcRef.current) {
           konumaUcRef.current = false;
@@ -1763,7 +1759,7 @@ export default function KuryeUygulamasi({
             initial={{ y: -20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: -20, opacity: 0 }}
-            className="absolute inset-x-3 top-[calc(env(safe-area-inset-top)+80px)] z-20 flex items-center gap-3 rounded-[20px] border border-kontrast/10 bg-kontrast/92 p-3 text-white shadow-yuzen backdrop-blur-xl"
+            className="absolute left-3 right-[68px] top-[calc(env(safe-area-inset-top)+80px)] z-20 flex items-center gap-3 rounded-[20px] border border-kontrast/10 bg-kontrast/92 p-3 text-white shadow-yuzen backdrop-blur-xl"
           >
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-kirmizi text-sm font-black">
               {rota.sira.length}
@@ -2132,7 +2128,7 @@ export default function KuryeUygulamasi({
             initial={{ y: -16, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: -16, opacity: 0 }}
-            className="absolute inset-x-3 top-[calc(env(safe-area-inset-top)+80px)] z-30 flex items-center gap-3 rounded-[20px] border border-cizgi bg-yuzey/90 p-3 shadow-yumusak backdrop-blur-2xl"
+            className="absolute left-3 right-[68px] top-[calc(env(safe-area-inset-top)+80px)] z-30 flex items-center gap-3 rounded-[20px] border border-cizgi bg-yuzey/90 p-3 shadow-yumusak backdrop-blur-2xl"
           >
             <span className="text-lg">🧍</span>
             <p className="flex-1 text-[12px] font-bold leading-snug">
@@ -2150,38 +2146,6 @@ export default function KuryeUygulamasi({
           </motion.div>
         )}
 
-        {!konumDuzeltme &&
-          !sabitKonum &&
-          kuryeKonumu &&
-          kuryeDogrulugu != null &&
-          kuryeDogrulugu > SUPHELI_DOGRULUK_M && (
-            <motion.div
-              key="dogruluk-uyarisi"
-              initial={{ y: -16, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: -16, opacity: 0 }}
-              className="absolute inset-x-3 top-[calc(env(safe-area-inset-top)+80px)] z-30 flex items-center gap-3 rounded-[20px] border border-cizgi bg-yuzey/90 p-3 shadow-yumusak backdrop-blur-2xl"
-            >
-              <span className="text-lg">📡</span>
-              <p className="flex-1 text-[12px] font-bold leading-snug">
-                Konumunuz ±
-                {kuryeDogrulugu >= 1000
-                  ? `${(kuryeDogrulugu / 1000).toFixed(1)} km`
-                  : `${Math.round(kuryeDogrulugu)} m`}{" "}
-                hata payıyla bulundu.
-                <span className="block font-semibold text-gri">
-                  Telefondan açınca GPS devreye girer.
-                </span>
-              </p>
-              <button
-                onClick={konumuYenidenBul}
-                className="shrink-0 rounded-hap bg-kontrast px-3 py-1.5 text-[12px] font-black text-white"
-              >
-                Yenile
-              </button>
-            </motion.div>
-          )}
-
       </AnimatePresence>
 
       {/* Konum düzeltme uyarısı */}
@@ -2191,7 +2155,7 @@ export default function KuryeUygulamasi({
             initial={{ y: -16, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: -16, opacity: 0 }}
-            className="absolute inset-x-3 top-[calc(env(safe-area-inset-top)+80px)] z-30 flex items-center gap-3 rounded-[20px] bg-kirmizi p-3 text-white shadow-kirmizi"
+            className="absolute left-3 right-[68px] top-[calc(env(safe-area-inset-top)+80px)] z-30 flex items-center gap-3 rounded-[20px] bg-kirmizi p-3 text-white shadow-kirmizi"
           >
             <span className="text-lg">📍</span>
             <p className="flex-1 text-[13px] font-bold">

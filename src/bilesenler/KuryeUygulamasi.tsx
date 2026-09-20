@@ -94,6 +94,18 @@ const AKTIF_DURUMLAR: SiparisDurumu[] = ["bekliyor", "hazirlaniyor", "yolda"];
  */
 const AZAMI_SATIR = 100;
 
+/**
+ * Bu hata payından kötü konum diğer kuryelerle paylaşılmıyor.
+ *
+ * Telefonun GPS'i ~10 m, Wi-Fi ~50-200 m veriyor. Masaüstünde ya da VPN
+ * arkasında tarayıcı IP'den tahmin yürütüyor ve pay kilometrelere çıkıyor;
+ * o konum kimseye yaramıyor.
+ */
+const PAYLASILIR_DOGRULUK_M = 500;
+
+/** Bundan kötü paya "konum güvenilmez" uyarısı çıkıyor. */
+const SUPHELI_DOGRULUK_M = 300;
+
 /** Ad, telefon ya da adres metninde arama. */
 function kayitAra(
   kayit: {
@@ -199,6 +211,8 @@ export default function KuryeUygulamasi({
   const [katmanPaneli, setKatmanPaneli] = useState(false);
 
   const [kuryeKonumu, setKuryeKonumu] = useState<Nokta | null>(null);
+  /** Konumun hata payı (metre); tarayıcı her ölçümle birlikte veriyor. */
+  const [kuryeDogrulugu, setKuryeDogrulugu] = useState<number | null>(null);
   const [kuryeYonu, setKuryeYonu] = useState<number | null>(null);
   const [konumTakibi, setKonumTakibi] = useState(false);
   const [aci, setAci] = useState({ bearing: -12, pitch: 45 });
@@ -511,6 +525,11 @@ export default function KuryeUygulamasi({
           lng: konum.coords.longitude,
         };
         setKuryeKonumu(nokta);
+        const dogruluk =
+          konum.coords.accuracy != null && !Number.isNaN(konum.coords.accuracy)
+            ? konum.coords.accuracy
+            : null;
+        setKuryeDogrulugu(dogruluk);
         const yon =
           konum.coords.heading != null && !Number.isNaN(konum.coords.heading)
             ? konum.coords.heading
@@ -534,10 +553,9 @@ export default function KuryeUygulamasi({
           // Rotadan sapma: iyi doğruluklu iki konum art arda çizgiden
           // uzaksa bulunduğu yerden en hızlı rotayı yeniden iste. Kuş
           // uçuşu "yerel" rotada anlamı yok — zaten yol değil.
-          const dogruluk = konum.coords.accuracy ?? 0;
           if (
             secenek.motor === "osrm" &&
-            dogruluk <= 60 &&
+            (dogruluk ?? Infinity) <= 60 &&
             rotayaUzaklik(secenek.geometri, nokta) > SAPMA_ESIGI_M
           ) {
             sapmaSayaciRef.current += 1;
@@ -553,8 +571,18 @@ export default function KuryeUygulamasi({
           }
         }
 
+        /*
+         * Kaba konum paylaşılmıyor. Masaüstünde ya da VPN arkasında tarayıcı
+         * IP'den kilometrelerce şaşan bir tahmin veriyor; onu tabloya yazmak
+         * diğer kuryeye "arkadaş şurada" diye yalan söylemek olurdu. Kendi
+         * ekranında yine görünüyor, yanında hata payı çemberiyle.
+         */
         const simdi = Date.now();
-        if (kurye && simdi - sonYazma > 15_000) {
+        if (
+          kurye &&
+          (dogruluk ?? Infinity) <= PAYLASILIR_DOGRULUK_M &&
+          simdi - sonYazma > 15_000
+        ) {
           sonYazma = simdi;
           void db.from("kurye_konumlari").upsert(
             {
@@ -1415,6 +1443,7 @@ export default function KuryeUygulamasi({
         katmanlar={katmanlar}
         kuryeKonumu={kuryeKonumu}
         kuryeYonu={kuryeYonu}
+        kuryeDogrulugu={kuryeDogrulugu}
         digerKuryeler={digerKuryeler}
         onSecim={(id) => {
           const s = teslimatlar.find((x) => x.id === id);
@@ -1934,6 +1963,41 @@ export default function KuryeUygulamasi({
             }}
           />
         )}
+      </AnimatePresence>
+
+      {/*
+        Konum güvenilmez uyarısı.
+
+        Tarayıcı konumu telefonda GPS'ten, masaüstünde Wi-Fi/IP tahmininden
+        veriyor; ikincisi kilometrelerce şaşabiliyor ve kurye haritada kendini
+        bambaşka bir yerde görüyor. Hata payını yazmak şikâyeti sebebine
+        bağlıyor; haritada da aynı payın çemberi duruyor.
+      */}
+      <AnimatePresence>
+        {!konumDuzeltme &&
+          kuryeKonumu &&
+          kuryeDogrulugu != null &&
+          kuryeDogrulugu > SUPHELI_DOGRULUK_M && (
+            <motion.div
+              initial={{ y: -16, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: -16, opacity: 0 }}
+              className="pointer-events-none absolute inset-x-3 top-[calc(env(safe-area-inset-top)+80px)] z-30 flex items-center gap-3 rounded-[20px] border border-cizgi bg-yuzey/90 p-3 shadow-yumusak backdrop-blur-2xl"
+            >
+              <span className="text-lg">📡</span>
+              <p className="flex-1 text-[12px] font-bold leading-snug">
+                Konumunuz ±
+                {kuryeDogrulugu >= 1000
+                  ? `${(kuryeDogrulugu / 1000).toFixed(1)} km`
+                  : `${Math.round(kuryeDogrulugu)} m`}{" "}
+                hata payıyla bulundu; haritadaki yeşil çember bu payı
+                gösteriyor.
+                <span className="block font-semibold text-gri">
+                  Telefondan açınca ve konum iznini verince GPS devreye girer.
+                </span>
+              </p>
+            </motion.div>
+          )}
       </AnimatePresence>
 
       {/* Konum düzeltme uyarısı */}

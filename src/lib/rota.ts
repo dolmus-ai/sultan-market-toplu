@@ -13,6 +13,36 @@ export function haversine(a: Nokta, b: Nokta): number {
   return 2 * DUNYA_YARICAP_M * Math.asin(Math.min(1, Math.sqrt(s)));
 }
 
+/**
+ * Bir noktanın çevresinde verilen yarıçapta çember — GeoJSON halkası.
+ *
+ * Konumun hata payını haritada göstermek için. Piksel yarıçaplı daire yerine
+ * coğrafi çokgen çiziliyor: yakınlaştırınca da eğik haritada da metre olarak
+ * doğru kalıyor. Halka kapalı döndürülüyor (son nokta = ilk nokta), GeoJSON
+ * poligonu öyle istiyor.
+ */
+export function cemberNoktalari(
+  merkez: Nokta,
+  yaricapM: number,
+  kenar = 64,
+): [number, number][] {
+  const rad = Math.PI / 180;
+  // Boylamda bir derece, enlem arttıkça daralıyor; kutupta sıfıra gidiyor.
+  const enlemDerece = (yaricapM / DUNYA_YARICAP_M) / rad;
+  const boylamDerece = enlemDerece / Math.max(Math.cos(merkez.lat * rad), 1e-6);
+
+  const halka: [number, number][] = [];
+  for (let i = 0; i < kenar; i++) {
+    const aci = (i / kenar) * 2 * Math.PI;
+    halka.push([
+      merkez.lng + boylamDerece * Math.cos(aci),
+      merkez.lat + enlemDerece * Math.sin(aci),
+    ]);
+  }
+  halka.push(halka[0]);
+  return halka;
+}
+
 /** Kuş uçuşu mesafeleri, şehir içi dolambaç payıyla düzeltir. */
 const SEHIR_ICI_KATSAYI = 1.35;
 /** Motosiklet ortalama şehir içi hızı (m/sn) ≈ 22 km/s. */

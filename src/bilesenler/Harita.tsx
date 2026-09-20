@@ -43,6 +43,7 @@ import {
   MERKEZ,
 } from "@/lib/ortam";
 import type { RotaSecenegi } from "@/lib/navigasyon";
+import { cemberNoktalari } from "@/lib/rota";
 import type {
   Nokta,
   RotaSonucu,
@@ -88,6 +89,8 @@ type Props = {
   katmanlar: Katmanlar;
   kuryeKonumu: Nokta | null;
   kuryeYonu: number | null;
+  /** Konumun hata payı (metre) — bilinmiyorsa null, çember çizilmez. */
+  kuryeDogrulugu?: number | null;
   /** Vardiyadaki diğer kuryeler — aynı mahalleye iki kişi gitmesin. */
   digerKuryeler: (KuryeKonumu & { ad: string })[];
   onSecim: (id: string) => void;
@@ -237,6 +240,33 @@ function katmanlariKur(
   harita.addSource("rota", { type: "geojson", data: BOS_GEOJSON });
   harita.addSource("navigasyon", { type: "geojson", data: BOS_GEOJSON });
   harita.addSource("kuryeler", { type: "geojson", data: BOS_GEOJSON });
+  harita.addSource("kurye-dogruluk", { type: "geojson", data: BOS_GEOJSON });
+
+  /*
+   * Konumun doğruluk yarıçapı.
+   *
+   * Tarayıcı her konumla birlikte bir hata payı veriyor: telefonun GPS'inde
+   * ~10 m, masaüstünde Wi-Fi/IP tahmininde kilometreler. İkisini de aynı
+   * kesinlikte nokta çizince kurye haritanın yalan söylediğini anlamıyor —
+   * "bulunduğum yer yanlış" şikâyeti buradan geliyor. Çember payı gösteriyor:
+   * GPS varken göze çarpmayacak kadar küçük, IP tahmininde yarım şehir.
+   */
+  harita.addLayer({
+    id: "kurye-dogruluk-alan",
+    type: "fill",
+    source: "kurye-dogruluk",
+    paint: { "fill-color": KURYE_RENGI, "fill-opacity": 0.1 },
+  });
+  harita.addLayer({
+    id: "kurye-dogruluk-cizgi",
+    type: "line",
+    source: "kurye-dogruluk",
+    paint: {
+      "line-color": KURYE_RENGI,
+      "line-width": 1.5,
+      "line-opacity": 0.45,
+    },
+  });
 
   /* Isı haritası — talep yoğunluğu */
   harita.addLayer({
@@ -810,6 +840,7 @@ export default function Harita({
   katmanlar,
   kuryeKonumu,
   kuryeYonu,
+  kuryeDogrulugu = null,
   digerKuryeler,
   onSecim,
   onAbonelikSecim,
@@ -1339,6 +1370,36 @@ export default function Harita({
       iptal = true;
     };
   }, [kuryeKonumu, kuryeYonu]);
+
+  /* ---------------- Konumun doğruluk çemberi ---------------- */
+  useEffect(() => {
+    const harita = haritaRef.current;
+    if (!harita || !hazir) return;
+    const kaynak = harita.getSource("kurye-dogruluk") as
+      | { setData: (d: GeoJSON.FeatureCollection) => void }
+      | undefined;
+    if (!kaynak) return;
+
+    // Çok küçük pay çizilmiyor: GPS iyi çalışırken ekranda nokta kadar
+    // kalıyor, imleci kirletmekten başka işe yaramıyor.
+    if (!kuryeKonumu || kuryeDogrulugu == null || kuryeDogrulugu < 25) {
+      kaynak.setData(BOS_GEOJSON);
+      return;
+    }
+    kaynak.setData({
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: {},
+          geometry: {
+            type: "Polygon",
+            coordinates: [cemberNoktalari(kuryeKonumu, kuryeDogrulugu)],
+          },
+        },
+      ],
+    });
+  }, [hazir, kuryeKonumu, kuryeDogrulugu]);
 
   /**
    * Balon bir MapLibre işaretçisine bağlanıyor: konumu harita hesaplıyor,

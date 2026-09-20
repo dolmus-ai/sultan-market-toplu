@@ -17,7 +17,7 @@ import {
   saat,
 } from "../src/lib/bicim.ts";
 import { adresAdaylari } from "../src/lib/adres.ts";
-import { haversine, mesafeYaz, sureYaz, yerelRotaCoz } from "../src/lib/rota.ts";
+import { cemberNoktalari, haversine, mesafeYaz, sureYaz, yerelRotaCoz } from "../src/lib/rota.ts";
 import {
   SAPMA_ESIGI_M,
   hizaGoreSirala,
@@ -508,6 +508,30 @@ bekle("temel stil bina katmanı", temel.layers.some((k) => k.id === "bina-3b" &&
 bekle("glyph adresi kendi sunucumuz", temel.glyphs === "https://kurye.ornek/maplibre/fonts/{fontstack}/{range}.pbf");
 const binasiz = googleTemelStili("aydinlik", "", "https://kurye.ornek");
 bekle("bina kaynağı boşsa katman yok", !binasiz.layers.some((k) => k.id === "bina-3b") && Object.keys(binasiz.sources).length === 0);
+
+bolum("Konum doğruluk çemberi");
+
+{
+  const merkez = { lat: 40.7784889, lng: 30.3518378 };
+  const halka = cemberNoktalari(merkez, 1000);
+  bekle("halka kapalı", halka.length === 65 && halka[0][0] === halka[64][0] && halka[0][1] === halka[64][1], `${halka.length} nokta`);
+
+  // Her nokta merkezden yarıçap kadar uzakta olmalı (yarım metre tolerans).
+  const uzakliklar = halka.slice(0, 64).map(([lng, lat]) => haversine(merkez, { lat, lng }));
+  const enAz = Math.min(...uzakliklar);
+  const enCok = Math.max(...uzakliklar);
+  bekle("bütün noktalar yarıçap kadar uzakta", enCok - enAz < 1 && Math.abs(enCok - 1000) < 1, `${enAz.toFixed(1)}–${enCok.toFixed(1)} m`);
+
+  // Enlemde boylam daralıyor: kuzeyde aynı metre daha çok dereceye denk gelir.
+  const kuzey = cemberNoktalari({ lat: 60, lng: 30 }, 1000);
+  const kuzeyGenislik = Math.max(...kuzey.map((n) => n[0])) - Math.min(...kuzey.map((n) => n[0]));
+  const genislik = Math.max(...halka.map((n) => n[0])) - Math.min(...halka.map((n) => n[0]));
+  bekle("kuzeyde çember boylamda genişliyor", kuzeyGenislik > genislik * 1.5, `${kuzeyGenislik.toFixed(4)} > ${genislik.toFixed(4)}`);
+
+  const kucuk = cemberNoktalari(merkez, 10);
+  bekle("küçük yarıçap da doğru", Math.abs(haversine(merkez, { lat: kucuk[0][1], lng: kucuk[0][0] }) - 10) < 0.1);
+  bekle("kenar sayısı ayarlanabiliyor", cemberNoktalari(merkez, 100, 8).length === 9);
+}
 
 bolum("Adres çözümleme");
 

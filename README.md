@@ -254,6 +254,15 @@ drop policy "muhasebe kilidi" on public.profiles;
 - **Rota şeridi:** gölge + koyu kenarlık + marka kırmızısı gövde + ince açık
   kırmızı parlaklık + akan beyaz kesikler; alternatifler soluk gri, tıklanınca
   seçilir.
+- **Konumun hata payı:** tarayıcı her ölçümle birlikte bir doğruluk yarıçapı
+  veriyor — telefonun GPS'inde ~10 m, masaüstünde ya da VPN arkasında
+  Wi-Fi/IP tahmininde kilometreler. İkisini de aynı kesinlikte nokta çizmek
+  yalan oluyordu: kurye kendini bambaşka bir yerde görüp "konum yanlış"
+  diyordu. Artık pay 25 m'yi geçince imlecin çevresine yeşil bir çember
+  çiziliyor (`cemberNoktalari`, coğrafi çokgen — yakınlaştırınca da eğik
+  haritada da metre olarak doğru), 300 m'yi geçince de payı yazan bir uyarı
+  çıkıyor. 500 m'den kötü konum `kurye_konumlari` tablosuna hiç yazılmıyor:
+  diğer kuryeye yanlış yer göstermektense hiç göstermemek yeğ.
 - **Konum imleci:** beyaz halkalı kırmızı nokta ve yön konisi. Koni haritayla
   birlikte döner (`rotationAlignment: map`), eğimde yere yatar; yön bilinmiyorsa
   gizlenir.

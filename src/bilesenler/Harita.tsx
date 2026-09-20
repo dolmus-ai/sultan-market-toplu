@@ -120,6 +120,15 @@ type Props = {
 const KURYE_RENGI = "#4ade80";
 
 /**
+ * maplibre-gl modül sözü, bir kez.
+ *
+ * `Marker` yalnızca kurye imleci için gerekiyor ve dinamik alınıyor. Sözü
+ * saklamak art arda gelen konum güncellemelerinin aynı yüklemeye bağlanmasını
+ * sağlıyor: hepsi sırayla çalışıyor, hiçbiri diğerini düşürmüyor.
+ */
+let maplibreSozu: Promise<typeof import("maplibre-gl")> | null = null;
+
+/**
  * Anahtar varsa zemin Google Map Tiles API'den geliyor; yoksa OpenFreeMap
  * vektör stiline düşülüyor. Pinler, rota, kümeler ve öteki katmanlar iki
  * durumda da aynı MapLibre katmanları — değişen yalnızca altlık.
@@ -865,8 +874,6 @@ export default function Harita({
   const kuryeMarkerRef = useRef<Marker | null>(null);
   /** Kuryenin "K" rozeti — ekrana göre hizalı, dönmeyen ayrı işaretçi. */
   const kuryeHarfRef = useRef<Marker | null>(null);
-  // Art arda gelen konum güncellemeleri aynı anda iki imleç oluşturmasın.
-  const kuryeOlusuyorRef = useRef(false);
   // Güncel geri çağırımları harita olay dinleyicilerine taşımak için.
   const secimRef = useRef(onSecim);
   const tiklamaRef = useRef(onHaritaTikla);
@@ -1053,7 +1060,6 @@ export default function Harita({
         kuryeMarkerRef.current = null;
         kuryeHarfRef.current?.remove();
         kuryeHarfRef.current = null;
-        kuryeOlusuyorRef.current = false;
         atifRef.current = null;
         harita.remove();
         haritaRef.current = null;
@@ -1294,18 +1300,25 @@ export default function Harita({
   }, [hazir, katmanlar]);
 
   /* ---------------- Kurye imleci ---------------- */
+  /*
+   * Tek `then` zinciri, iptal bayrağı yok.
+   *
+   * Eskiden bu efekt async'ti: bir konum güncellemesi işaretçiyi kurarken
+   * ikincisi geliyor, birincinin temizliği "iptal" diyor, ikincisi de
+   * "zaten kuruluyor" deyip dönüyordu — imleç hiç çizilmiyordu ve bağımlılık
+   * değişmediği için bir daha denenmiyordu. Şimdi modül sözü bir kez
+   * alınıyor; art arda gelen güncellemeler aynı söze bağlanıyor ve sırayla
+   * çalışıyor, ilki kuruyor sonrakiler yerini güncelliyor.
+   */
   useEffect(() => {
     const harita = haritaRef.current;
     if (!harita || !kuryeKonumu) return;
-    let iptal = false;
 
-    (async () => {
-      if (kuryeOlusuyorRef.current) return;
-      kuryeOlusuyorRef.current = true;
-      try {
-        const { Marker: MapLibreMarker } = await import("maplibre-gl");
-        if (iptal || !haritaRef.current) return;
-
+    maplibreSozu ??= import("maplibre-gl");
+    void maplibreSozu.then(({ Marker: MapLibreMarker }) => {
+      // Harita sökülmüşse yapacak bir şey yok.
+      if (!haritaRef.current) return;
+      {
         if (!kuryeMarkerRef.current) {
           // Yön konisi haritayla dönmeli; bu yüzden ayrı bir işaretçide ve
           // rotationAlignment: map ile duruyor.
@@ -1361,15 +1374,12 @@ export default function Harita({
           .querySelector<SVGElement>(".kurye-koni");
         if (koni) koni.style.display = kuryeYonu == null ? "none" : "";
         kuryeMarkerRef.current?.setRotation(kuryeYonu ?? 0);
-      } finally {
-        kuryeOlusuyorRef.current = false;
       }
-    })();
-
-    return () => {
-      iptal = true;
-    };
-  }, [kuryeKonumu, kuryeYonu]);
+    });
+    // `hazir` şart: konum haritadan önce geliyor, efekt boş haritada dönüyor
+    // ve konum sabitse (masaüstünde IP tahmini öyle) bir daha hiç çalışmıyor,
+    // imleç de hiç çizilmiyordu.
+  }, [hazir, kuryeKonumu, kuryeYonu]);
 
   /* ---------------- Konumun doğruluk çemberi ---------------- */
   useEffect(() => {

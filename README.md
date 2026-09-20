@@ -263,6 +263,11 @@ drop policy "muhasebe kilidi" on public.profiles;
   haritada da metre olarak doğru), 300 m'yi geçince de payı yazan bir uyarı
   çıkıyor. 500 m'den kötü konum `kurye_konumlari` tablosuna hiç yazılmıyor:
   diğer kuryeye yanlış yer göstermektense hiç göstermemek yeğ.
+- **Konumu elle işaretleme:** hata payı uyarısındaki **Düzelt** ile kurye
+  bulunduğu yeri haritada gösteriyor. İşaretlenen nokta kilitleniyor: kaba
+  ölçümler onu ezmiyor, ancak 100 m'den iyi gerçek bir GPS ölçümü gelince
+  kilit kendiliğinden açılıyor — o noktada cihaz elle konulandan iyisini
+  biliyor.
 - **Konum imleci:** beyaz halkalı kırmızı nokta ve yön konisi. Koni haritayla
   birlikte döner (`rotationAlignment: map`), eğimde yere yatar; yön bilinmiyorsa
   gizlenir.

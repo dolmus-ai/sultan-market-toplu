@@ -106,6 +106,15 @@ const PAYLASILIR_DOGRULUK_M = 500;
 /** Bundan kötü paya "konum güvenilmez" uyarısı çıkıyor. */
 const SUPHELI_DOGRULUK_M = 300;
 
+/**
+ * Bu paydan iyi ölçüm gerçek GPS sayılıyor.
+ *
+ * Elle işaretlenmiş konumu yalnızca böyle bir ölçüm ezebiliyor: kurye
+ * telefonu cebinden çıkarıp dışarı adım attığında cihaz onun elle koyduğu
+ * noktadan daha iyisini biliyor, ama masaüstünün IP tahmini bilmiyor.
+ */
+const IYI_DOGRULUK_M = 100;
+
 /** Ad, telefon ya da adres metninde arama. */
 function kayitAra(
   kayit: {
@@ -213,6 +222,16 @@ export default function KuryeUygulamasi({
   const [kuryeKonumu, setKuryeKonumu] = useState<Nokta | null>(null);
   /** Konumun hata payı (metre); tarayıcı her ölçümle birlikte veriyor. */
   const [kuryeDogrulugu, setKuryeDogrulugu] = useState<number | null>(null);
+  /** Kurye kendi konumunu haritadan işaretliyor. */
+  const [kendiKonumSec, setKendiKonumSec] = useState(false);
+  /*
+   * Konum elle konulduysa tarayıcının kaba tahmini onu ezmesin. Ref, çünkü
+   * `watchPosition` geri çağırımı bir kez kuruluyor ve state'in eski hâlini
+   * görürdü. Gerçek GPS devreye girerse kilit kendiliğinden açılıyor:
+   * o noktada cihaz elle konulan noktadan daha iyisini biliyor.
+   */
+  const elleAyarliRef = useRef(false);
+  const [elleAyarli, setElleAyarli] = useState(false);
   const [kuryeYonu, setKuryeYonu] = useState<number | null>(null);
   const [konumTakibi, setKonumTakibi] = useState(false);
   const [aci, setAci] = useState({ bearing: -12, pitch: 45 });
@@ -524,11 +543,19 @@ export default function KuryeUygulamasi({
           lat: konum.coords.latitude,
           lng: konum.coords.longitude,
         };
-        setKuryeKonumu(nokta);
         const dogruluk =
           konum.coords.accuracy != null && !Number.isNaN(konum.coords.accuracy)
             ? konum.coords.accuracy
             : null;
+
+        // Elle işaretlenmiş konum, ancak gerçekten iyi bir ölçümle değişir.
+        if (elleAyarliRef.current) {
+          if ((dogruluk ?? Infinity) > IYI_DOGRULUK_M) return;
+          elleAyarliRef.current = false;
+          setElleAyarli(false);
+        }
+
+        setKuryeKonumu(nokta);
         setKuryeDogrulugu(dogruluk);
         const yon =
           konum.coords.heading != null && !Number.isNaN(konum.coords.heading)
@@ -1533,6 +1560,19 @@ export default function KuryeUygulamasi({
         }}
         onHaritaTikla={(nokta) => {
           if (konumDuzeltme) return void konumuKaydet(nokta);
+          if (kendiKonumSec) {
+            // Elle konulan noktanın hata payı yok: kurye nerede olduğunu
+            // tarayıcıdan iyi biliyor.
+            setKuryeKonumu(nokta);
+            setKuryeDogrulugu(null);
+            elleAyarliRef.current = true;
+            setElleAyarli(true);
+            setKendiKonumSec(false);
+            setKonumTakibi(true);
+            haritaApi.current?.ucur(nokta, 16);
+            uyar("Konumunuz işaretlendi");
+            return;
+          }
           setBalonSecim(null);
         }}
         onAciDegisti={(bearing, pitch) => setAci({ bearing, pitch })}
@@ -1975,14 +2015,16 @@ export default function KuryeUygulamasi({
       */}
       <AnimatePresence>
         {!konumDuzeltme &&
+          !kendiKonumSec &&
           kuryeKonumu &&
           kuryeDogrulugu != null &&
           kuryeDogrulugu > SUPHELI_DOGRULUK_M && (
             <motion.div
+              key="dogruluk-uyarisi"
               initial={{ y: -16, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: -16, opacity: 0 }}
-              className="pointer-events-none absolute inset-x-3 top-[calc(env(safe-area-inset-top)+80px)] z-30 flex items-center gap-3 rounded-[20px] border border-cizgi bg-yuzey/90 p-3 shadow-yumusak backdrop-blur-2xl"
+              className="absolute inset-x-3 top-[calc(env(safe-area-inset-top)+80px)] z-30 flex items-center gap-3 rounded-[20px] border border-cizgi bg-yuzey/90 p-3 shadow-yumusak backdrop-blur-2xl"
             >
               <span className="text-lg">📡</span>
               <p className="flex-1 text-[12px] font-bold leading-snug">
@@ -1993,11 +2035,64 @@ export default function KuryeUygulamasi({
                 hata payıyla bulundu; haritadaki yeşil çember bu payı
                 gösteriyor.
                 <span className="block font-semibold text-gri">
-                  Telefondan açınca ve konum iznini verince GPS devreye girer.
+                  Telefondan açınca GPS devreye girer.
                 </span>
               </p>
+              <button
+                onClick={() => setKendiKonumSec(true)}
+                className="shrink-0 rounded-hap bg-kontrast px-3 py-1.5 text-[12px] font-black text-white"
+              >
+                Düzelt
+              </button>
             </motion.div>
           )}
+
+        {/* Kurye kendi konumunu haritada işaretliyor. */}
+        {kendiKonumSec && (
+          <motion.div
+            key="kendi-konum"
+            initial={{ y: -16, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -16, opacity: 0 }}
+            className="absolute inset-x-3 top-[calc(env(safe-area-inset-top)+80px)] z-30 flex items-center gap-3 rounded-[20px] bg-kontrast p-3 text-white shadow-yumusak"
+          >
+            <span className="text-lg">🧍</span>
+            <p className="flex-1 text-[13px] font-bold">
+              Bulunduğunuz yeri haritada işaretleyin.
+            </p>
+            <button
+              onClick={() => setKendiKonumSec(false)}
+              className="rounded-hap bg-yuzey/20 px-3 py-1.5 text-[12px] font-black"
+            >
+              Vazgeç
+            </button>
+          </motion.div>
+        )}
+
+        {/* Elle işaretli konum — otomatiğe dönüş elinizin altında. */}
+        {elleAyarli && !kendiKonumSec && !konumDuzeltme && (
+          <motion.div
+            key="elle-konum"
+            initial={{ y: -16, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -16, opacity: 0 }}
+            className="absolute inset-x-3 top-[calc(env(safe-area-inset-top)+80px)] z-30 flex items-center gap-3 rounded-[20px] border border-cizgi bg-yuzey/90 p-3 shadow-yumusak backdrop-blur-2xl"
+          >
+            <span className="text-lg">🧍</span>
+            <p className="flex-1 text-[12px] font-bold leading-snug">
+              Konumunuz elle işaretli.
+              <span className="block font-semibold text-gri">
+                GPS iyi sinyal bulunca kendiliğinden devralır.
+              </span>
+            </p>
+            <button
+              onClick={() => setKendiKonumSec(true)}
+              className="shrink-0 rounded-hap bg-yuzey2 px-3 py-1.5 text-[12px] font-black text-gri"
+            >
+              Değiştir
+            </button>
+          </motion.div>
+        )}
       </AnimatePresence>
 
       {/* Konum düzeltme uyarısı */}

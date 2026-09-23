@@ -97,6 +97,10 @@ export type Siparis = {
   odeme_alindi: boolean | null;
   /** Ödeme alınamadıysa kapıdaki/borçlu kişi. */
   odeme_alinmayan_kisi: string | null;
+  /** Ödemeyi yapan kişi — teslimat kapatılırken zorunlu. */
+  odeme_yapan: string | null;
+  /** Tahsil edilen tutar; kasaya işlenmeyen yöntemlerde de burada kalır. */
+  odeme_tutari: number | null;
   odeme_notu: string | null;
   created_at: string;
   musteri: Musteri | null;

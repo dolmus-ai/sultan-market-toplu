@@ -61,6 +61,8 @@ import {
   siteEkle,
   siteSil,
   sitelerGetir,
+  siparisleriGetir,
+  topluSil,
 } from "@/lib/veri";
 import { sakaryadaMi, siteAdresMetni, type SiteAdayi } from "@/lib/site";
 import { binaAnahtari, bugununTarihi, gecikmeDk, para } from "@/lib/bicim";
@@ -226,12 +228,14 @@ export default function KuryeUygulamasi({
     "alindi",
   );
   /**
-   * Haritadan teslim işaretlenenler: kimlik → önceki durum. Aynı pine tekrar
-   * uzun basıldığında bu durumuna (çoğunlukla kırmızı "bekliyor") dönüyor.
+   * Haritada yeşile döndürülüp ödeme bilgisi henüz girilmemiş teslim.
+   * Doluyken ödeme ekranı kapatılamıyor; "Teslimi geri al" pini bu
+   * önceki durumuna döndürüyor.
    */
-  const [sonTeslimler, setSonTeslimler] = useState<
-    Record<string, SiparisDurumu>
-  >({});
+  const [zorunluTeslim, setZorunluTeslim] = useState<{
+    id: string;
+    oncekiDurum: SiparisDurumu;
+  } | null>(null);
   /** Haritada açık balon — kayıt listeden tazelensin diye yalnızca kimlik tutuluyor. */
   const [balonSecim, setBalonSecim] = useState<{
     tur: "teslimat" | "abonelik" | "sepet";
@@ -244,6 +248,7 @@ export default function KuryeUygulamasi({
 
   const [secimModu, setSecimModu] = useState(false);
   const [secilenler, setSecilenler] = useState<string[]>([]);
+  const [topluSilOnay, setTopluSilOnay] = useState(false);
   const [indiriliyor, setIndiriliyor] = useState(false);
   /** Abonelik ve sepet listelerinde ad/telefon/adres araması. */
   const [arama, setArama] = useState("");
@@ -528,19 +533,15 @@ export default function KuryeUygulamasi({
   }, [db]);
 
   /* ------------------------- Veri tazeleme ------------------------- */
+  // Açılıştaki sorguyla aynısı: ayrı bir alan listesi tutulunca ödeme
+  // alanları (alındı mı, yöntem, ödeyen) canlı yenilemede düşüyordu ve
+  // günün listesine geçmiş günlerin teslim edilmişleri karışıyordu.
   const teslimatlariTazele = useCallback(async () => {
-    const { data } = await db
-      .from("siparisler")
-      .select(
-        `id, musteri_id, adres_id, kaynak, abonelik_id, kurye_id, durum, oncelik,
-         planlanan_tarih, planlanan_saat, teslim_zamani, odeme_yontemi, tutar, notlar, created_at,
-         musteri:musteriler ( id, ad, telefon, notlar ),
-         adres:adresler ( id, musteri_id, baslik, adres_metni, bina, kat, daire, tarif, lat, lng, konum_dogrulandi ),
-         kalemler:siparis_kalemleri ( id, urun_id, miktar, birim_fiyat, urun:urunler ( id, ad, birim, emoji, fiyat ) )`,
-      )
-      .order("oncelik", { ascending: false })
-      .limit(400);
-    if (data) setTeslimatlar(data as unknown as Siparis[]);
+    try {
+      setTeslimatlar(await siparisleriGetir(db, bugununTarihi()));
+    } catch {
+      /* ağ yoksa eldeki liste kalsın */
+    }
   }, [db]);
 
   /**
@@ -814,6 +815,25 @@ export default function KuryeUygulamasi({
     return sepetler.filter((s) => kayitAra(s, aramaAnahtari));
   }, [sepetler, aramaAnahtari]);
 
+  /**
+   * Açık sekmede listelenen kayıtlar — "Tümünü seç" bunları seçer. Arama
+   * açıksa yalnızca eşleşenler: kurye "Serdivan" arayıp tümünü silerse
+   * diğer ilçelere dokunulmasın.
+   */
+  const gorunurKimlikler = useMemo(
+    () =>
+      (sekme === "teslimatlar"
+        ? siraliTeslimatlar
+        : sekme === "abonelikler"
+          ? suzulmusAbonelikler
+          : suzulmusSepetler
+      ).map((k) => k.id),
+    [sekme, siraliTeslimatlar, suzulmusAbonelikler, suzulmusSepetler],
+  );
+  const tumuSecili =
+    gorunurKimlikler.length > 0 &&
+    gorunurKimlikler.every((id) => secilenler.includes(id));
+
   /* ------------------------- Navigasyon ------------------------- */
   const navSecili = useMemo(
     () => navSecenekler.find((s) => s.id === navSeciliId) ?? navSecenekler[0] ?? null,
@@ -1001,6 +1021,51 @@ export default function KuryeUygulamasi({
     );
   }
 
+  function tumunuSecDegistir() {
+    setSecilenler(tumuSecili ? [] : gorunurKimlikler);
+  }
+
+  /** Seçili kayıtları açık sekmeden siler; silinemeyenleri söyler. */
+  async function secilenleriSil() {
+    const idler = secilenler.filter((id) => gorunurKimlikler.includes(id));
+    if (idler.length === 0) return;
+    const tablo =
+      sekme === "teslimatlar"
+        ? "siparisler"
+        : sekme === "abonelikler"
+          ? "abonelikler"
+          : "sepetler";
+
+    setIslemde(true);
+    try {
+      const silinen = new Set(await topluSil(db, tablo, idler));
+      const kalan = <T extends { id: string }>(o: T[]) =>
+        o.filter((x) => !silinen.has(x.id));
+      if (sekme === "teslimatlar") setTeslimatlar(kalan);
+      else if (sekme === "abonelikler") setAbonelikler(kalan);
+      else setSepetler(kalan);
+
+      setSecilenler((o) => o.filter((id) => !silinen.has(id)));
+      if (seciliId && silinen.has(seciliId)) setSeciliId(null);
+      if (balonSecim && silinen.has(balonSecim.id)) setBalonSecim(null);
+      setRota(null);
+      setTopluSilOnay(false);
+
+      const atlanan = idler.length - silinen.size;
+      if (atlanan === 0) setSecimModu(false);
+      uyar(
+        atlanan > 0
+          ? `${silinen.size} kayıt silindi · ${atlanan} kayıt silinemedi (teslim edilmiş)`
+          : `${silinen.size} kayıt silindi`,
+      );
+    } catch {
+      setTopluSilOnay(false);
+      uyar("Kayıtlar silinemedi. Bağlantıyı kontrol edip tekrar deneyin.");
+    } finally {
+      setIslemde(false);
+    }
+  }
+
   /**
    * Açık sekmenin listesini Excel'e indirir.
    *
@@ -1152,6 +1217,8 @@ export default function KuryeUygulamasi({
     if (sonuc.tur === "teslim") {
       const zaman = new Date().toISOString();
       const alindi = sonuc.odemeAlindi;
+      const odeyen = alindi ? sonuc.odeyen : null;
+      const odemeTutari = alindi ? sonuc.tahsilat.tutar : null;
       const yama: Record<string, unknown> = {
         durum: "teslim",
         teslim_zamani: zaman,
@@ -1159,9 +1226,12 @@ export default function KuryeUygulamasi({
         odeme_alindi: alindi,
         odeme_alinmayan_kisi: alindi ? null : sonuc.alinmayanKisi,
         odeme_notu: alindi ? null : sonuc.not || null,
+        odeme_yapan: odeyen,
+        odeme_tutari: odemeTutari,
       };
       if (alindi) yama.odeme_yontemi = sonuc.tahsilat.yontem;
 
+      setZorunluTeslim(null);
       await siparisGuncelle(id, yama, (s) => ({
         ...s,
         durum: "teslim",
@@ -1170,10 +1240,13 @@ export default function KuryeUygulamasi({
         odeme_alinmayan_kisi: alindi ? null : sonuc.alinmayanKisi,
         odeme_notu: alindi ? null : sonuc.not || null,
         odeme_yontemi: alindi ? sonuc.tahsilat.yontem : s.odeme_yontemi,
+        odeme_yapan: odeyen,
+        odeme_tutari: odemeTutari,
       }));
 
-      // Kasa yalnızca gerçekten para alındığında hareket eder.
-      if (alindi && sonuc.tahsilat.tutar > 0 && kurye) {
+      // Kasa yalnızca kurye parayı elden aldığında hareket eder; havale gibi
+      // yöntemlerde tutar siparişte kalır, kasaya işlenmez.
+      if (alindi && sonuc.kasaya && sonuc.tahsilat.tutar > 0 && kurye) {
         const kayit = {
           siparis_id: id,
           kurye_id: kurye.id,
@@ -1451,47 +1524,61 @@ export default function KuryeUygulamasi({
   /* ---------------- Haritadan hızlı işlemler ---------------- */
 
   /**
-   * Uzun basışla teslim işaretleme. Pin yeşile dönüyor ve öyle kalıyor;
-   * aynı pine tekrar uzun basılırsa eski durumuna (kırmızı) dönüyor.
+   * Teslimi kapatma ekranını açar.
+   *
+   * `pinYesil`: kurye pini haritada teslim etti (uzun basış, navigasyonda
+   * "Teslim ettim"). Pin hemen yeşile dönüyor ama veritabanına yalnızca
+   * ekran eksiksiz doldurulunca yazılıyor; ekran ödeme yöntemi, tutar ve
+   * ödeyen girilmeden kapanmıyor. Tek çıkış "Teslimi geri al".
    */
-  async function teslimIsaretle(siparis: Siparis) {
-    const oncekiDurum = siparis.durum;
-    const zaman = new Date().toISOString();
+  function teslimFormuAc(siparis: Siparis, pinYesil: boolean) {
+    setBalonSecim(null);
+    setSeciliId(siparis.id);
+    setTeslimBaslangic("alindi");
+    setTeslimModu("teslim");
+    if (!pinYesil) return;
 
-    setSonTeslimler((o) => ({ ...o, [siparis.id]: oncekiDurum }));
-    // Teslim edilenler katmanı kapalıysa yeşile dönen pin gözden kaybolur;
-    // tekrar basıp geri alabilmek için katmanı açıyoruz.
+    setZorunluTeslim({ id: siparis.id, oncekiDurum: siparis.durum });
+    // Teslim edilenler katmanı kapalıysa yeşile dönen pin gözden kaybolur.
     setKatmanlar((k) =>
       k.teslimEdilenler ? k : { ...k, teslimEdilenler: true },
     );
-
-    await siparisGuncelle(
-      siparis.id,
-      { durum: "teslim", teslim_zamani: zaman, kurye_id: kurye?.id ?? null },
-      (s) => ({ ...s, durum: "teslim", teslim_zamani: zaman }),
+    setTeslimatlar((o) =>
+      o.map((s) => (s.id === siparis.id ? { ...s, durum: "teslim" } : s)),
     );
-    setBalonSecim(null);
-
-    uyar("Teslim edildi", {
-      etiket: "Geri al",
-      calistir: () => void teslimGeriAl(siparis.id),
-    });
   }
 
-  /** Teslim işaretini geri alır: pin eski rengine döner. */
-  async function teslimGeriAl(id: string) {
-    const durum = sonTeslimler[id] ?? "bekliyor";
-    setSonTeslimler((o) => {
-      const kalan = { ...o };
-      delete kalan[id];
-      return kalan;
-    });
-    setBalonSecim(null);
-    await siparisGuncelle(
-      id,
-      { durum, teslim_zamani: null },
-      (s) => ({ ...s, durum, teslim_zamani: null }),
+  /** Zorunlu ekrandan "Teslimi geri al": yalnızca yereldeki yeşil geri döner. */
+  function zorunluTeslimiGeriAl() {
+    const bekleyen = zorunluTeslim;
+    if (!bekleyen) return;
+    setTeslimatlar((o) =>
+      o.map((s) =>
+        s.id === bekleyen.id ? { ...s, durum: bekleyen.oncekiDurum } : s,
+      ),
     );
+    setZorunluTeslim(null);
+    setTeslimModu(null);
+    uyar("Teslim işareti kaldırıldı");
+  }
+
+  /**
+   * Kaydedilmiş bir teslimi geri alır (yeşil pine tekrar uzun basış): pin
+   * "bekliyor"a döner ve ödeme bilgisi silinir — yeniden teslim edildiğinde
+   * yeniden girilecek.
+   */
+  async function teslimGeriAl(id: string) {
+    setBalonSecim(null);
+    const yama = {
+      durum: "bekliyor" as SiparisDurumu,
+      teslim_zamani: null,
+      odeme_alindi: null,
+      odeme_alinmayan_kisi: null,
+      odeme_notu: null,
+      odeme_yapan: null,
+      odeme_tutari: null,
+    };
+    await siparisGuncelle(id, yama, (s) => ({ ...s, ...yama }));
     uyar("Teslim işareti kaldırıldı");
   }
 
@@ -1530,7 +1617,7 @@ export default function KuryeUygulamasi({
     if (!siparis) return uyar("Bugün için teslimat yok");
     // Yeşile dönmüş pine tekrar uzun basmak işareti kaldırıyor.
     if (siparis.durum === "teslim") return void teslimGeriAl(siparis.id);
-    void teslimIsaretle(siparis);
+    teslimFormuAc(siparis, true);
   }
 
   /** Sepeti güne ait teslimata çevirir — sepetin tek çıkış kapısı. */
@@ -2496,37 +2583,116 @@ export default function KuryeUygulamasi({
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 60, opacity: 0 }}
             transition={{ type: "spring", stiffness: 400, damping: 34 }}
-            className="absolute inset-x-3 bottom-4 z-40 flex items-center gap-2 rounded-[22px] bg-kontrast p-2 pl-4 text-white shadow-yuzen"
+            className="absolute inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+16px)] z-40 mx-auto max-w-xl rounded-[22px] bg-kontrast p-2 text-white shadow-yuzen"
           >
-            <p className="flex-1 text-[13px] font-extrabold">
-              {secilenler.length}{" "}
-              {sekme === "teslimatlar" ? "durak" : "kayıt"} seçildi
-            </p>
-            <button
-              onClick={() => {
-                setSecimModu(false);
-                setSecilenler([]);
-              }}
-              className="rounded-hap bg-yuzey/10 px-3 py-2.5 text-[12px] font-bold"
-            >
-              Vazgeç
-            </button>
-            <button
-              onClick={() => void excelIndir()}
-              disabled={indiriliyor || secilenler.length === 0}
-              className="rounded-hap bg-yuzey/10 px-3 py-2.5 text-[12px] font-black disabled:opacity-50"
-            >
-              {indiriliyor ? "…" : "Excel"}
-            </button>
-            {sekme === "teslimatlar" && (
+            {/* Üst satır: sayaç, tümünü seç, kapat */}
+            <div className="flex items-center gap-2 pl-2">
+              <p className="min-w-0 flex-1 truncate text-[13px] font-extrabold">
+                {secilenler.length} / {gorunurKimlikler.length}{" "}
+                {sekme === "teslimatlar" ? "durak" : "kayıt"} seçildi
+              </p>
               <button
-                onClick={rotayiOlustur}
-                disabled={rotaHesapla || secilenler.length < 2}
-                className="rounded-hap bg-kirmizi px-3.5 py-2.5 text-[12px] font-black disabled:opacity-50"
+                onClick={tumunuSecDegistir}
+                disabled={gorunurKimlikler.length === 0}
+                className="min-h-10 rounded-hap bg-yuzey/10 px-3 text-[12px] font-black disabled:opacity-50"
               >
-                {rotaHesapla ? "Hesaplanıyor…" : "En kısa yol"}
+                {tumuSecili ? "Seçimi kaldır" : "Tümünü seç"}
               </button>
-            )}
+              <button
+                onClick={() => {
+                  setSecimModu(false);
+                  setSecilenler([]);
+                }}
+                aria-label="Seçimden çık"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-yuzey/10 text-[18px] leading-none"
+              >
+                ×
+              </button>
+            </div>
+            {/* Alt satır: eylemler */}
+            <div className="mt-2 flex gap-2">
+              <button
+                onClick={() => setTopluSilOnay(true)}
+                disabled={secilenler.length === 0 || islemde}
+                className="min-h-11 flex-1 rounded-hap bg-yuzey/10 px-3 text-[12px] font-black text-[#ff8a93] disabled:opacity-50"
+              >
+                🗑 Sil{secilenler.length > 0 ? ` (${secilenler.length})` : ""}
+              </button>
+              <button
+                onClick={() => void excelIndir()}
+                disabled={indiriliyor || secilenler.length === 0}
+                className="min-h-11 flex-1 rounded-hap bg-yuzey/10 px-3 text-[12px] font-black disabled:opacity-50"
+              >
+                {indiriliyor ? "…" : "Excel"}
+              </button>
+              {sekme === "teslimatlar" && (
+                <button
+                  onClick={rotayiOlustur}
+                  disabled={rotaHesapla || secilenler.length < 2}
+                  className="min-h-11 flex-[1.3] rounded-hap bg-kirmizi px-3 text-[12px] font-black disabled:opacity-50"
+                >
+                  {rotaHesapla ? "Hesaplanıyor…" : "En kısa yol"}
+                </button>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Toplu silme onayı */}
+      <AnimatePresence>
+        {topluSilOnay && secimModu && secilenler.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => !islemde && setTopluSilOnay(false)}
+            className="absolute inset-0 z-50 flex items-end justify-center bg-black/45 backdrop-blur-[2px]"
+          >
+            <motion.div
+              initial={{ y: 60 }}
+              animate={{ y: 0 }}
+              exit={{ y: 60 }}
+              transition={{ type: "spring", stiffness: 400, damping: 34 }}
+              onClick={(e) => e.stopPropagation()}
+              role="alertdialog"
+              aria-label="Toplu silme onayı"
+              className="w-full max-w-xl rounded-t-[28px] border-t border-cizgi bg-yuzey px-4 pb-[calc(env(safe-area-inset-bottom)+16px)] pt-4"
+            >
+              <div className="mx-auto mb-4 h-1.5 w-11 rounded-full bg-cizgi" />
+              <p className="text-[11px] font-black uppercase tracking-wider text-gri">
+                {SEKMELER.find((s) => s.anahtar === sekme)?.ad}
+              </p>
+              <h2 className="mt-0.5 text-xl font-extrabold tracking-tight">
+                {tumuSecili
+                  ? `Listenin tamamı silinsin mi? (${secilenler.length})`
+                  : `${secilenler.length} kayıt silinsin mi?`}
+              </h2>
+              <p className="mt-2 text-[13px] font-semibold leading-snug text-gri">
+                Kayıtlar kalıcı olarak silinir, geri alınamaz.
+                {sekme === "teslimatlar" &&
+                  " Teslim edilmiş siparişler tahsilat kaydına bağlı olduğu için silinmez, listede kalır."}
+                {sekme === "abonelikler" &&
+                  " Bu aboneliklerden daha önce üretilmiş siparişler silinmez."}
+              </p>
+              <div className="mt-4 flex gap-2">
+                <button
+                  onClick={() => setTopluSilOnay(false)}
+                  disabled={islemde}
+                  className="min-h-12 flex-1 rounded-hap bg-yuzey2 text-[14px] font-bold text-gri"
+                >
+                  Vazgeç
+                </button>
+                <motion.button
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => void secilenleriSil()}
+                  disabled={islemde}
+                  className="min-h-12 flex-[2] rounded-hap bg-kirmizi text-[14px] font-black text-white disabled:opacity-60"
+                >
+                  {islemde ? "Siliniyor…" : "Evet, sil"}
+                </motion.button>
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -2570,8 +2736,12 @@ export default function KuryeUygulamasi({
             baslangicOdeme={teslimBaslangic}
             onYontemEkle={yontemEkle}
             onYontemKaldir={yontemKaldir}
-            onKapat={() => setTeslimModu(null)}
+            onKapat={() => {
+              if (!zorunluTeslim) setTeslimModu(null);
+            }}
             onOnay={teslimSonucuUygula}
+            zorunlu={zorunluTeslim?.id === secili.id && teslimModu === "teslim"}
+            onGeriAl={zorunluTeslimiGeriAl}
           />
         )}
         {vardiyaOzeti && vardiya && (
@@ -2621,8 +2791,10 @@ export default function KuryeUygulamasi({
             onBasla={surusuBaslat}
             onBitir={navigasyonuKapat}
             onTeslim={() => {
-              void durumDegistir(navHedef.id, "teslim");
+              const hedef = navHedef;
               navigasyonuKapat();
+              // Hedefe varıldı: pin yeşile döner, ödeme bilgisi zorunlu.
+              teslimFormuAc(hedef, true);
             }}
             onHariciAc={hariciNavigasyon}
           />
@@ -2692,6 +2864,7 @@ export default function KuryeUygulamasi({
               onClick={(e) => {
                 e.stopPropagation();
                 setSecimModu((o) => !o);
+                setBalonSecim(null);
                 setSecilenler([]);
                 setSeciliId(null);
                 setPanel("yari");

@@ -327,15 +327,38 @@ drop policy "muhasebe kilidi" on public.profiles;
 
 ## Ödeme ve tahsilat
 
-Teslimat kapatılırken kurye önce **ödeme alındı / alınamadı** kararını verir.
+Her teslimat ödeme bilgisiyle kapanır — başka yol yok. Teslimi hangi yoldan
+yaparsa yapsın (pine uzun basış, navigasyonda "Teslim ettim", teslimat
+detayı, harita balonundaki "Ödeme al") kurye aynı ekrana düşer ve önce
+**ödeme alındı / alınamadı** kararını verir.
 
-- **Alındı** → yöntem seçilir, tahsil edilen tutar girilir, `tahsilatlar` tablosuna
-  kayıt düşer ve vardiya kasası artar. Sipariş tutarıyla fark varsa ekranda
-  "eksik/fazla" olarak gösterilir.
-- **Alınamadı** → kapıdaki kişinin adı ve açıklama istenir. Teslimat yine
+- **Alındı** → **ödeme yöntemi**, **ödenen tutar** ve **ödemeyi yapan** üçü de
+  zorunlu. Alanlar bilerek boş açılır; planlanan yöntem, sipariş tutarı ve
+  müşteri adı tek dokunuşluk öneri olarak durur. Eksik alan varsa "Eksik: …"
+  yazar ve kaydetmez. Tutar ve ödeyen `siparisler.odeme_tutari` /
+  `odeme_yapan`'a yazılır; yöntem kuryenin elden para aldığı türdense
+  (`para_alinir`) `tahsilatlar`'a da düşer ve vardiya kasası artar.
+- **Alınamadı** → kapıdaki kişinin adı ve açıklama zorunlu. Teslimat yine
   tamamlanır, ama kasaya hiçbir şey işlenmez; borç `siparisler.odeme_alindi`,
   `odeme_alinmayan_kisi` ve `odeme_notu` alanlarında durur ve hem listede hem
   teslimat detayında turuncu olarak görünür.
+
+**Pin yeşile döndüyse haritaya dönülemez.** Uzun basış ya da navigasyonda
+varış pini hemen yeşile çevirir ama veritabanına hiçbir şey yazmaz; ekran
+dışarı dokunmakla kapanmaz. Tek çıkış **Teslimi geri al**: pin eski rengine
+döner, teslim edilmemiş sayılır. Uygulama bu arada kapanırsa da pin kırmızı
+kalır — ödeme bilgisi olmayan hiçbir teslim kaydı oluşmaz. Kaydedilmiş bir
+teslime tekrar uzun basmak teslimi ve ödeme bilgisini geri alır.
+
+## Toplu seçim ve silme
+
+Liste başlığındaki **Toplu seç** her sekmede (Teslimatlar, Abonelikler,
+Sepetler) satırlara onay kutusu açar. Alttaki çubukta **Tümünü seç** (arama
+açıksa yalnızca eşleşenler), **Sil**, **Excel** ve teslimatlarda **En kısa
+yol** var. Sil onay ister; listenin tamamı seçiliyse "Listenin tamamı
+silinsin mi?" diye sorar. Teslim edilmiş siparişler tahsilata bağlı olduğu
+için silinmez (RLS) — kaç kaydın kaldığı bildirimde yazar. Silme 100'erli
+parçalarla yapılır; binlerce aboneyi tek seferde temizlemek de çalışır.
 
 Ödeme yöntemleri sabit değildir: `odeme_yontemleri` tablosundan gelir, kurye
 ekranındaki **Düzenle** ile yenisi eklenir ya da listeden kaldırılır (kayıt

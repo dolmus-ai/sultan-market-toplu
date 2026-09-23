@@ -128,6 +128,24 @@ export default function TeslimatDetay({
         </div>
       )}
 
+      {/* Teslimde girilen ödeme: yöntem, tutar, ödeyen */}
+      {siparis.odeme_alindi === true && (
+        <div className="rounded-[20px] border border-yesil/40 bg-yesil/10 p-3.5">
+          <p className="text-[12px] font-black uppercase tracking-wide text-yesil">
+            Ödeme alındı
+          </p>
+          <p className="mt-1 text-[14px] font-bold">
+            {[
+              siparis.odeme_tutari != null ? para(siparis.odeme_tutari) : null,
+              odemeAdi(siparis.odeme_yontemi),
+              siparis.odeme_yapan,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </p>
+        </div>
+      )}
+
       {/* Ödeme alınamadıysa kimden alınamadığı burada duruyor */}
       {siparis.odeme_alindi === false && (
         <div className="rounded-[20px] border border-turuncu/40 bg-turuncu/10 p-3.5">

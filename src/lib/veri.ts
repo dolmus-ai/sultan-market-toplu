@@ -20,7 +20,7 @@ const SIPARIS_ALANLARI = `
   id, musteri_id, adres_id, kaynak, abonelik_id, kurye_id, durum, oncelik,
   planlanan_tarih, planlanan_saat, teslim_zamani, odeme_yontemi, tutar, notlar,
   basarisizlik_sebebi, basarisizlik_notu, deneme_sayisi, created_at,
-  odeme_alindi, odeme_alinmayan_kisi, odeme_notu,
+  odeme_alindi, odeme_alinmayan_kisi, odeme_notu, odeme_yapan, odeme_tutari,
   musteri:musteriler ( id, ad, telefon, notlar ),
   adres:adresler ( id, musteri_id, baslik, adres_metni, bina, kat, daire, tarif, kurye_notu, kapi_kodu, lat, lng, konum_dogrulandi ),
   kalemler:siparis_kalemleri (
@@ -681,6 +681,32 @@ export async function sepetSil(db: SupabaseClient, id: string) {
     .eq("id", id);
   if (error) throw error;
   if (!count) throw new Error("silinemedi");
+}
+
+/**
+ * Birden çok kaydı siler, gerçekten silinenlerin kimliklerini döndürür.
+ *
+ * 100'erli parçalarla: abone defteri binin üstünde kayıt taşıyor ve tek
+ * `in (...)` süzgeci istek adresini sunucunun sınırının üstüne çıkarıyor.
+ * RLS'in izin vermediği satırlar (teslim edilmiş sipariş) hata vermeden
+ * atlanıyor; kaçının kaldığını çağıran farktan hesaplıyor.
+ */
+export async function topluSil(
+  db: SupabaseClient,
+  tablo: "siparisler" | "abonelikler" | "sepetler",
+  idler: string[],
+): Promise<string[]> {
+  const silinen: string[] = [];
+  for (let i = 0; i < idler.length; i += 100) {
+    const { data, error } = await db
+      .from(tablo)
+      .delete()
+      .in("id", idler.slice(i, i + 100))
+      .select("id");
+    if (error) throw error;
+    silinen.push(...((data ?? []) as { id: string }[]).map((r) => r.id));
+  }
+  return silinen;
 }
 
 /* ------------------------------------------------------------------ */

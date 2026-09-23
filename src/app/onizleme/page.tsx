@@ -99,6 +99,8 @@ const TESLIMATLAR: Siparis[] = MUSTERILER.map(
       deneme_sayisi: 0,
       odeme_alindi: null,
       odeme_alinmayan_kisi: null,
+      odeme_yapan: null,
+      odeme_tutari: null,
       odeme_notu: null,
       created_at: new Date().toISOString(),
       musteri: { id: `musteri-${i}`, ad, telefon, notlar: null },

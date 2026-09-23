@@ -33,7 +33,13 @@ function odemeSatiri(
   if (s.durum === "teslim") {
     if (s.odeme_alindi === true)
       return {
-        metin: `${odemeAdi(s.odeme_yontemi, yontemler)} ile alındı`,
+        metin: [
+          s.odeme_tutari != null ? para(s.odeme_tutari) : null,
+          `${odemeAdi(s.odeme_yontemi, yontemler)} ile alındı`,
+          s.odeme_yapan,
+        ]
+          .filter(Boolean)
+          .join(" · "),
         ton: "yesil",
       };
     if (s.odeme_alindi === false)

@@ -194,6 +194,7 @@ function siteVeBlok(ad) {
 function duzelt(ad) {
   return ad
     .replace(/\s+/g, " ")
+    .replace(/^[^\p{L}\d]+/u, "")
     .replace(/\bSİTESİ\b/g, "Sitesi")
     .replace(/\bsitesi\b/g, "Sitesi")
     .replace(/\bApt\b\.?/g, "Apt.")
@@ -233,6 +234,7 @@ function harfDuzelt(ad) {
 function overtureAdi(ham) {
   let ad = ham
     .replace(/^pudo\s+/i, "")
+    .replace(/^[^\p{L}\d]+/u, "")
     .replace(/[_]+/g, " ")
     .replace(/\s*[|/,-]\s*(kocaeli|sakarya).*$/i, "")
     .replace(/\s+/g, " ")

@@ -25,6 +25,7 @@ import KonumTamamla from "./KonumTamamla";
 import TopluYukleme from "./TopluYukleme";
 import VardiyaOzeti from "./VardiyaOzeti";
 import NavigasyonPaneli, { type NavigasyonDurumu } from "./NavigasyonPaneli";
+import AdresBulucu, { BinaSimgesi } from "./AdresBulucu";
 import {
   AbonelikSatiri,
   ListeArama,
@@ -57,11 +58,16 @@ import {
   acikVardiyaGetir,
   kuryeKonumlariGetir,
   vardiyaTahsilatlari,
+  siteEkle,
+  siteSil,
+  sitelerGetir,
 } from "@/lib/veri";
+import { sakaryadaMi, siteAdresMetni, type SiteAdayi } from "@/lib/site";
 import { binaAnahtari, bugununTarihi, gecikmeDk, para } from "@/lib/bicim";
 import { bekleyenler, kuyruguIsle, kuyrukVeyaGonder } from "@/lib/cevrimdisi";
 import type {
   Abonelik,
+  KayitliSite,
   Kurye,
   KuryeKonumu,
   Nokta,
@@ -160,7 +166,20 @@ type Props = {
   baslangicSepetler: Sepet[];
   /** Listede gösterilecek aktif ödeme yöntemleri. */
   baslangicYontemler: OdemeYontemiTanimi[];
+  /** Adres bulucuda onaylanıp haritaya eklenmiş siteler. */
+  baslangicSiteler?: KayitliSite[];
 };
+
+/**
+ * Adres bulucu açıkken haritanın uçacağı noktayı panelin/kartın altında
+ * kalmayacak şekilde kaydırır. Masaüstünde panel solda 400 px; telefonda
+ * aday kartı alttan açılıyor, nokta ekranın üst kısmına gelmeli.
+ */
+function bulucuOfseti(kart: boolean): [number, number] {
+  if (typeof window === "undefined") return [0, 0];
+  if (window.innerWidth >= 640) return [200, 0];
+  return kart ? [0, -Math.round(window.innerHeight * 0.28)] : [0, 0];
+}
 
 export default function KuryeUygulamasi({
   kurye,
@@ -168,6 +187,7 @@ export default function KuryeUygulamasi({
   baslangicAbonelikler,
   baslangicSepetler,
   baslangicYontemler,
+  baslangicSiteler = [],
 }: Props) {
   const yonlendir = useRouter();
   const db = useMemo(() => tarayiciIstemcisi(), []);
@@ -177,6 +197,21 @@ export default function KuryeUygulamasi({
   const [abonelikler, setAbonelikler] = useState(baslangicAbonelikler);
   const [sepetler, setSepetler] = useState(baslangicSepetler);
   const [yontemler, setYontemler] = useState(baslangicYontemler);
+  const [siteler, setSiteler] = useState(baslangicSiteler);
+
+  /* Adres bulucu */
+  const [bulucuAcik, setBulucuAcik] = useState(false);
+  const [siteOnizleme, setSiteOnizleme] = useState<SiteAdayi | null>(null);
+  const [seciliSiteId, setSeciliSiteId] = useState<string | null>(null);
+  const [haritadanSecim, setHaritadanSecim] = useState(false);
+  /** Bulucudan "Buraya kayıt aç" — yeni kaydın adres adımı bununla dolar. */
+  const [kayitAdresi, setKayitAdresi] = useState<{
+    adres_metni: string;
+    bina: string;
+    lat: number;
+    lng: number;
+    etiket: string;
+  } | null>(null);
 
   const [ekleMenu, setEkleMenu] = useState(false);
   const [kayitEkle, setKayitEkle] = useState(false);
@@ -222,6 +257,7 @@ export default function KuryeUygulamasi({
     ucBoyut: true,
     isiHaritasi: false,
     karanlik: tercihOku().karanlik ?? false,
+    siteler: true,
   }));
   const [katmanPaneli, setKatmanPaneli] = useState(false);
 
@@ -316,6 +352,23 @@ export default function KuryeUygulamasi({
   const secili = useMemo(
     () => teslimatlar.find((s) => s.id === seciliId) ?? null,
     [teslimatlar, seciliId],
+  );
+
+  /**
+   * Bulucunun "yakınındaki siteler" sırası için merkez. ~100 m'ye
+   * yuvarlanıyor: her GPS güncellemesinde liste yeniden dizilip kuryenin
+   * okuduğu satır kaymasın.
+   */
+  const bulucuLat = Math.round((kuryeKonumu?.lat ?? MARKET.nokta.lat) * 1000) / 1000;
+  const bulucuLng = Math.round((kuryeKonumu?.lng ?? MARKET.nokta.lng) * 1000) / 1000;
+  const bulucuMerkezi = useMemo(
+    () => ({ lat: bulucuLat, lng: bulucuLng }),
+    [bulucuLat, bulucuLng],
+  );
+
+  const seciliSite = useMemo(
+    () => siteler.find((s) => s.id === seciliSiteId) ?? null,
+    [siteler, seciliSiteId],
   );
 
   const bugunAbonelikler = useMemo(() => {
@@ -457,6 +510,22 @@ export default function KuryeUygulamasi({
       void db.removeChannel(kanal);
     };
   }, [db, kurye]);
+
+  /* ------------------------- Siteler ------------------------- */
+  useEffect(() => {
+    // Başka bir kuryenin onayladığı site bu haritaya da düşsün.
+    const kanal = db
+      .channel("siteler")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "siteler" },
+        () => void sitelerGetir(db).then(setSiteler),
+      )
+      .subscribe();
+    return () => {
+      void db.removeChannel(kanal);
+    };
+  }, [db]);
 
   /* ------------------------- Veri tazeleme ------------------------- */
   const teslimatlariTazele = useCallback(async () => {
@@ -1482,6 +1551,156 @@ export default function KuryeUygulamasi({
     }
   }
 
+  /* ------------------------- Adres bulucu ------------------------- */
+
+  function bulucuyaUc(nokta: Nokta, kart: boolean, zoom = 17) {
+    haritaApi.current?.ucur(nokta, zoom, bulucuOfseti(kart));
+  }
+
+  function bulucuyuAc() {
+    setBulucuAcik(true);
+    setBalonSecim(null);
+    setPanel("kapali");
+  }
+
+  function bulucuyuKapat() {
+    setBulucuAcik(false);
+    setSiteOnizleme(null);
+    setSeciliSiteId(null);
+    setHaritadanSecim(false);
+  }
+
+  function siteyiOnizle(aday: SiteAdayi | null) {
+    setSiteOnizleme(aday);
+    setSeciliSiteId(null);
+    if (aday) bulucuyaUc(aday, true);
+  }
+
+  function siteSec(site: KayitliSite | null) {
+    setSeciliSiteId(site?.id ?? null);
+    setSiteOnizleme(null);
+    if (site) {
+      setKatmanlar((k) => (k.siteler ? k : { ...k, siteler: true }));
+      bulucuyaUc(site, true);
+    }
+  }
+
+  /** "Haritaya dokunarak ekle": dokunulan noktadan boş bir aday açar. */
+  async function haritadanSiteAc(nokta: Nokta) {
+    setHaritadanSecim(false);
+    if (!sakaryadaMi(nokta)) {
+      uyar("Bu nokta Sakarya dışında.");
+      return;
+    }
+    const anahtar = `elle:${nokta.lat.toFixed(6)},${nokta.lng.toFixed(6)}`;
+    setSiteOnizleme({
+      anahtar,
+      ad: "",
+      tur: "site",
+      ilce: null,
+      mahalle: null,
+      adres: null,
+      lat: nokta.lat,
+      lng: nokta.lng,
+      bloklar: [],
+      kaynak: "elle",
+      kaynak_id: null,
+    });
+    setSeciliSiteId(null);
+    bulucuyaUc(nokta, true, 17.5);
+
+    // İlçe/mahalle/sokağı doldurmayı dene; kurye bu arada yazmaya
+    // başladıysa onun yazdığını ezme.
+    try {
+      const yanit = await fetch(
+        `/api/site-ara?lat=${nokta.lat}&lng=${nokta.lng}`,
+      );
+      if (!yanit.ok) return;
+      const { aday } = (await yanit.json()) as { aday: SiteAdayi };
+      setSiteOnizleme((o) =>
+        o?.anahtar === anahtar
+          ? {
+              ...o,
+              ad: o.ad || aday.ad,
+              tur: o.ad ? o.tur : aday.tur,
+              ilce: o.ilce ?? aday.ilce,
+              mahalle: o.mahalle ?? aday.mahalle,
+              adres: o.adres ?? aday.adres,
+            }
+          : o,
+      );
+    } catch {
+      /* çevrimdışı — kurye elle doldurur */
+    }
+  }
+
+  async function siteyiOnayla(aday: SiteAdayi) {
+    if (!sakaryadaMi(aday)) {
+      uyar("Pin Sakarya sınırları dışında.");
+      return;
+    }
+    setIslemde(true);
+    try {
+      const yeni = await siteEkle(db, {
+        ad: aday.ad,
+        tur: aday.tur,
+        ilce: aday.ilce,
+        mahalle: aday.mahalle,
+        adres: aday.adres,
+        lat: aday.lat,
+        lng: aday.lng,
+        bloklar: aday.bloklar,
+        kaynak: aday.kaynak,
+        kaynak_id: aday.kaynak_id,
+      });
+      setSiteler((o) => birlestir(o, yeni));
+      setKatmanlar((k) => (k.siteler ? k : { ...k, siteler: true }));
+      setSiteOnizleme(null);
+      setSeciliSiteId(yeni.id);
+      uyar(`${yeni.ad} haritaya eklendi`);
+    } catch (hata) {
+      const kod = (hata as { code?: string }).code;
+      uyar(
+        kod === "23505"
+          ? "Bu site zaten haritada."
+          : kod === "PGRST205" || kod === "42P01"
+            ? "Siteler tablosu kurulmamış — göç dosyasını uygulayın."
+            : "Site eklenemedi.",
+      );
+    } finally {
+      setIslemde(false);
+    }
+  }
+
+  async function siteyiKaldir(site: KayitliSite) {
+    setIslemde(true);
+    try {
+      await siteSil(db, site.id);
+      setSiteler((o) => o.filter((x) => x.id !== site.id));
+      setSeciliSiteId(null);
+      uyar(`${site.ad} haritadan kaldırıldı`);
+    } catch {
+      uyar("Yalnızca kendi eklediğin siteyi kaldırabilirsin.");
+    } finally {
+      setIslemde(false);
+    }
+  }
+
+  /** Bulunan siteyi yeni kaydın adresi olarak açar. */
+  function siteyeKayitAc(site: SiteAdayi, blok: string | null) {
+    const bl = blok ? site.bloklar.find((b) => b.ad === blok) : null;
+    setKayitAdresi({
+      adres_metni: siteAdresMetni(site, blok),
+      bina: blok ?? "",
+      lat: bl?.lat ?? site.lat,
+      lng: bl?.lng ?? site.lng,
+      etiket: blok ? `${site.ad} · ${blok}` : site.ad,
+    });
+    bulucuyuKapat();
+    setDuzenlenen(null);
+    setKayitEkle(true);
+  }
+
   async function cikis() {
     await db.auth.signOut();
     yonlendir.replace("/giris");
@@ -1562,6 +1781,25 @@ export default function KuryeUygulamasi({
         kuryeKonumu={kuryeKonumu}
         kuryeYonu={kuryeYonu}
         digerKuryeler={digerKuryeler}
+        siteler={siteler}
+        siteOnizleme={
+          siteOnizleme
+            ? {
+                lat: siteOnizleme.lat,
+                lng: siteOnizleme.lng,
+                ad: siteOnizleme.ad.trim() || "Yeni site",
+              }
+            : null
+        }
+        onOnizlemeTasindi={(n) =>
+          setSiteOnizleme((o) => (o ? { ...o, lat: n.lat, lng: n.lng } : o))
+        }
+        onSiteSecim={(id) => {
+          const site = siteler.find((x) => x.id === id);
+          if (!site || secimModu || konumDuzeltme) return;
+          bulucuyuAc();
+          siteSec(site);
+        }}
         onSecim={(id) => {
           const s = teslimatlar.find((x) => x.id === id);
           haritaPini(
@@ -1650,6 +1888,14 @@ export default function KuryeUygulamasi({
         }}
         onHaritaTikla={(nokta) => {
           if (konumDuzeltme) return void konumuKaydet(nokta);
+          if (haritadanSecim) return void haritadanSiteAc(nokta);
+          // Onay bekleyen site varken dokunmak pini oraya taşır.
+          if (siteOnizleme) {
+            setSiteOnizleme((o) =>
+              o ? { ...o, lat: nokta.lat, lng: nokta.lng } : o,
+            );
+            return;
+          }
           setBalonSecim(null);
         }}
         onAciDegisti={(bearing, pitch) => setAci({ bearing, pitch })}
@@ -1702,6 +1948,19 @@ export default function KuryeUygulamasi({
               {bekleyenSayisi}
             </span>
           )}
+          <button
+            onClick={() => (bulucuAcik ? bulucuyuKapat() : bulucuyuAc())}
+            aria-label="Adres bulucu"
+            title="Adres bulucu — Sakarya siteleri"
+            className={`flex h-8 shrink-0 items-center gap-1.5 rounded-hap px-2.5 text-[11px] font-black transition-colors ${
+              bulucuAcik
+                ? "bg-kurum text-white"
+                : "bg-yuzey2 text-metin hover:bg-cizgi"
+            }`}
+          >
+            <BinaSimgesi boyut={15} />
+            <span className="hidden sm:inline">Adres bul</span>
+          </button>
           <button
             onClick={vardiyaDegistir}
             className={`rounded-hap px-3 py-1.5 text-[11px] font-black uppercase tracking-wide transition-colors ${
@@ -2072,11 +2331,17 @@ export default function KuryeUygulamasi({
             yontemler={yontemler}
             kuryeKonumu={kuryeKonumu}
             duzenlenen={duzenlenen}
+            siteler={siteler}
+            baslangicAdres={kayitAdresi}
             onKapat={() => {
               setKayitEkle(false);
               setDuzenlenen(null);
+              setKayitAdresi(null);
             }}
-            onEklendi={kayitEklendi}
+            onEklendi={(kayit, mesaj) => {
+              setKayitAdresi(null);
+              kayitEklendi(kayit, mesaj);
+            }}
           />
         )}
         {konumTamamla && (
@@ -2146,6 +2411,58 @@ export default function KuryeUygulamasi({
           </motion.div>
         )}
 
+      </AnimatePresence>
+
+      {/* Adres bulucu */}
+      <AnimatePresence>
+        {bulucuAcik && !haritadanSecim && !navHedef && (
+          <AdresBulucu
+            key="adres-bulucu"
+            kayitlilar={siteler}
+            merkez={bulucuMerkezi}
+            onizleme={siteOnizleme}
+            onOnizle={siteyiOnizle}
+            onOnizlemeGuncelle={(yama) =>
+              setSiteOnizleme((o) => (o ? { ...o, ...yama } : o))
+            }
+            secili={seciliSite}
+            onSec={siteSec}
+            haritadanSecim={haritadanSecim}
+            onHaritadanSecim={(acik) => {
+              setHaritadanSecim(acik);
+              setSiteOnizleme(null);
+              setSeciliSiteId(null);
+            }}
+            kullaniciId={kurye?.id ?? null}
+            islemde={islemde}
+            onOnayla={(aday) => void siteyiOnayla(aday)}
+            onSil={(site) => void siteyiKaldir(site)}
+            onGit={(n) => bulucuyaUc(n, true, 18)}
+            onKayitAc={siteyeKayitAc}
+            onKapat={bulucuyuKapat}
+          />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {haritadanSecim && (
+          <motion.div
+            initial={{ y: -16, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -16, opacity: 0 }}
+            className="absolute inset-x-3 top-[calc(env(safe-area-inset-top)+80px)] z-30 mx-auto flex max-w-md items-center gap-3 rounded-[20px] bg-kurum p-3 text-white shadow-yuzen"
+          >
+            <span className="text-lg">🏘️</span>
+            <p className="flex-1 text-[13px] font-bold">
+              Eklemek istediğin sitenin girişine dokun.
+            </p>
+            <button
+              onClick={() => setHaritadanSecim(false)}
+              className="rounded-hap bg-yuzey/20 px-3 py-1.5 text-[12px] font-black"
+            >
+              Vazgeç
+            </button>
+          </motion.div>
+        )}
       </AnimatePresence>
 
       {/* Konum düzeltme uyarısı */}

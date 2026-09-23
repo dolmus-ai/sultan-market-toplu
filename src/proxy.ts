@@ -48,7 +48,8 @@ export default async function proxy(istek: NextRequest) {
       yol.startsWith("/api/rota") ||
       yol.startsWith("/api/navigasyon") ||
       yol.startsWith("/api/disa-aktar") ||
-      yol.startsWith("/api/toplu-musteri"));
+      yol.startsWith("/api/toplu-musteri") ||
+      yol.startsWith("/api/site-ara"));
   const acikYol = yol.startsWith("/giris") || gelistirmeAcik;
 
   if (!user && !acikYol) {
@@ -72,7 +73,8 @@ export default async function proxy(istek: NextRequest) {
 
 export const config = {
   matcher: [
-    // Statik varlıklar ve MapLibre worker dosyaları oturum kontrolünden muaf.
-    "/((?!_next/static|_next/image|maplibre/|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|webp|ico|mjs|js|css|map|webmanifest)$).*)",
+    // Statik varlıklar, MapLibre worker dosyaları ve herkese açık OSM
+    // derlemesi (/veri/sakarya-siteler.json) oturum kontrolünden muaf.
+    "/((?!_next/static|_next/image|maplibre/|veri/|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|webp|ico|mjs|js|css|map|webmanifest)$).*)",
   ],
 };

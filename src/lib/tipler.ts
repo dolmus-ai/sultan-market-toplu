@@ -198,3 +198,26 @@ export type RotaSonucu = {
   geometri: [number, number][];
   motor: "osrm" | "yerel";
 };
+
+export type SiteTuru = "site" | "apartman";
+export type SiteKaynagi = "osm" | "overture" | "nominatim" | "google" | "elle";
+
+export type SiteBlogu = { ad: string; lat: number; lng: number };
+
+/** Adres bulucuda onaylanıp haritaya eklenmiş site ya da apartman. */
+export type KayitliSite = {
+  id: string;
+  ad: string;
+  tur: SiteTuru;
+  ilce: string | null;
+  mahalle: string | null;
+  adres: string | null;
+  lat: number;
+  lng: number;
+  bloklar: SiteBlogu[];
+  kaynak: SiteKaynagi;
+  kaynak_id: string | null;
+  notlar: string | null;
+  ekleyen: string | null;
+  created_at: string;
+};

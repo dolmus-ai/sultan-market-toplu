@@ -50,6 +50,7 @@ import type {
   Siparis,
   Abonelik,
   KuryeKonumu,
+  KayitliSite,
   Sepet,
 } from "@/lib/tipler";
 
@@ -60,10 +61,16 @@ export type Katmanlar = {
   ucBoyut: boolean;
   isiHaritasi: boolean;
   karanlik: boolean;
+  /** Adres bulucuda onaylanıp haritaya eklenen siteler. */
+  siteler: boolean;
 };
 
 export type HaritaApi = {
-  ucur: (nokta: Nokta, zoom?: number) => void;
+  /**
+   * `ofset` hedefi ekran ortasından piksel olarak kaydırır — yan panel ya da
+   * alt kart açıkken nokta onların altında kalmasın.
+   */
+  ucur: (nokta: Nokta, zoom?: number, ofset?: [number, number]) => void;
   hepsiniSigdir: (noktalar: Nokta[]) => void;
   pusulaSifirla: () => void;
   egimDegistir: () => void;
@@ -91,6 +98,11 @@ type Props = {
   kuryeYonu: number | null;
   /** Vardiyadaki diğer kuryeler — aynı mahalleye iki kişi gitmesin. */
   digerKuryeler: (KuryeKonumu & { ad: string })[];
+  siteler: KayitliSite[];
+  /** Adres bulucuda onay bekleyen aday — sürüklenebilir pin olarak çizilir. */
+  siteOnizleme?: { lat: number; lng: number; ad: string } | null;
+  onOnizlemeTasindi?: (nokta: Nokta) => void;
+  onSiteSecim?: (id: string) => void;
   onSecim: (id: string) => void;
   /** Abonelik pinine dokunuldu. */
   onAbonelikSecim?: (id: string) => void;
@@ -228,6 +240,7 @@ function katmanlariKur(
   uzunRef: RefObject<
     ((tur: "teslimat" | "abonelik" | "sepet", id: string) => void) | undefined
   >,
+  siteRef: RefObject<((id: string) => void) | undefined>,
 ) {
   /**
    * Uzun basış, uzun basıştan sonra gelen "click" olayını yutmak için
@@ -247,6 +260,8 @@ function katmanlariKur(
   harita.addSource("rota", { type: "geojson", data: BOS_GEOJSON });
   harita.addSource("navigasyon", { type: "geojson", data: BOS_GEOJSON });
   harita.addSource("kuryeler", { type: "geojson", data: BOS_GEOJSON });
+  harita.addSource("siteler", { type: "geojson", data: BOS_GEOJSON });
+
   /* Isı haritası — talep yoğunluğu */
   harita.addLayer({
     id: "yogunluk-katmani",
@@ -450,6 +465,42 @@ function katmanlariKur(
     },
   });
 
+  /*
+   * Onaylı siteler — lacivert gövde, beyaz halka. Teslimat pinlerinin
+   * altında kalıyor: site bir yer işareti, iş değil.
+   */
+  harita.addLayer({
+    id: "site-nokta",
+    type: "circle",
+    source: "siteler",
+    paint: {
+      "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, 4, 17, 9],
+      "circle-color": "#16212e",
+      "circle-stroke-color": "#ffffff",
+      "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 11, 1.5, 17, 2.5],
+    },
+  });
+  harita.addLayer({
+    id: "site-etiket",
+    type: "symbol",
+    source: "siteler",
+    minzoom: 14,
+    layout: {
+      "text-field": ["get", "ad"],
+      "text-font": ["Noto Sans Bold"],
+      "text-size": 11,
+      "text-offset": [0, 1.2],
+      "text-anchor": "top",
+      "text-max-width": 10,
+      "text-optional": true,
+    },
+    paint: {
+      "text-color": "#16212e",
+      "text-halo-color": "#ffffff",
+      "text-halo-width": 2,
+    },
+  });
+
   /* Diğer kuryeler — soluk gri, adlarıyla */
   harita.addLayer({
     id: "kurye-hale",
@@ -634,6 +685,7 @@ function katmanlariKur(
     "kume",
     "abonelik-halka",
     "sepet-halka",
+    "site-nokta",
     "nav-alternatif",
   ].forEach(
     isaretci,
@@ -672,6 +724,21 @@ function katmanlariKur(
     })[0];
     const id = ozellik?.properties?.id;
     if (typeof id === "string") sepetRef.current?.(id);
+  });
+
+  harita.on("click", "site-nokta", (e: MapMouseEvent) => {
+    // Üstünde bir teslimat pini varsa o kazanıyor.
+    const ustte = harita.queryRenderedFeatures(e.point, {
+      layers: ["teslimat-nokta", "kume", "abonelik-halka", "sepet-halka"].filter(
+        (k) => harita.getLayer(k),
+      ),
+    });
+    if (ustte.length) return;
+    const ozellik = harita.queryRenderedFeatures(e.point, {
+      layers: ["site-nokta"],
+    })[0];
+    const id = ozellik?.properties?.id;
+    if (typeof id === "string") siteRef.current?.(id);
   });
 
   harita.on("click", "kume", async (e: MapMouseEvent) => {
@@ -764,6 +831,7 @@ function katmanlariKur(
         "kume",
         "abonelik-halka",
         "sepet-halka",
+        "site-nokta",
       ].filter((k) =>
         harita.getLayer(k),
       ),
@@ -819,6 +887,10 @@ export default function Harita({
   katmanlar,
   kuryeKonumu,
   digerKuryeler,
+  siteler,
+  siteOnizleme,
+  onOnizlemeTasindi,
+  onSiteSecim,
   onSecim,
   onAbonelikSecim,
   onSepetSecim,
@@ -848,6 +920,8 @@ export default function Harita({
   const abonelikRef = useRef(onAbonelikSecim);
   const sepetRef = useRef(onSepetSecim);
   const uzunRef = useRef(onUzunBasis);
+  const siteRef = useRef(onSiteSecim);
+  const tasindiRef = useRef(onOnizlemeTasindi);
   const temaRef = useRef<Tema>(katmanlar.karanlik ? "karanlik" : "aydinlik");
   const onKullaniciHareketiRef = useRef(onKullaniciHareketi);
   /** Google oturumu açılamayınca gösterilen sebep. */
@@ -896,6 +970,8 @@ export default function Harita({
     sepetRef.current = onSepetSecim;
     uzunRef.current = onUzunBasis;
     googleYukleRef.current = googleKarolariYukle;
+    siteRef.current = onSiteSecim;
+    tasindiRef.current = onOnizlemeTasindi;
   });
 
   /* ---------------- Haritayı kur ---------------- */
@@ -998,6 +1074,7 @@ export default function Harita({
             abonelikRef,
             sepetRef,
             uzunRef,
+            siteRef,
           );
           marketiIsaretle(harita);
         } catch (hata) {
@@ -1184,6 +1261,20 @@ export default function Harita({
     });
   }, [hazir, navigasyonSecenekleri, seciliSecenekId, katmanlar.karanlik]);
 
+  useEffect(() => {
+    const harita = haritaRef.current;
+    if (!harita || !hazirRef.current) return;
+    const kaynak = harita.getSource("siteler") as GeoJSONSource | undefined;
+    kaynak?.setData({
+      type: "FeatureCollection",
+      features: siteler.map((s) => ({
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [s.lng, s.lat] },
+        properties: { id: s.id, ad: s.ad },
+      })),
+    });
+  }, [hazir, siteler]);
+
   /* Tema değişince harita paletini yeniden uygula. */
   useEffect(() => {
     const tema: Tema = katmanlar.karanlik ? "karanlik" : "aydinlik";
@@ -1218,6 +1309,30 @@ export default function Harita({
       harita.setPaintProperty(
         "kurye-etiket",
         "text-halo-color",
+        karanlik ? "#101216" : "#ffffff",
+      );
+    }
+    if (harita.getLayer("site-etiket")) {
+      harita.setPaintProperty(
+        "site-etiket",
+        "text-color",
+        karanlik ? "#dbe4ee" : "#16212e",
+      );
+      harita.setPaintProperty(
+        "site-etiket",
+        "text-halo-color",
+        karanlik ? "#101216" : "#ffffff",
+      );
+    }
+    if (harita.getLayer("site-nokta")) {
+      harita.setPaintProperty(
+        "site-nokta",
+        "circle-color",
+        karanlik ? "#9fc3ea" : "#16212e",
+      );
+      harita.setPaintProperty(
+        "site-nokta",
+        "circle-stroke-color",
         karanlik ? "#101216" : "#ffffff",
       );
     }
@@ -1266,6 +1381,8 @@ export default function Harita({
     gorunur("sepet-halka", katmanlar.sepetler);
     gorunur("sepet-cekirdek", katmanlar.sepetler);
     gorunur("yogunluk-katmani", katmanlar.isiHaritasi);
+    gorunur("site-nokta", katmanlar.siteler);
+    gorunur("site-etiket", katmanlar.siteler);
     ucBoyutluBinalariGoster(harita, katmanlar.ucBoyut);
     // Bina verisi OpenStreetMap'ten; katman açıkken atfı da görünsün.
     atifRef.current?.ekAtifAyarla(
@@ -1326,6 +1443,73 @@ export default function Harita({
   }, [hazir, kuryeKonumu]);
 
   /**
+   * Adres bulucunun onay bekleyen adayı. Sürüklenebilir bir işaretçi: kurye
+   * pini binanın kapısına taşıyıp öyle onaylıyor. Katman değil işaretçi,
+   * çünkü MapLibre katman özelliklerini sürüklemeyi desteklemiyor.
+   */
+  const onizlemeRef = useRef<Marker | null>(null);
+  const onizlemeVar = siteOnizleme != null;
+  // İşaretçi eşzamansız kuruluyor; kurulunca konumu ve adı yeniden yazılsın.
+  const [onizlemeKuruldu, setOnizlemeKuruldu] = useState(0);
+
+  useEffect(() => {
+    const harita = haritaRef.current;
+    if (!harita || !hazir || !onizlemeVar) return;
+
+    let iptal = false;
+    (async () => {
+      const { Marker: MapLibreMarker } = await import("maplibre-gl");
+      if (iptal || !haritaRef.current || onizlemeRef.current) return;
+      const kutu = document.createElement("div");
+      kutu.style.cssText =
+        "display:flex;flex-direction:column;align-items:center;cursor:grab;touch-action:none";
+      kutu.innerHTML = `
+        <span class="site-onizleme-ad" style="font:800 11px/1.15 ui-sans-serif,system-ui;
+              color:#fff;background:#16212e;padding:5px 9px;border-radius:999px;
+              white-space:nowrap;max-width:200px;overflow:hidden;text-overflow:ellipsis;
+              box-shadow:0 4px 14px rgba(14,14,17,.35);margin-bottom:4px"></span>
+        <svg width="34" height="44" viewBox="0 0 34 44" style="filter:drop-shadow(0 4px 6px rgba(14,14,17,.35))">
+          <path d="M17 43C17 43 32 27.5 32 16.5C32 7.9 25.3 1.5 17 1.5C8.7 1.5 2 7.9 2 16.5C2 27.5 17 43 17 43Z"
+                fill="#16212e" stroke="#fff" stroke-width="2.5"/>
+          <rect x="11" y="9" width="12" height="14" rx="1.5" fill="#fff"/>
+          <rect x="13.5" y="11.5" width="2.5" height="2.5" fill="#16212e"/>
+          <rect x="18" y="11.5" width="2.5" height="2.5" fill="#16212e"/>
+          <rect x="13.5" y="16" width="2.5" height="2.5" fill="#16212e"/>
+          <rect x="18" y="16" width="2.5" height="2.5" fill="#16212e"/>
+          <rect x="15.5" y="19.5" width="3" height="3.5" fill="#e30a17"/>
+        </svg>
+        <span style="width:18px;height:6px;border-radius:50%;background:rgba(14,14,17,.28);margin-top:-3px"></span>`;
+      const isaretci = new MapLibreMarker({
+        element: kutu,
+        anchor: "bottom",
+        draggable: true,
+      })
+        .setLngLat([0, 0])
+        .addTo(haritaRef.current);
+      isaretci.on("dragend", () => {
+        const { lat, lng } = isaretci.getLngLat();
+        tasindiRef.current?.({ lat, lng });
+      });
+      onizlemeRef.current = isaretci;
+      setOnizlemeKuruldu((n) => n + 1);
+    })();
+
+    return () => {
+      iptal = true;
+      onizlemeRef.current?.remove();
+      onizlemeRef.current = null;
+    };
+  }, [hazir, onizlemeVar]);
+
+  useEffect(() => {
+    const isaretci = onizlemeRef.current;
+    if (!isaretci || !siteOnizleme) return;
+    isaretci.setLngLat([siteOnizleme.lng, siteOnizleme.lat]);
+    const ad = isaretci.getElement().querySelector(".site-onizleme-ad");
+    if (ad) ad.textContent = siteOnizleme.ad;
+  }, [siteOnizleme, onizlemeKuruldu]);
+
+  /**
    * Balon bir MapLibre işaretçisine bağlanıyor: konumu harita hesaplıyor,
    * içeriği React portal ile basılıyor. Böylece harita kaydırılıp
    * yakınlaştırıldığında balon pinin üstünde kalıyor.
@@ -1371,10 +1555,11 @@ export default function Harita({
   useImperativeHandle(
     ref,
     (): HaritaApi => ({
-      ucur: (nokta, zoom = 16.5) => {
+      ucur: (nokta, zoom = 16.5, ofset = [0, 0]) => {
         haritaRef.current?.flyTo({
           center: [nokta.lng, nokta.lat],
           zoom,
+          offset: ofset,
           pitch: 55,
           duration: 1400,
           curve: 1.5,

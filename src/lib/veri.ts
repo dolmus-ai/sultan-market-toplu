@@ -4,6 +4,7 @@ import type {
   Abonelik,
   AbonelikSikligi,
   Adres,
+  KayitliSite,
   Kurye,
   KuryeKonumu,
   Musteri,
@@ -823,4 +824,71 @@ export async function sepetiSiparise(
   if (sepetHatasi) throw sepetHatasi;
 
   return data as unknown as Siparis;
+}
+
+/* ------------------------------------------------------------------ */
+/* Adres bulucu — onaylanmış siteler                                   */
+/* ------------------------------------------------------------------ */
+
+const SITE_ALANLARI =
+  "id, ad, tur, ilce, mahalle, adres, lat, lng, bloklar, kaynak, kaynak_id, notlar, ekleyen, created_at";
+
+/**
+ * Haritadaki siteler. Tablo henüz kurulmamışsa (göç uygulanmadıysa) boş
+ * liste döner — harita açılışı bu yüzden bozulmasın.
+ */
+export async function sitelerGetir(db: SupabaseClient): Promise<KayitliSite[]> {
+  const { data, error } = await db
+    .from("siteler")
+    .select(SITE_ALANLARI)
+    .order("ad")
+    .limit(2000);
+  if (error) {
+    console.warn("[siteler]", error.message);
+    return [];
+  }
+  return (data ?? []) as KayitliSite[];
+}
+
+export type YeniSite = Pick<
+  KayitliSite,
+  | "ad"
+  | "tur"
+  | "ilce"
+  | "mahalle"
+  | "adres"
+  | "lat"
+  | "lng"
+  | "bloklar"
+  | "kaynak"
+  | "kaynak_id"
+> & { notlar?: string | null };
+
+export async function siteEkle(
+  db: SupabaseClient,
+  site: YeniSite,
+): Promise<KayitliSite> {
+  const { data, error } = await db
+    .from("siteler")
+    .insert({
+      ...site,
+      ad: site.ad.trim(),
+      notlar: site.notlar?.trim() || null,
+    })
+    .select(SITE_ALANLARI)
+    .single();
+  if (error) throw error;
+  return data as KayitliSite;
+}
+
+export async function siteSil(db: SupabaseClient, id: string) {
+  // RLS başkasının eklediğini sessizce süzüyor; silinen satırı geri isteyip
+  // gerçekten gitti mi diye bakıyoruz.
+  const { data, error } = await db
+    .from("siteler")
+    .delete()
+    .eq("id", id)
+    .select("id");
+  if (error) throw error;
+  if (!data?.length) throw new Error("yetki");
 }

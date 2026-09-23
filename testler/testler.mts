@@ -61,6 +61,15 @@ import {
   oturumGecerliMi,
 } from "../src/lib/google-karo.ts";
 import { PALETLER } from "../src/lib/harita-stili.ts";
+import {
+  derlemeyiCoz,
+  kayitliEsi,
+  sadelestir,
+  sakaryadaMi,
+  siteAdresMetni,
+  siteAra,
+} from "../src/lib/site.ts";
+import { readFileSync } from "node:fs";
 
 let gecti = 0;
 const kaldi: string[] = [];
@@ -642,6 +651,108 @@ bekle("market ile arası sıfır metre", Math.round(metre({ lat: 40.7784889, lng
 
 bekle("1216 adresin maliyeti birkaç dolar", maliyetTahmini(1216) > 0.5 && maliyetTahmini(1216) < 5, `$${maliyetTahmini(1216).toFixed(2)}`);
 bekle("sıfır adres sıfır maliyet", maliyetTahmini(0) === 0);
+
+bolum("Adres bulucu");
+
+bekle(
+  "sadeleştirme",
+  sadelestir("ŞÜKÜR Konakları-2") === "sukur konaklari 2",
+  `-> ${sadelestir("ŞÜKÜR Konakları-2")}`,
+);
+bekle("İ/ı ayrımı", sadelestir("IŞIK İstiklal") === "isik istiklal");
+
+const derleme = derlemeyiCoz({
+  kayitlar: [
+    { i: "w1", a: "Şükür Konakları", t: "s", c: "Serdivan", m: "İstiklal", y: 40.77, x: 30.36, b: [["A Blok", 40.7701, 30.3601]] },
+    { i: "w2", a: "Işık Sitesi", t: "s", c: "Sapanca", m: "Göl", y: 40.69, x: 30.26 },
+    { i: "w3", a: "Kardeşler Apt.", t: "a", c: "Serdivan", m: "İstiklal", y: 40.771, x: 30.362 },
+    { i: "w4", a: "Işık Sitesi", t: "s", c: "Serdivan", m: "Arabacıalanı", y: 40.78, x: 30.35 },
+  ],
+});
+bekle(
+  "derleme çözüldü",
+  derleme.length === 4 &&
+    derleme[0].bloklar[0].ad === "A Blok" &&
+    derleme[2].tur === "apartman",
+);
+bekle("aksansız arama", siteAra(derleme, "sukur")[0]?.ad === "Şükür Konakları");
+bekle("mahalleyle arama", siteAra(derleme, "istiklal").length === 2);
+bekle("blokla arama", siteAra(derleme, "sukur a blok").length === 1);
+bekle("ilçe süzgeci", siteAra(derleme, "ışık", { ilce: "Sapanca" }).length === 1);
+bekle(
+  "tür süzgeci",
+  siteAra(derleme, "", { tur: "apartman" }).map((s) => s.ad).join() === "Kardeşler Apt.",
+);
+bekle("adda geçen öne", siteAra(derleme, "isik")[0].ad === "Işık Sitesi");
+bekle("eşleşmeyen boş", siteAra(derleme, "yokboyle").length === 0);
+
+const kayitli = [
+  {
+    id: "1",
+    ad: "Işık Sitesi",
+    tur: "site" as const,
+    ilce: "Serdivan",
+    mahalle: null,
+    adres: null,
+    lat: 40.7801,
+    lng: 30.3501,
+    bloklar: [],
+    kaynak: "google" as const,
+    kaynak_id: "g1",
+    notlar: null,
+    ekleyen: null,
+    created_at: "2026-09-24",
+  },
+];
+bekle("aynı ad yakın = eş", kayitliEsi(derleme[3], kayitli)?.id === "1");
+bekle("aynı ad uzak = eş değil", kayitliEsi(derleme[1], kayitli) === null);
+bekle(
+  "aynı kaynak kimliği = eş",
+  kayitliEsi({ ad: "Başka ad", lat: 41, lng: 30.5, kaynak: "google", kaynak_id: "g1" }, kayitli)
+    ?.id === "1",
+);
+
+bekle(
+  "adres metni",
+  siteAdresMetni(derleme[0], "A Blok") ===
+    "Şükür Konakları, A Blok, İstiklal Mah., Serdivan/Sakarya",
+  `-> ${siteAdresMetni(derleme[0], "A Blok")}`,
+);
+bekle(
+  "adres metni ilçesiz",
+  siteAdresMetni({ ad: "X Evleri", mahalle: null, ilce: null, adres: null }) ===
+    "X Evleri, Sakarya",
+);
+
+bekle("market Sakarya'da", sakaryadaMi(MARKET.nokta));
+bekle("İzmit Sakarya dışında", !sakaryadaMi({ lat: 40.7654, lng: 29.9408 }));
+
+const gercek = derlemeyiCoz(
+  JSON.parse(
+    readFileSync(new URL("../public/veri/sakarya-siteler.json", import.meta.url), "utf8"),
+  ),
+);
+bekle("derleme dosyası dolu", gercek.length > 100, `-> ${gercek.length}`);
+bekle(
+  "Overture kaydı kaynağıyla çözüldü",
+  derlemeyiCoz({
+    kayitlar: [{ i: "08f1", k: "ov", a: "Vadipark Sitesi", t: "s", c: "Serdivan", m: "", y: 40.77, x: 30.36 }],
+  })[0].anahtar === "overture:08f1",
+);
+bekle("derlemede iki kaynak da var", gercek.some((s) => s.kaynak === "overture") && gercek.some((s) => s.kaynak === "osm"));
+bekle(
+  "Overture adları temizlenmiş",
+  !gercek.some((s) => /^pudo\s|havuz|şantiye|[iı]nşaat/i.test(s.ad)),
+);
+bekle("derlemede il dışı kayıt yok", gercek.every(sakaryadaMi));
+bekle(
+  "derlemede blok kodu site olmamış",
+  !gercek.some((s) => /^[A-Z]{0,3}\d{0,3}[-\s]?\d{1,4}$/.test(s.ad)),
+);
+bekle(
+  "derlemede tekil anahtar",
+  new Set(gercek.map((s) => s.anahtar)).size === gercek.length,
+);
 
 /* ------------------------------------------------------------------ */
 console.log(`\n${"=".repeat(52)}`);

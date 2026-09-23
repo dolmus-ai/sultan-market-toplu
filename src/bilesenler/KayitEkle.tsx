@@ -19,10 +19,12 @@ import {
   siparisDuzenle,
   siparisEkle,
 } from "@/lib/veri";
+import { kayitliyiAdayaCevir, siteAdresMetni, siteAra } from "@/lib/site";
 import type {
   Abonelik,
   Adres,
   AbonelikSikligi,
+  KayitliSite,
   Musteri,
   OdemeYontemiTanimi,
   Sepet,
@@ -75,6 +77,8 @@ export default function KayitEkle({
   yontemler,
   kuryeKonumu,
   duzenlenen,
+  siteler = [],
+  baslangicAdres,
   onKapat,
   onEklendi,
 }: {
@@ -84,6 +88,16 @@ export default function KayitEkle({
   kuryeKonumu: { lat: number; lng: number } | null;
   /** Doluysa akış doğrudan detay adımında, düzenleme kipinde açılır. */
   duzenlenen?: DuzenlenenKayit | null;
+  /** Haritadaki onaylı siteler — adres adımında "Siteden seç" için. */
+  siteler?: KayitliSite[];
+  /** Adres bulucudan "Buraya kayıt aç" ile gelindiyse yeni adres bununla dolu açılır. */
+  baslangicAdres?: {
+    adres_metni: string;
+    bina: string;
+    lat: number;
+    lng: number;
+    etiket: string;
+  } | null;
   onKapat: () => void;
   onEklendi: (kayit: EklenenKayit, mesaj: string) => void;
 }) {
@@ -104,13 +118,15 @@ export default function KayitEkle({
   const [adres, setAdres] = useState<Adres | null>(null);
   const [yeniAdres, setYeniAdres] = useState({
     baslik: "Ev",
-    adres_metni: "",
-    bina: "",
+    adres_metni: baslangicAdres?.adres_metni ?? "",
+    bina: baslangicAdres?.bina ?? "",
     kat: "",
     daire: "",
     tarif: "",
   });
-  const [konum, setKonum] = useState<{ lat: number; lng: number } | null>(null);
+  const [konum, setKonum] = useState<{ lat: number; lng: number } | null>(
+    baslangicAdres ? { lat: baslangicAdres.lat, lng: baslangicAdres.lng } : null,
+  );
 
   /* --- Kayıt --- */
   const [tur, setTur] = useState<KayitTuru>(duzenlenen?.tur ?? "teslimat");
@@ -183,7 +199,11 @@ export default function KayitEkle({
         /** Hangi servis buldu — Google yoksa kapı numarası şaşabilir. */
         motor?: "google" | "nominatim";
       }
-  >({ durum: "bos" });
+  >(
+    baslangicAdres
+      ? { durum: "bulundu", ad: baslangicAdres.etiket, kaba: false }
+      : { durum: "bos" },
+  );
 
   /* Müşteri araması — yazarken 250 ms bekliyor. */
   useEffect(() => {
@@ -254,7 +274,9 @@ export default function KayitEkle({
       try {
         const liste = await musteriAdresleri(db, musteri.id);
         setAdresler(liste);
-        setAdres(liste[0] ?? null);
+        // Bulucudan gelindiyse kurye yeni adres açmak istiyor; kayıtlı
+        // adreslerden birini hazır seçip formu gizlemiyoruz.
+        setAdres(baslangicAdres ? null : (liste[0] ?? null));
         ileri();
       } catch {
         setHata("Adresler okunamadı.");
@@ -602,6 +624,32 @@ export default function KayitEkle({
                         className={`${GIRDI} h-auto resize-none py-3`}
                       />
                     </Alan>
+                    {siteler.length > 0 && (
+                      <SiteSecici
+                        siteler={siteler}
+                        onSec={(site, blok) => {
+                          const aday = kayitliyiAdayaCevir(site);
+                          const bl = blok
+                            ? site.bloklar.find((b) => b.ad === blok)
+                            : null;
+                          setYeniAdres((o) => ({
+                            ...o,
+                            adres_metni: siteAdresMetni(aday, blok),
+                            bina: blok ?? o.bina,
+                          }));
+                          setKonum({
+                            lat: bl?.lat ?? site.lat,
+                            lng: bl?.lng ?? site.lng,
+                          });
+                          setGeokod({
+                            durum: "bulundu",
+                            ad: blok ? `${site.ad} · ${blok}` : site.ad,
+                            // Kuryenin kapıda onayladığı site konumu — kaba değil.
+                            kaba: false,
+                          });
+                        }}
+                      />
+                    )}
                     <div className="mt-2 grid grid-cols-3 gap-2">
                       {(["bina", "kat", "daire"] as const).map((alan) => (
                         <input
@@ -1019,6 +1067,119 @@ function Baslik({ ust, ana, alt }: { ust: string; ana: string; alt?: string }) {
         {ana}
       </h2>
       {alt && <p className="truncate text-[13px] text-gri">{alt}</p>}
+    </div>
+  );
+}
+
+/**
+ * Haritadaki onaylı sitelerden adres doldurur: site seçilince adres metni
+ * ve konum yazılır, varsa blok seçilince bina ve pin bloğa kayar.
+ */
+function SiteSecici({
+  siteler,
+  onSec,
+}: {
+  siteler: KayitliSite[];
+  onSec: (site: KayitliSite, blok: string | null) => void;
+}) {
+  const [acik, setAcik] = useState(false);
+  const [sorgu, setSorgu] = useState("");
+  const [secilen, setSecilen] = useState<KayitliSite | null>(null);
+  const [blok, setBlok] = useState<string | null>(null);
+
+  const sonuclar = siteAra(siteler.map(kayitliyiAdayaCevir), sorgu, {}, 5);
+
+  if (!acik) {
+    return (
+      <button
+        type="button"
+        onClick={() => setAcik(true)}
+        className="mt-2 flex h-10 w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-cizgi text-[13px] font-bold text-gri hover:bg-yuzey2"
+      >
+        🏘️ Haritadaki sitelerden seç
+      </button>
+    );
+  }
+
+  return (
+    <div className="mt-2 rounded-2xl border border-cizgi bg-yuzey p-2">
+      {secilen ? (
+        <div className="px-1.5 py-1">
+          <div className="flex items-center gap-2">
+            <p className="min-w-0 flex-1 truncate text-[13px] font-black">
+              🏘️ {secilen.ad}
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setSecilen(null);
+                setBlok(null);
+              }}
+              className="text-[12px] font-bold text-gri"
+            >
+              Değiştir
+            </button>
+          </div>
+          {secilen.bloklar.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {secilen.bloklar.map((b) => (
+                <button
+                  type="button"
+                  key={b.ad}
+                  onClick={() => {
+                    const yeni = blok === b.ad ? null : b.ad;
+                    setBlok(yeni);
+                    onSec(secilen, yeni);
+                  }}
+                  className={`rounded-hap border px-2.5 py-1 text-[12px] font-bold ${
+                    blok === b.ad
+                      ? "border-kontrast bg-kontrast text-white"
+                      : "border-cizgi bg-yuzey"
+                  }`}
+                >
+                  {b.ad}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        <>
+          <input
+            autoFocus
+            value={sorgu}
+            onChange={(e) => setSorgu(e.target.value)}
+            placeholder="Site adı ya da mahalle"
+            className="h-10 w-full rounded-xl bg-yuzey2 px-3 text-[14px] font-semibold outline-none"
+          />
+          {sonuclar.map((a) => {
+            const site = siteler.find((s) => `kayit:${s.id}` === a.anahtar);
+            if (!site) return null;
+            return (
+              <button
+                type="button"
+                key={a.anahtar}
+                onClick={() => {
+                  setSecilen(site);
+                  onSec(site, null);
+                }}
+                className="mt-1 flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left hover:bg-yuzey2"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13px] font-black">{a.ad}</span>
+                  <span className="block truncate text-[11px] text-gri">
+                    {[a.mahalle, a.ilce].filter(Boolean).join(" · ")}
+                  </span>
+                </span>
+                <span className="text-gri">›</span>
+              </button>
+            );
+          })}
+          {sonuclar.length === 0 && (
+            <p className="px-2 py-2 text-[12px] text-gri">Eşleşen site yok.</p>
+          )}
+        </>
+      )}
     </div>
   );
 }

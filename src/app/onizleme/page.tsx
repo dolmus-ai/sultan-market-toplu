@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import KuryeUygulamasi from "@/bilesenler/KuryeUygulamasi";
 import type {
   Abonelik,
+  KayitliSite,
   Kalem,
   Sepet,
   Siparis,
@@ -161,6 +162,45 @@ const SEPETLER: Sepet[] = [1, 4, 7].map((i) => ({
   })),
 }));
 
+/** Adres bulucuda onaylanmış gibi duran örnek siteler. */
+const SITELER: KayitliSite[] = [
+  {
+    id: "site-1",
+    ad: "Şükür Konakları",
+    tur: "site",
+    ilce: "Serdivan",
+    mahalle: "İstiklal",
+    adres: null,
+    lat: 40.77648,
+    lng: 30.3509,
+    bloklar: [
+      { ad: "A Blok", lat: 40.7767, lng: 30.3505 },
+      { ad: "B Blok", lat: 40.7762, lng: 30.3513 },
+    ],
+    kaynak: "osm",
+    kaynak_id: "w758933396",
+    notlar: null,
+    ekleyen: "onizleme",
+    created_at: "2026-09-24T08:00:00Z",
+  },
+  {
+    id: "site-2",
+    ad: "Kardeşler Apt.",
+    tur: "apartman",
+    ilce: "Serdivan",
+    mahalle: "Arabacıalanı",
+    adres: "Orhan Gazi Sk.",
+    lat: 40.7812,
+    lng: 30.3547,
+    bloklar: [],
+    kaynak: "elle",
+    kaynak_id: null,
+    notlar: null,
+    ekleyen: null,
+    created_at: "2026-09-20T08:00:00Z",
+  },
+];
+
 /**
  * Defter yüklendikten sonraki gerçek hacmi denemek için çoğaltılmış abone
  * listesi: `/onizleme?abonelik=1215`. Market defterinde binden fazla abone
@@ -209,6 +249,7 @@ export default async function OnizlemeSayfasi({
       baslangicTeslimatlar={TESLIMATLAR}
       baslangicAbonelikler={abonelikler}
       baslangicSepetler={SEPETLER}
+      baslangicSiteler={SITELER}
       baslangicYontemler={[
         { kod: "nakit", ad: "Nakit", para_alinir: true, sira: 10, aktif: true },
         {

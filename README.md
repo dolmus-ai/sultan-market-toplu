@@ -58,6 +58,7 @@ ve market konumu gizli değil. Yerelde farklı bir değer denemek isterseniz
 | `NEXT_PUBLIC_MARKET_ACILIS` | Açılış saati (varsayılan `07:30`) — bu saatten önce hiçbir teslimat "gecikti" sayılmaz |
 | `NEXT_PUBLIC_MERKEZ_LAT` / `_LNG` / `_ZOOM` | Kurye konumu alınamazsa haritanın açılacağı yer (varsayılan: market) |
 | `OSRM_SUNUCU` | Gerçek yol ağı rotası. Boşsa her şey yerel hesaplanır (aşağıya bakın) |
+| `GOOGLE_MAPS_API_KEY` | İsteğe bağlı, yalnızca sunucu. Doluysa adres bulucunun canlı araması Google Places'i de sorar (aşağıya bakın) |
 
 **Market konumu:** Arabacıalanı Mah. Orhan Gazi Sk. No:19, 54050 Serdivan/Sakarya
 → `40.7784889, 30.3518378` (Google Haritalar'daki işletme pini). Harita ve tüm
@@ -604,6 +605,91 @@ paketine girmesin diye.
 Abonelik çıktısı yukarıdaki **abone defteri biçiminde** yazılıyor: aynı dosya
 indirilip Excel'de düzenlenip toplu yüklemeden geri verilebiliyor. Kapı
 bilgisi ve koordinatlar da sütun olarak gittiği için gidiş-dönüşte kaybolmuyor.
+
+## Adres bulucu
+
+Üst çubuktaki **bina** düğmesi (masaüstünde "Adres bul") soldan bir yan panel
+açar: Sakarya'daki siteleri ve apartmanları bulup onaylayarak haritaya eklemek
+için.
+
+1. **Ara ya da gez.** Arama kutusu boşken liste kuryeye (konum yoksa markete)
+   en yakından uzağa sıralanır; 16 ilçe çipi ve Site/Apartman seçimiyle
+   daraltılır. Arama Türkçe harfe duyarsızdır ("sukur konak" → Şükür
+   Konakları) ve mahalle ile blok adlarında da arar.
+2. **Adaya dokun.** Harita oraya uçar, lacivert **sürüklenebilir pin** çıkar.
+   Kurye adı, türü, ilçe ve mahalleyi düzeltir; pini sürükleyerek ya da
+   haritaya dokunarak girişin olduğu noktaya taşır. Sitenin blokları
+   biliniyorsa çip olarak çıkar, dokununca pin o bloğa gider.
+3. **Onayla, haritaya ekle.** Kayıt `siteler` tablosuna düşer; realtime ile
+   **tüm kuryelerin haritasında** lacivert noktayla görünür (katman
+   panelinde "Siteler"). Aynı site ikinci kez eklenemez — hem kaynak kimliği
+   (`kaynak, kaynak_id` tekil) hem "aynı ad, 150 m içinde" kontrolü var.
+
+Haritadaki site pinine dokunmak paneli o sitenin kartıyla açar: bloklar,
+**Haritada göster**, **Buraya kayıt aç** (Yeni kayıt akışı adres metni —
+"Şükür Konakları, B Blok, İstiklal Mah., Serdivan/Sakarya" — ve konumla dolu
+açılır) ve kendi eklediği siteyse **Haritadan kaldır**. Yeni kayıt akışının
+adres adımında da "Haritadaki sitelerden seç" var.
+
+### Veri nereden geliyor
+
+| Kaynak | Ne zaman | Anahtar |
+| --- | --- | --- |
+| **Hazır liste** — `public/veri/sakarya-siteler.json` | Panel açılınca, anında | — |
+| **Canlı arama** — `GET /api/site-ara?q=…` (Nominatim) | "İnternette ara" / Enter | — |
+| **Google Places (Text Search)** — aynı uç nokta | `GOOGLE_MAPS_API_KEY` doluysa canlı aramaya eklenir | Gerekli |
+| **Haritaya dokunarak ekle** — `GET /api/site-ara?lat=…&lng=…` | Listede hiç yoksa | — |
+
+Hazır liste iki ücretsiz açık kaynaktan **derlenir**; uygulama çalışırken
+hiçbirine gidilmez (Overpass'ta il geneli sorgu dakikalar sürüyor ve sık sık
+504 dönüyor):
+
+```bash
+pip install duckdb                          # bir kez
+python scripts/overture-cek.py              # Overture Maps adayları (~20 sn)
+node scripts/siteleri-derle.mjs             # OSM + Overture'ı birleştir
+node scripts/siteleri-derle.mjs --tazele    # OSM'yi Overpass'tan yeniden indir
+```
+
+- **OpenStreetMap** — çizili site alanları, adlı apartmanlar ve bloklar. Betik
+  il sınırı çokgeniyle Kocaeli/Bilecik taşmalarını atar, "B2-17", "41 nolu
+  villa", "3. Blok" gibi blok etiketlerini site saymayıp en yakın siteye blok
+  olarak bağlar, sanayi sitesi/yurt/mahalle adlarını eler.
+- **Overture Maps** (Meta, Microsoft, Amazon ortak açık verisi, ticari
+  kullanım serbest) — mekân katmanındaki site adları. Çoğu Meta işletme
+  sayfası; siteler "historic_site", "home_developer", "real_estate_agent",
+  kargo dolabı ("pudo X Sitesi") gibi tutarsız kategorilerde duruyor. Betik
+  adları temizler (müteahhit öneki, sondaki ilçe adı, "…Parkı", bozuk büyük
+  harf), havuz/sahil/şantiye/satış ofisi kayıtlarını atar. Aynı site OSM'de de
+  varsa OSM kaydı kalır.
+
+Her kayda il sınırı içinde ilçe/mahalle yazılır. Şu anki dosya: **905 kayıt**
+(826 site, 79 adlı apartman; 189 OSM + 716 Overture), 134 KB.
+
+Taranıp işe yaramadığı görülen ücretsiz kaynaklar: Overture bina katmanı
+(Türkiye'de OSM'nin kopyası), Overture adres katmanı (Türkiye boş), Wikidata
+(Sakarya'da site kaydı yok), GeoNames (yalnızca köy/mahalle adları),
+Microsoft/Google bina ayak izleri (ad içermiyor).
+
+> **Kapsam uyarısı:** Bu liste Sakarya'daki tüm siteleri kapsamaz ve
+> Overture'daki bazı kayıtların konumu işletme sayfasının işaretlendiği nokta
+> olduğu için birkaç yüz metre sapabilir — bu yüzden her aday kurye onayından
+> geçip pini kapıya taşınarak haritaya ekleniyor. Eksikleri canlı arama
+> (özellikle Google anahtarıyla) ve "haritaya dokunarak ekle" tamamlar.
+> Eksiksiz resmî kaynak UAVT'dir (NVİ); toplu erişimi protokol gerektirir.
+>
+> **Google koşulları:** Google Places sonuçları yalnızca canlı aramada
+> gösterilir, hazır listeye yazılmaz. Onaylanan site `kaynak='google'` ve
+> `place_id` ile saklanır; konum kuryenin haritada onayladığı noktadır. Google
+> Maps Platform koşulları Google'dan gelen koordinatların kalıcı
+> saklanmasını kısıtlıyor — ticari kullanımda koşulları kontrol edin.
+> Google Haritalar sayfalarından veri kazımak (scraping) bu koşullara aykırı
+> olduğu için yapılmadı.
+
+Tablo `supabase/migrations/20260924_siteler.sql` ile kuruldu. RLS: personel
+okur/ekler/günceller; kurye yalnızca **kendi eklediğini** siler; sahip tam
+yetkili. Kurye kimliğiyle sınandı (ekleme, okuma, tekrar kaydın ve il dışı
+noktanın reddi, kendi kaydını silme, başkasınınkini silememe).
 
 ## Rota ve navigasyon
 

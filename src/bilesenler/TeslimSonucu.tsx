@@ -100,6 +100,8 @@ export default function TeslimSonucu({
   const fark = sayisalTutar - (siparis.tutar ?? 0);
   const paraAlinir = yontem ? paraAlinirMi(yontem, yontemler) : true;
   const musteriAdi = siparis.musteri?.ad?.trim() ?? "";
+  // Veresiyede para el değiştirmiyor: tutar borç, kişi borcu üstlenen.
+  const veresiye = yontem === "veresiye";
 
   const eksikler = odemeAlindi
     ? [
@@ -284,7 +286,7 @@ export default function TeslimSonucu({
 
                   <div className="mt-4">
                     <p className="mb-2 text-[12px] font-bold text-gri">
-                      Ödenen tutar <Zorunlu />
+                      {veresiye ? "Veresiye tutarı" : "Ödenen tutar"} <Zorunlu />
                     </p>
                     <div className="flex items-center gap-2">
                       <input
@@ -320,20 +322,23 @@ export default function TeslimSonucu({
                     </div>
                     {yontem && !paraAlinir && (
                       <p className="mt-2 rounded-2xl bg-yuzey2 px-4 py-2.5 text-[12px] font-semibold text-gri">
-                        Bu yöntemde kurye elden para almıyor; tutar kayda
-                        geçer ama kasaya işlenmez.
+                        {veresiye
+                          ? "Para alınmadı; tutar bu kişinin borcu olarak yazılır, kasaya işlenmez."
+                          : "Bu yöntemde kurye elden para almıyor; tutar kayda geçer ama kasaya işlenmez."}
                       </p>
                     )}
                   </div>
 
                   <div className="mt-4">
                     <p className="mb-2 text-[12px] font-bold text-gri">
-                      Ödemeyi yapan <Zorunlu />
+                      {veresiye ? "Veresiye yazılan kişi" : "Ödemeyi yapan"} <Zorunlu />
                     </p>
                     <input
                       value={odeyen}
                       onChange={(e) => setOdeyen(e.target.value)}
-                      placeholder="Ödemeyi yapan kişinin adı"
+                      placeholder={
+                        veresiye ? "Borcu üstlenen kişinin adı" : "Ödemeyi yapan kişinin adı"
+                      }
                       aria-label="Ödemeyi yapan"
                       autoComplete="off"
                       aria-invalid={denendi && !odeyen.trim()}

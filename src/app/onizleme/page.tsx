@@ -261,6 +261,7 @@ export default async function OnizlemeSayfasi({
           sira: 20,
           aktif: true,
         },
+        { kod: "veresiye", ad: "Veresiye", para_alinir: false, sira: 50, aktif: true },
       ]}
     />
   );

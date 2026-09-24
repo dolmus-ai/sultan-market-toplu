@@ -130,9 +130,19 @@ export default function TeslimatDetay({
 
       {/* Teslimde girilen ödeme: yöntem, tutar, ödeyen */}
       {siparis.odeme_alindi === true && (
-        <div className="rounded-[20px] border border-yesil/40 bg-yesil/10 p-3.5">
-          <p className="text-[12px] font-black uppercase tracking-wide text-yesil">
-            Ödeme alındı
+        <div
+          className={`rounded-[20px] border p-3.5 ${
+            siparis.odeme_yontemi === "veresiye"
+              ? "border-turuncu/40 bg-turuncu/10"
+              : "border-yesil/40 bg-yesil/10"
+          }`}
+        >
+          <p
+            className={`text-[12px] font-black uppercase tracking-wide ${
+              siparis.odeme_yontemi === "veresiye" ? "text-turuncu" : "text-yesil"
+            }`}
+          >
+            {siparis.odeme_yontemi === "veresiye" ? "Veresiye yazıldı" : "Ödeme alındı"}
           </p>
           <p className="mt-1 text-[14px] font-bold">
             {[

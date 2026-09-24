@@ -31,6 +31,18 @@ function odemeSatiri(
   yontemler: OdemeYontemiTanimi[],
 ): { metin: string; ton: Ton } {
   if (s.durum === "teslim") {
+    // Veresiye para alınmış gibi yeşil görünmesin: borç turuncu.
+    if (s.odeme_alindi === true && s.odeme_yontemi === "veresiye")
+      return {
+        metin: [
+          "Veresiye",
+          s.odeme_tutari != null ? para(s.odeme_tutari) : null,
+          s.odeme_yapan,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        ton: "turuncu",
+      };
     if (s.odeme_alindi === true)
       return {
         metin: [

@@ -164,6 +164,47 @@ const SEPETLER: Sepet[] = [1, 4, 7].map((i) => ({
   })),
 }));
 
+/** Defterden gelmiş gibi konumsuz aboneler — "Toplu düzelt" sekmesi için. */
+const DEFTER_ABONELERI: Abonelik[] = [
+  ["Ayten Kaya", "DAYMINT AB 10"],
+  ["Murat Er", "BU YAPI DİAMONT A BLOK A GİRİŞİ D 2"],
+  ["Sibel Tan", "DAYMNT C BLOK D:2"],
+  ["Hakan Oral", "TERAS TRİO C BLOK A GİRİŞİ D:4"],
+  ["Esra Gül", "TERAS TRİO CB D:1"],
+  ["Kemal Can", "KİRAZ EVLER D BLOK D:4 ŞİFRE:5400"],
+  ["Nur Ak", "SAMET ORDU'NUN KARŞI KOMŞUSU"],
+].map(([ad, adres], i) => ({
+  id: `defter-${i}`,
+  musteri_id: `defter-musteri-${i}`,
+  adres_id: `defter-adres-${i}`,
+  baslik: "Abonelik",
+  siklik: "haftalik",
+  gunler: [],
+  teslim_saati: "08:00:00",
+  baslangic: "2026-09-20",
+  bitis: null,
+  durum: "aktif",
+  tutar: 0,
+  notlar: null,
+  musteri: { id: `defter-musteri-${i}`, ad, telefon: null, notlar: null },
+  adres: {
+    id: `defter-adres-${i}`,
+    musteri_id: `defter-musteri-${i}`,
+    baslik: "Ev",
+    adres_metni: adres,
+    bina: null,
+    kat: null,
+    daire: null,
+    tarif: null,
+    kurye_notu: null,
+    kapi_kodu: null,
+    lat: null,
+    lng: null,
+    konum_dogrulandi: false,
+  },
+  kalemler: [],
+}));
+
 /** Adres bulucuda onaylanmış gibi duran örnek siteler. */
 const SITELER: KayitliSite[] = [
   {
@@ -236,7 +277,7 @@ export default async function OnizlemeSayfasi({
 }) {
   if (process.env.NODE_ENV === "production") notFound();
   const { abonelik } = await searchParams;
-  const abonelikler = cogalt(Number(abonelik) || 0);
+  const abonelikler = [...cogalt(Number(abonelik) || 0), ...DEFTER_ABONELERI];
 
   return (
     <KuryeUygulamasi

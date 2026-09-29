@@ -71,6 +71,7 @@ import {
   siteAdresMetni,
   siteAra,
 } from "../src/lib/site.ts";
+import { aboneleriGrupla, adresAyristir, siteAnahtari } from "../src/lib/abone-grup.ts";
 import { readFileSync } from "node:fs";
 
 let gecti = 0;
@@ -769,6 +770,44 @@ bekle(
   "derlemede tekil anahtar",
   new Set(gercek.map((s) => s.anahtar)).size === gercek.length,
 );
+
+/* ------------------------------------------------------------------ */
+bolum("Toplu konum düzeltme");
+
+const ay = adresAyristir;
+const k54 = ay("KARAT 54 A BLOK D:11");
+bekle("site adındaki sayı korunur", k54.site === "KARAT 54" && k54.daire === "11", JSON.stringify(k54));
+const sk = ay("ŞÜKÜR KONAKLARI NO:13");
+bekle("kapı no binaya", sk.site === "ŞÜKÜR KONAKLARI" && sk.bina === "13", JSON.stringify(sk));
+const kz = ay("KİRAZ EVLER D BLOK D:4 ŞİFRE:5400");
+bekle("blok ve şifre tarife", kz.tarif === "D BLOK D:4 ŞİFRE:5400" && kz.daire === "4", JSON.stringify(kz));
+bekle("tireli kapı no", ay("AKKENT-16").bina === "16" && ay("AKKENT-16").site === "AKKENT");
+bekle("tireli site adı", ay("SİPAHİER-2 I BLOK").site === "SİPAHİER-2");
+bekle("PARK-2 kod sayılmaz", ay("İNKO PARK-2 B2 D:2").site === "İNKO PARK-2");
+bekle("tarif adresi", ay("TRAFONUN ARKASINDAKİ PEMBE BİNA YANI").tarifMi);
+bekle("telefon atılır", ay("(531 253 77 93)   TERAS EVLER CA BLOK D:1").site === "TERAS EVLER");
+
+bekle("anahtar yazım farkı", siteAnahtari("ÜNBAY SERDİVAN KONAKLARI") === siteAnahtari("SERDİVAN UNBAY"));
+bekle("anahtar Daymint", siteAnahtari("BU YAPI DİAMONT") === siteAnahtari("DAYMINT"));
+bekle("anahtar boşluk", siteAnahtari("SAFİR PARK") === siteAnahtari("SAFİRPARK SİT."));
+
+const tg = aboneleriGrupla(
+  [
+    "DAYMINT AB 10", "BU YAPI DİAMONT A BLOK A GİRİŞİ D 2", "DAYMNT C BLOK D:2",
+    "KARAT 54 A BLOK D:11", "KARAT-54 A BLOK D:12",
+    "SİPAHİER-2 I BLOK", "SİPAHİER 1 J2",
+    "KİRAZ EVLER C:8", "SAKURA KİRAZ EVLER B BKOL D:",
+    "SAMET ORDU'NUN KARŞI KOMŞUSU",
+  ],
+  (x: string) => x,
+);
+const grupAl = (m: string) => tg.find((g) => g.uyeler.some((u) => u.ham === m));
+bekle("Daymint yazımları tek grupta", grupAl("DAYMNT C BLOK D:2")?.uyeler.length === 3);
+bekle("KARAT-54 Karat 54'e katıldı", grupAl("KARAT-54 A BLOK D:12") === grupAl("KARAT 54 A BLOK D:11"));
+bekle("Sipahier 1 ve 2 ayrı", grupAl("SİPAHİER-2 I BLOK") !== grupAl("SİPAHİER 1 J2"));
+bekle("Kiraz ve Sakura Kiraz ayrı", grupAl("KİRAZ EVLER C:8") !== grupAl("SAKURA KİRAZ EVLER B BKOL D:"));
+bekle("tarif tek başına, sonda", tg[tg.length - 1].tarifMi && tg[tg.length - 1].uyeler.length === 1);
+bekle("büyük grup önde", tg[0].uyeler.length === 3);
 
 /* ------------------------------------------------------------------ */
 console.log(`\n${"=".repeat(52)}`);

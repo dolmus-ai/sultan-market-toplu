@@ -654,6 +654,34 @@ Haritadaki site pinine dokunmak paneli o sitenin kartıyla açar: bloklar,
 açılır) ve kendi eklediği siteyse **Haritadan kaldır**. Yeni kayıt akışının
 adres adımında da "Haritadaki sitelerden seç" var.
 
+### Toplu düzelt — defterden gelen konumsuz abonelikler
+
+Adres bulucunun **Toplu düzelt** sekmesi, defterden gelen konumsuz
+abonelikleri (adresi "DAYMINT AB 10", "KİRAZ EVLER D BLOK D:4" gibi serbest
+metin) **sitelerine göre gruplar** (`src/lib/abone-grup.ts`). Aynı sitenin
+farklı yazımları tek grupta toplanır (ÜNBAY / UNBAY SERDİVAN, DAYMINT /
+DİAMONT / DYMINT, SAFİR PARK / SAFİRPARK, KARAT 54 / KARAT-54); rakamı farklı
+olanlar (Sipahier-1 / Sipahier-2) ayrı kalır.
+
+Bir siteye **bir kez** konum verilir — Google Haritalar bağlantısı/koordinatı
+yapıştırılır ya da onaylı öneri seçilir. Öneri önce onaylı kaynaklardan gelir
+(haritaya eklenmiş siteler ve aynı sitede daha önce düzeltilmiş aboneler);
+hazır listeden gelen öneri "doğrulanmamış" yazar, çünkü Google'dan birkaç yüz
+metre sapabilir. Kaydedince o sitedeki seçili her abone, elle yapılan
+düzeltmeyle aynı biçimde yeniden kurulur (`aboneligi_yeniden_kur`, tek
+işlemde):
+
+- yeni adres: "Site adı, sokak, Mahalle Mah., İlçe/Sakarya" (sokak ve mahalle
+  noktadan OpenStreetMap ile), konum doğrulanmış; kapı no → bina, D:x → daire,
+  blok/giriş/şifre → tarif,
+- yeni abonelik: Pazartesi–Cuma 09:00, bugünden başlar; başlık, tutar ve not
+  eskisinden taşınır,
+- eski abonelik silinir.
+
+İsteğe bağlı olarak site de haritaya eklenir, böylece sonraki aramada onaylı
+öneri olarak gelir. Site adı olmayan tarif adresleri ("TRAFONUN ARKASINDAKİ
+PEMBE BİNA") ayrı listede tek tek durur.
+
 ### Google Haritalar'dan konum yapıştırma (anahtarsız)
 
 Onay kartındaki **Google Haritalar'dan konum yapıştır** anahtar gerektirmez.

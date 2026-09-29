@@ -2586,6 +2586,9 @@ export default function KuryeUygulamasi({
             onGit={(n) => bulucuyaUc(n, true, 18)}
             onKayitAc={siteyeKayitAc}
             onGoogleEsle={(a) => void googleIleEsle(a)}
+            db={db}
+            abonelikler={abonelikler}
+            onAboneliklerDegisti={listeleriTazele}
             onKapat={bulucuyuKapat}
           />
         )}

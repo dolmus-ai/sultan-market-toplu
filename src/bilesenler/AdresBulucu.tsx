@@ -14,7 +14,10 @@ import {
   type SiteAdayi,
 } from "@/lib/site";
 import { haversine, mesafeYaz } from "@/lib/rota";
-import type { KayitliSite, Nokta, SiteTuru } from "@/lib/tipler";
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+import TopluKonum from "./TopluKonum";
+import type { Abonelik, KayitliSite, Nokta, SiteTuru } from "@/lib/tipler";
 
 /**
  * Adres bulucu — soldan açılan yan panel.
@@ -50,10 +53,14 @@ type Props = {
   onKayitAc: (site: SiteAdayi, blok: string | null) => void;
   /** Adayı Google Haritalar'da arayıp pini oraya taşır. */
   onGoogleEsle: (aday: SiteAdayi) => void;
+  /** Toplu düzelt sekmesi: konumsuz abonelikleri siteye göre düzeltir. */
+  db: SupabaseClient;
+  abonelikler: Abonelik[];
+  onAboneliklerDegisti: () => Promise<void> | void;
   onKapat: () => void;
 };
 
-type Sekme = "bul" | "harita";
+type Sekme = "bul" | "harita" | "toplu";
 
 type Canli =
   | { durum: "bos" }
@@ -64,6 +71,7 @@ type Canli =
 const SEKMELER: { anahtar: Sekme; ad: string }[] = [
   { anahtar: "bul", ad: "Bul" },
   { anahtar: "harita", ad: "Haritadakiler" },
+  { anahtar: "toplu", ad: "Toplu düzelt" },
 ];
 
 /** Derleme dosyası oturum boyunca bir kez iner. */
@@ -96,6 +104,9 @@ export default function AdresBulucu({
   onGit,
   onKayitAc,
   onGoogleEsle,
+  db,
+  abonelikler,
+  onAboneliklerDegisti,
   onKapat,
 }: Props) {
   const [sekme, setSekme] = useState<Sekme>("bul");
@@ -179,6 +190,10 @@ export default function AdresBulucu({
   }
 
   const kart = onizleme != null || secili != null;
+  const konumsuzSayi = useMemo(
+    () => abonelikler.filter((a) => a.adres?.lat == null).length,
+    [abonelikler],
+  );
 
   return (
     <motion.aside
@@ -281,7 +296,9 @@ export default function AdresBulucu({
                     placeholder={
                       sekme === "bul"
                         ? "Site, apartman ya da mahalle ara"
-                        : "Haritadaki sitelerde ara"
+                        : sekme === "toplu"
+                          ? "Site, adres ya da müşteri ara"
+                          : "Haritadaki sitelerde ara"
                     }
                     className="h-12 w-full rounded-2xl border border-cizgi bg-yuzey2 pl-10 pr-10 text-[15px] font-semibold outline-none placeholder:font-medium placeholder:text-gri focus:border-kirmizi [&::-webkit-search-cancel-button]:hidden"
                   />
@@ -324,10 +341,14 @@ export default function AdresBulucu({
                           {s.anahtar === "harita" && kayitlilar.length > 0 && (
                             <span className="ml-1 opacity-70">{kayitlilar.length}</span>
                           )}
+                          {s.anahtar === "toplu" && konumsuzSayi > 0 && (
+                            <span className="ml-1 opacity-70">{konumsuzSayi}</span>
+                          )}
                         </span>
                       </button>
                     ))}
                   </div>
+                  {sekme !== "toplu" && (
                   <select
                     value={tur ?? ""}
                     onChange={(e) => setTur((e.target.value || null) as SiteTuru | null)}
@@ -338,9 +359,11 @@ export default function AdresBulucu({
                     <option value="site">Site</option>
                     <option value="apartman">Apartman</option>
                   </select>
+                  )}
                 </div>
 
                 {/* İlçeler */}
+                {sekme !== "toplu" && (
                 <div className="ince-kaydirma -mx-4 flex gap-1.5 overflow-x-auto px-4 pb-0.5">
                   <IlceCipi
                     ad="Tüm ilçeler"
@@ -357,11 +380,23 @@ export default function AdresBulucu({
                     />
                   ))}
                 </div>
+                )}
               </div>
 
               {/* Sonuçlar */}
               <div className="ince-kaydirma min-h-0 flex-1 overflow-y-auto border-t border-cizgi px-3 pb-6 pt-2">
-                {sekme === "harita" ? (
+                {sekme === "toplu" ? (
+                  <TopluKonum
+                    db={db}
+                    abonelikler={abonelikler}
+                    derleme={derleme ?? []}
+                    kayitlilar={kayitlilar}
+                    sorgu={sorgu}
+                    merkez={merkez}
+                    onGit={onGit}
+                    onDegisti={onAboneliklerDegisti}
+                  />
+                ) : sekme === "harita" ? (
                   <>
                     {haritadakiler.map((a) => {
                       const k = kayitlilar.find((x) => `kayit:${x.id}` === a.anahtar);

@@ -30,7 +30,7 @@ export default async function HaritaSayfasi() {
     { onConflict: "id", ignoreDuplicates: true },
   );
 
-  const [kurye, teslimatlar, abonelikler, sepetler, yontemler, siteler] =
+  const [kurye, teslimatlar, abonelikler, sepetler, yontemler, siteler, profil] =
     await Promise.all([
       kuryeGetir(db, user.id),
       siparisleriGetir(db, bugununTarihi()),
@@ -38,6 +38,8 @@ export default async function HaritaSayfasi() {
       sepetleriGetir(db),
       odemeYontemleriGetir(db),
       sitelerGetir(db),
+      // Defter ekibi (profiles kaydı olan) deftere geri dönebilir.
+      db.from("profiles").select("id").eq("id", user.id).maybeSingle(),
     ]);
 
   return (
@@ -48,6 +50,7 @@ export default async function HaritaSayfasi() {
       baslangicSepetler={sepetler}
       baslangicYontemler={yontemler.filter((y) => y.aktif)}
       baslangicSiteler={siteler}
+      defterErisimi={profil.data != null}
     />
   );
 }

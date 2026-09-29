@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Manrope } from "next/font/google";
 import "./globals.css";
 import ServisCalisani from "@/bilesenler/ServisCalisani";
+import { GecisKarsilama } from "@/bilesenler/ModGecisi";
 
 const manrope = Manrope({
   subsets: ["latin", "latin-ext"],
@@ -39,8 +40,10 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="tr">
+    // suppressHydrationWarning: mod geçişi perdesi <html>e data-gecis ekliyor.
+    <html lang="tr" suppressHydrationWarning>
       <body className={`${manrope.variable} antialiased`}>
+        <GecisKarsilama mod="kurye" />
         <ServisCalisani />
         {children}
       </body>

@@ -2,10 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Shell from "@/components/Shell";
-import { supabase } from "@/lib/supabase";
-import { useAuth } from "@/components/AuthProvider";
-import type { Profile } from "@/lib/types";
+import Shell from "@/defter/components/Shell";
+import { supabase } from "@/defter/lib/supabase";
+import { useAuth } from "@/defter/components/AuthProvider";
+import type { Profile } from "@/defter/lib/types";
 
 export default function KullanicilarPage() {
   const router = useRouter();

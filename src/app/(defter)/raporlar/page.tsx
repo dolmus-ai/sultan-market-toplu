@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import Shell from "@/components/Shell";
-import { supabase } from "@/lib/supabase";
+import Shell from "@/defter/components/Shell";
+import { supabase } from "@/defter/lib/supabase";
 import {
   ayOnce,
   bugun,
@@ -14,8 +14,8 @@ import {
   tarihFmt,
   TUR_LABEL,
   YONTEM_LABEL,
-} from "@/lib/format";
-import type { CariOzet, Hareket, OdemeYontemi } from "@/lib/types";
+} from "@/defter/lib/format";
+import type { CariOzet, Hareket, OdemeYontemi } from "@/defter/lib/types";
 
 // Özet toplamları için hareketin yalnızca bu alanları okunur
 type OzetHareket = Pick<Hareket, "tur" | "tutar" | "odeme_yontemi"> & {

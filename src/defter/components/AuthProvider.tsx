@@ -9,8 +9,8 @@ import {
   type ReactNode,
 } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { supabase } from "@/lib/supabase";
-import type { Profile } from "@/lib/types";
+import { supabase } from "@/defter/lib/supabase";
+import type { Profile } from "@/defter/lib/types";
 
 type AuthCtx = {
   session: Session | null;

@@ -33,6 +33,7 @@ import {
   TeslimatSatiri,
 } from "./Listeler";
 import { SultanAmblem } from "./SultanLogo";
+import { ModGecisDugmesi } from "./ModGecisi";
 
 import { tarayiciIstemcisi } from "@/lib/supabase/client";
 import { haversine, mesafeYaz, sureYaz } from "@/lib/rota";
@@ -175,6 +176,8 @@ type Props = {
   baslangicYontemler: OdemeYontemiTanimi[];
   /** Adres bulucuda onaylanıp haritaya eklenmiş siteler. */
   baslangicSiteler?: KayitliSite[];
+  /** Bakkal defteri ekibinden mi? Öyleyse deftere dönüş düğmesi görünür. */
+  defterErisimi?: boolean;
 };
 
 /**
@@ -195,6 +198,7 @@ export default function KuryeUygulamasi({
   baslangicSepetler,
   baslangicYontemler,
   baslangicSiteler = [],
+  defterErisimi = false,
 }: Props) {
   const yonlendir = useRouter();
   const db = useMemo(() => tarayiciIstemcisi(), []);
@@ -2107,6 +2111,16 @@ export default function KuryeUygulamasi({
             <BinaSimgesi boyut={15} />
             <span className="hidden sm:inline">Adres bul</span>
           </button>
+          {defterErisimi && (
+            <ModGecisDugmesi
+              hedef="defter"
+              title="Bakkal defterine dön"
+              className="flex h-8 shrink-0 items-center gap-1.5 rounded-hap bg-[#15803d] px-2.5 text-[11px] font-black text-white shadow-yumusak transition-transform active:scale-95"
+            >
+              <span className="text-[14px] leading-none">📒</span>
+              <span className="hidden xs:inline">Defter</span>
+            </ModGecisDugmesi>
+          )}
           <button
             onClick={vardiyaDegistir}
             className={`rounded-hap px-3 py-1.5 text-[11px] font-black uppercase tracking-wide transition-colors ${

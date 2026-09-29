@@ -2,10 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import Shell from "@/components/Shell";
-import { supabase } from "@/lib/supabase";
-import { bugun, gunBasiISO, para, saatFmt, TUR_LABEL } from "@/lib/format";
-import type { Hareket } from "@/lib/types";
+import Shell from "@/defter/components/Shell";
+import { supabase } from "@/defter/lib/supabase";
+import { bugun, gunBasiISO, para, saatFmt, TUR_LABEL } from "@/defter/lib/format";
+import type { Hareket } from "@/defter/lib/types";
 
 type Ozet = {
   gelenOdeme: number;

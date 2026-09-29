@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { BuyukHarfGirdi } from "./Girdi";
-import { supabase } from "@/lib/supabase";
-import { buyukHarf, YONTEM_LABEL } from "@/lib/format";
-import type { Kart, KartYontemi } from "@/lib/types";
+import { supabase } from "@/defter/lib/supabase";
+import { buyukHarf, YONTEM_LABEL } from "@/defter/lib/format";
+import type { Kart, KartYontemi } from "@/defter/lib/types";
 
 // Kartla ödemede "hangi kartla?" sorusunu soran seçici. Kart adlarını
 // kullanıcı kendi verir; listede yoksa buradan tek dokunuşla eklenir.

@@ -94,7 +94,8 @@ export default function GirisSayfasi() {
     }
 
     if (sesAcik) void onaySesi();
-    yonlendir.replace("/harita");
+    // Hesabın türüne göre (defter ekibi / kurye) proxy doğru ekrana yollar.
+    yonlendir.replace("/");
     yonlendir.refresh();
   }
 
@@ -181,10 +182,10 @@ export default function GirisSayfasi() {
             className="relative z-10 w-full max-w-sm rounded-[28px] border border-cizgi bg-yuzey/90 p-7 shadow-yuzen backdrop-blur-xl"
           >
             <h1 className="text-2xl font-extrabold tracking-tight">
-              Vardiyaya gir
+              Giriş yap
             </h1>
             <p className="mt-1.5 text-sm text-gri">
-              Teslimatların, abonelikler ve rotan seni bekliyor.
+              Hesabına göre bakkal defteri ya da kurye ekranı açılır.
             </p>
 
             <form onSubmit={gonder} className="mt-6 space-y-3">
@@ -193,7 +194,7 @@ export default function GirisSayfasi() {
                 tip="email"
                 deger={eposta}
                 degistir={setEposta}
-                yer="kurye@sultanmarket.com"
+                yer="ornek@sultanmarket.com"
               />
               <Alan
                 etiket="Şifre"

@@ -2,12 +2,12 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import Shell from "@/components/Shell";
-import CariSecici from "@/components/CariSecici";
-import { BuyukHarfGirdi, TutarGirdi } from "@/components/Girdi";
-import { supabase } from "@/lib/supabase";
-import { bugun, buyukHarf, para, parseTutar, tutarYaz } from "@/lib/format";
-import type { Cari } from "@/lib/types";
+import Shell from "@/defter/components/Shell";
+import CariSecici from "@/defter/components/CariSecici";
+import { BuyukHarfGirdi, TutarGirdi } from "@/defter/components/Girdi";
+import { supabase } from "@/defter/lib/supabase";
+import { bugun, buyukHarf, para, parseTutar, tutarYaz } from "@/defter/lib/format";
+import type { Cari } from "@/defter/lib/types";
 
 // Tarama modu: toptancı faturası mı, müşteri veresiye fişi mi?
 type Mod = "fatura" | "veresiye";

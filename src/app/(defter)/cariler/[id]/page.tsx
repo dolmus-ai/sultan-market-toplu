@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import Shell from "@/components/Shell";
-import BelgeGoruntuleyici from "@/components/BelgeGoruntuleyici";
-import { BuyukHarfGirdi } from "@/components/Girdi";
-import { supabase } from "@/lib/supabase";
+import Shell from "@/defter/components/Shell";
+import BelgeGoruntuleyici from "@/defter/components/BelgeGoruntuleyici";
+import { BuyukHarfGirdi } from "@/defter/components/Girdi";
+import { supabase } from "@/defter/lib/supabase";
 import {
   girisBaslik,
   girisTuru,
@@ -16,8 +16,8 @@ import {
   tarihFmt,
   TUR_LABEL,
   YONTEM_LABEL,
-} from "@/lib/format";
-import type { CariOzet, Hareket } from "@/lib/types";
+} from "@/defter/lib/format";
+import type { CariOzet, Hareket } from "@/defter/lib/types";
 
 export default function CariDetay() {
   const { id } = useParams<{ id: string }>();

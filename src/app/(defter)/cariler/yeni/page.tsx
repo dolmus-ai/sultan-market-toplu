@@ -2,10 +2,10 @@
 
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import Shell from "@/components/Shell";
-import { BuyukHarfGirdi, BuyukHarfMetinAlani } from "@/components/Girdi";
-import { supabase } from "@/lib/supabase";
-import type { CariTip } from "@/lib/types";
+import Shell from "@/defter/components/Shell";
+import { BuyukHarfGirdi, BuyukHarfMetinAlani } from "@/defter/components/Girdi";
+import { supabase } from "@/defter/lib/supabase";
+import type { CariTip } from "@/defter/lib/types";
 
 function YeniCariInner() {
   const router = useRouter();

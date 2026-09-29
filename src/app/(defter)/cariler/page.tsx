@@ -3,10 +3,10 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import Shell from "@/components/Shell";
-import { supabase } from "@/lib/supabase";
-import { girisBaslik, odemeBaslik, para } from "@/lib/format";
-import type { CariOzet, CariTip } from "@/lib/types";
+import Shell from "@/defter/components/Shell";
+import { supabase } from "@/defter/lib/supabase";
+import { girisBaslik, odemeBaslik, para } from "@/defter/lib/format";
+import type { CariOzet, CariTip } from "@/defter/lib/types";
 
 function CarilerInner() {
   const params = useSearchParams();

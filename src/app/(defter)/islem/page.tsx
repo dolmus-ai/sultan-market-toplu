@@ -2,10 +2,10 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import Shell from "@/components/Shell";
-import { BuyukHarfGirdi, TutarGirdi } from "@/components/Girdi";
-import KartSecici from "@/components/KartSecici";
-import { supabase } from "@/lib/supabase";
+import Shell from "@/defter/components/Shell";
+import { BuyukHarfGirdi, TutarGirdi } from "@/defter/components/Girdi";
+import KartSecici from "@/defter/components/KartSecici";
+import { supabase } from "@/defter/lib/supabase";
 import {
   bugun,
   kartliMi,
@@ -13,8 +13,8 @@ import {
   parseTutar,
   TUR_LABEL,
   YONTEM_LABEL,
-} from "@/lib/format";
-import type { Cari, HareketTur, KartYontemi, OdemeYontemi } from "@/lib/types";
+} from "@/defter/lib/format";
+import type { Cari, HareketTur, KartYontemi, OdemeYontemi } from "@/defter/lib/types";
 
 const TURLER: { tur: HareketTur; renk: string }[] = [
   { tur: "gelen_odeme", renk: "bg-green-700" },

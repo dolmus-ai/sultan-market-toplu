@@ -1,6 +1,7 @@
-import { createClient } from "@supabase/supabase-js";
+import { createBrowserClient } from "@supabase/ssr";
 
-export const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+import { SUPABASE_ANON_KEY, SUPABASE_URL } from "@/lib/ortam";
+
+// Oturum çerezde tutulur: kurye tarafıyla ve sunucudaki proxy ile aynı
+// oturum paylaşılsın, tek girişle iki ekran arasında geçilebilsin.
+export const supabase = createBrowserClient(SUPABASE_URL, SUPABASE_ANON_KEY);

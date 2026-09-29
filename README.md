@@ -1,4 +1,47 @@
-# Sultan Market · Kurye
+# Sultan Market · Bakkal Defteri + Kurye
+
+Tek depo, tek giriş, iki uygulama: **bakkal defteri** (cari hesap, tahsilat,
+ödeme, rapor — eskiden `dolmus-ai/sultan-market`) ve **kurye uygulaması**
+(harita, teslimat, rota — eskiden `dolmus-ai/sultan-market-kurye`). İki
+deponun git geçmişi de korunarak birleştirildi.
+
+## Birleşik yapı
+
+| | Bakkal defteri | Kurye |
+| --- | --- | --- |
+| Sayfalar | `src/app/(defter)/` — `/`, `/cariler`, `/islem`, `/raporlar`, `/kartlar`, `/kullanicilar`, `/fatura-tara` | `src/app/(kurye)/` — `/giris`, `/harita`, `/onizleme` + `src/app/api/` |
+| Bileşen / kütüphane | `src/defter/components`, `src/defter/lib` | `src/bilesenler`, `src/lib` |
+| Kök yerleşim, stil | kendi `layout.tsx` + `globals.css` (yeşil, besmele şeridi) | kendi `layout.tsx` + `globals.css` (kırmızı marka) |
+| Kimler girer | yalnızca **defter ekibi** (sahip/personel) | **herkes** (defter ekibi + kurye) |
+
+İki taraf ayrı kök yerleşim kullandığı için birbirinin görünümünü etkilemez;
+ekranlar ve davranışlar birleştirmeden önceki hâliyle aynı.
+
+**Hesap türü nasıl ayrılıyor?** Defter ekibinin `profiles` kaydı var, kurye
+hesaplarının yok (bkz. [Muhasebe / kurye ayrımı](#muhasebe--kurye-ayrımı)).
+Koruma iki katmanlı:
+
+- **Sayfa:** `src/proxy.ts` defter adreslerini `profiles` kaydı olmayan
+  hesaplara kapatır, onları `/harita`ya yollar. Girişten sonra herkes kendi
+  ana ekranına düşer (defter ekibi `/`, kurye `/harita`).
+- **Veritabanı:** RLS'teki "muhasebe kilidi" defter tablolarını, "belgeler
+  defter kilidi" (`supabase/migrations/20260929_belgeler_defter_kilidi.sql`)
+  fatura/fiş görsellerini kuryeye kapatır. Ekran atlanıp API'ye doğrudan
+  gidilse de veri gelmez.
+
+**Mod geçişi:** Defterin üst çubuğundaki **🛵 Kurye** düğmesi ve kurye
+ekranının üst çubuğundaki **📒 Defter** düğmesi (yalnızca defter ekibine
+görünür) tek dokunuşla karşı tarafa geçirir: dokunulan yerden hedef modun
+renginde bir daire açılır, `gecisSesi()` (Web Audio, `src/lib/jingle.ts`)
+çalar, varılan ekranda perde kapanarak açılır. Ses, giriş ekranındaki ses
+tercihine uyar; "hareketi azalt" açıksa animasyonsuz geçer. Kod:
+`src/bilesenler/ModGecisi.tsx`.
+
+Eski defter giriş adresi `/login`, `/giris`e yönlenir. Defter PWA bildirimi
+`public/defter.webmanifest`, kurye PWA bildirimi `public/manifest.webmanifest`.
+Defterin eski README'si: [`docs/bakkal-defteri.md`](docs/bakkal-defteri.md).
+
+---
 
 Harita odaklı kurye uygulaması. Kurye; günün teslimatlarını, abonelikleri ve
 müşterilerin açık sepetlerini tek haritada görür, toplu siparişlerde en kısa

@@ -63,13 +63,54 @@ export default async function proxy(istek: NextRequest) {
     url.pathname = "/giris";
     return NextResponse.redirect(url);
   }
-  if (user && acikYol && !gelistirmeAcik) {
+  if (!user) return yanit;
+
+  /*
+   * Bakkal defteri ekranları yalnızca defter ekibine (profiles kaydı olan
+   * sahip/personel) açık. Kurye hesaplarının profiles kaydı yok; RLS de
+   * herkese yalnızca kendi satırını gösterdiğinden satırın varlığı yeterli.
+   * Kurye ekranları (harita, giriş, API) her oturuma açık: defter ekibi
+   * kurye moduna tek dokunuşla geçebiliyor.
+   */
+  const kuryeYolu =
+    yol.startsWith("/harita") ||
+    yol.startsWith("/onizleme") ||
+    yol.startsWith("/api/");
+  const defterYolu = !kuryeYolu && !yol.startsWith("/giris");
+
+  if (acikYol && !gelistirmeAcik) {
+    // Girişten sonra hesabın kendi ana ekranına.
+    const url = istek.nextUrl.clone();
+    url.pathname = (await defterEkibiMi(supabase, user.id)) ? "/" : "/harita";
+    return NextResponse.redirect(url);
+  }
+  if (defterYolu && !(await defterEkibiMi(supabase, user.id))) {
     const url = istek.nextUrl.clone();
     url.pathname = "/harita";
+    url.search = "";
     return NextResponse.redirect(url);
   }
 
   return yanit;
+}
+
+/** Oturumdaki kullanıcı bakkal defteri ekibinden mi (sahip/personel)? */
+async function defterEkibiMi(
+  supabase: ReturnType<typeof createServerClient>,
+  kullaniciId: string,
+): Promise<boolean> {
+  try {
+    const { data } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("id", kullaniciId)
+      .maybeSingle();
+    return data != null;
+  } catch (hata) {
+    // Okunamazsa kapalı tarafa düş: defter açılmaz, kurye ekranı açılır.
+    console.error("[proxy] hesap türü okunamadı", hata);
+    return false;
+  }
 }
 
 export const config = {

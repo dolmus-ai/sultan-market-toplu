@@ -1,11 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Shell from "@/components/Shell";
-import { BuyukHarfGirdi } from "@/components/Girdi";
-import { supabase } from "@/lib/supabase";
-import { buyukHarf, KART_YONTEMLERI, YONTEM_LABEL } from "@/lib/format";
-import type { Kart, KartYontemi } from "@/lib/types";
+import Shell from "@/defter/components/Shell";
+import { BuyukHarfGirdi } from "@/defter/components/Girdi";
+import { supabase } from "@/defter/lib/supabase";
+import { buyukHarf, KART_YONTEMLERI, YONTEM_LABEL } from "@/defter/lib/format";
+import type { Kart, KartYontemi } from "@/defter/lib/types";
 
 export default function KartlarPage() {
   const [kartlar, setKartlar] = useState<Kart[]>([]);

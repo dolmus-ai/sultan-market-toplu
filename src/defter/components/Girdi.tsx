@@ -8,7 +8,7 @@ import {
   type InputHTMLAttributes,
   type TextareaHTMLAttributes,
 } from "react";
-import { buyukHarf, tutarFormatla } from "@/lib/format";
+import { buyukHarf, tutarFormatla } from "@/defter/lib/format";
 
 // Kontrollü alanda yazarken değeri dönüştürünce (büyük harf, binlik ayracı)
 // React değeri DOM'a geri yazıyor ve tarayıcı imleci sona atıyordu — kelimenin

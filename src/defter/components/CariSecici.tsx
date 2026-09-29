@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
-import { BuyukHarfGirdi } from "@/components/Girdi";
-import type { Cari } from "@/lib/types";
+import { BuyukHarfGirdi } from "@/defter/components/Girdi";
+import type { Cari } from "@/defter/lib/types";
 
 type Props = {
   liste: Cari[];

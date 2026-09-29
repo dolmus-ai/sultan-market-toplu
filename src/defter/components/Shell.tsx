@@ -4,6 +4,7 @@ import { useEffect, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "./AuthProvider";
+import { ModGecisDugmesi } from "@/bilesenler/ModGecisi";
 
 const NAV = [
   { href: "/", label: "Özet", icon: "🏠" },
@@ -60,8 +61,19 @@ export default function Shell({
             </h1>
           </div>
         </div>
-        <div className="shrink-0 text-right text-xs text-green-100">
-          {profile?.full_name}
+        <div className="flex shrink-0 items-center gap-2">
+          <div className="text-right text-xs text-green-100">
+            {profile?.full_name}
+          </div>
+          {/* Tek dokunuşla kurye moduna: haritaya sesli, animasyonlu geçiş */}
+          <ModGecisDugmesi
+            hedef="kurye"
+            title="Kurye moduna geç"
+            className="flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs font-bold text-red-600 shadow-sm transition active:scale-95"
+          >
+            <span className="text-base leading-none">🛵</span>
+            Kurye
+          </ModGecisDugmesi>
         </div>
       </header>
 

@@ -619,10 +619,8 @@ function OnayKarti({
           onGuncelle({
             ...nokta,
             eskiKonum: { lat: aday.lat, lng: aday.lng },
-            // Elle verilen konum Google eşleştirmesinin önüne geçer. Anahtar
-            // yoksa bunu hatırla ki işe yaramayan "Google'la eşle" çıkmasın.
-            dogrulama:
-              aday.dogrulama?.durum === "anahtarsiz" ? aday.dogrulama : undefined,
+            // Elle verilen konum önceki Google sonucunun yerine geçer.
+            dogrulama: undefined,
           });
           onGit(nokta);
         }}
@@ -847,18 +845,26 @@ function GoogleDurumu({
 }) {
   const d = aday.dogrulama;
   if (!d && aday.kaynak === "google") return null;
-  // Anahtar yoksa Google eşleştirmesi hiç yok; üstteki yapıştırma alanı yeter.
-  if (d?.durum === "anahtarsiz") return null;
   const adVar = aday.ad.trim().length >= 2;
 
-  if (!d) {
+  // Düğme anahtar yokken de duruyor: anahtar tanımlandığı gün kod
+  // değişmeden çalışmaya başlıyor.
+  if (!d || d.durum === "anahtarsiz") {
     return adVar ? (
-      <button
-        onClick={onYeniden}
-        className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl border border-cizgi bg-yuzey text-[13px] font-black hover:bg-yuzey2"
-      >
-        <GoogleIsareti /> Konumu Google Haritalar&apos;la eşle
-      </button>
+      <div className="mt-3">
+        <button
+          onClick={onYeniden}
+          className="flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl border border-cizgi bg-yuzey text-[13px] font-black hover:bg-yuzey2"
+        >
+          <GoogleIsareti /> Konumu Google Haritalar&apos;la eşle
+        </button>
+        {d?.durum === "anahtarsiz" && (
+          <p className="mt-1.5 px-1 text-[11px] font-semibold leading-snug text-gri">
+            Google anahtarı henüz tanımlı değil; tanımlanınca bu düğme
+            çalışır. Şimdilik konumu yukarıdan yapıştırabilirsiniz.
+          </p>
+        )}
+      </div>
     ) : null;
   }
 

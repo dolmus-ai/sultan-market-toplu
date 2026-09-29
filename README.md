@@ -654,6 +654,25 @@ Haritadaki site pinine dokunmak paneli o sitenin kartıyla açar: bloklar,
 açılır) ve kendi eklediği siteyse **Haritadan kaldır**. Yeni kayıt akışının
 adres adımında da "Haritadaki sitelerden seç" var.
 
+### Google Haritalar'dan konum yapıştırma (anahtarsız)
+
+Onay kartındaki **Google Haritalar'dan konum yapıştır** anahtar gerektirmez.
+Kişi Google Haritalar'da siteyi açar, girişine sağ tıklar (telefonda basılı
+tutar), en üstte çıkan koordinata dokunup kopyalar ve kutuya yapıştırır;
+pin oraya taşınır, "Eski konuma dön" ile geri alınır. Kutunun yanındaki
+**Google'da aç** siteyi Google Haritalar'da arar, **Panodan yapıştır** tek
+dokunuşla okur.
+
+`konumCoz` (`src/lib/site.ts`) şu biçimleri okur: `40.7745487, 30.3439116`,
+Türkçe ondalık `40,7745487 30,3439116`, ters sıra, derece-dakika-saniye
+(`40°46'28.4"N 30°20'38.1"E`) ve adres çubuğundaki uzun bağlantı (önce yerin
+kendisi `!3d…!4d…`, yoksa harita ortası `@…`). Kısa paylaşım bağlantısı
+(`maps.app.goo.gl`) konum içermediği için açıklamayla reddedilir; Sakarya
+dışındaki nokta da kabul edilmez.
+
+Bu, bir kişinin Google'a bakıp konumu elle girmesiyle aynıdır; otomatik
+veri çekme yapılmaz.
+
 ### Google Haritalar'la eşleştirme
 
 Kurye bir adayı açtığı anda `GET /api/site-dogrula` aynı yeri Google'da arar

@@ -318,6 +318,100 @@ export function adBenzerligi(a: string, b: string): number {
   return ortak / Math.min(x.size, y.size);
 }
 
+export type KonumCozumu =
+  | { tamam: true; nokta: Nokta }
+  | { tamam: false; hata: string };
+
+/** "40°46'28.4\"N" gibi derece-dakika-saniye bileşenini ondalığa çevirir. */
+function dmsOndalik(d: string, m: string, s: string, yon: string): number {
+  const deger = Number(d) + Number(m || 0) / 60 + Number((s || "0").replace(",", ".")) / 3600;
+  return /[SWG]/i.test(yon) ? -deger : deger;
+}
+
+/**
+ * Elle yapıştırılan konumu okur — Google Haritalar'dan kopyalanan her biçim:
+ *
+ * - Sağ tıkla kopyalanan koordinat: `40.7745487, 30.3439116`
+ * - Türkçe ondalık: `40,7745487 30,3439116`
+ * - Derece-dakika-saniye: `40°46'28.4"N 30°20'38.1"E`
+ * - Adres çubuğundaki bağlantı: `…/place/…/@40.77,30.34,17z/data=…!3d40.7745487!4d30.3439116…`
+ *   Bağlantıda `!3d…!4d…` yerin kendisi, `@…` ise haritanın o anki ortası;
+ *   önce yer okunur.
+ *
+ * Kısa paylaşım bağlantıları (`maps.app.goo.gl/…`) konum içermez.
+ * Nokta Sakarya dışındaysa reddedilir.
+ */
+export function konumCoz(ham: string): KonumCozumu {
+  const metin = ham.trim();
+  if (!metin) return { tamam: false, hata: "Konum ya da bağlantı yapıştırın." };
+
+  if (/goo\.gl\/|maps\.app\./i.test(metin) && !/[!@]\d/.test(metin)) {
+    return {
+      tamam: false,
+      hata: "Kısa bağlantıda konum yok. Google Haritalar'da haritaya sağ tıklayıp koordinatı kopyalayın ya da adres çubuğundaki uzun bağlantıyı yapıştırın.",
+    };
+  }
+
+  const aday = (lat: number, lng: number): KonumCozumu | null => {
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+    // Sıra ters yapıştırılmışsa (boylam, enlem) düzelt: Sakarya'da enlem ~40–41, boylam ~30–31.
+    const nokta = sakaryadaMi({ lat, lng })
+      ? { lat, lng }
+      : sakaryadaMi({ lat: lng, lng: lat })
+        ? { lat: lng, lng: lat }
+        : null;
+    if (!nokta) {
+      return {
+        tamam: false,
+        hata: `Bu konum Sakarya sınırları dışında (${lat.toFixed(5)}, ${lng.toFixed(5)}).`,
+      };
+    }
+    return { tamam: true, nokta };
+  };
+
+  // Bağlantıdaki yerin kendisi: !3d<enlem>!4d<boylam>
+  const yer = metin.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/);
+  if (yer) return aday(Number(yer[1]), Number(yer[2]))!;
+
+  // Sorgu parametreleri: ?q=, query=, ll=, destination=, center=
+  const sorgu = metin.match(
+    /[?&](?:q|query|ll|destination|daddr|center)=(-?\d+(?:\.\d+)?)(?:,|%2C)\s*(-?\d+(?:\.\d+)?)/i,
+  );
+  if (sorgu) return aday(Number(sorgu[1]), Number(sorgu[2]))!;
+
+  // Haritanın ortası: @<enlem>,<boylam>
+  const merkez = metin.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
+  if (merkez) return aday(Number(merkez[1]), Number(merkez[2]))!;
+
+  // Derece-dakika-saniye
+  const dms = [
+    ...metin.matchAll(/(\d{1,3})\s*°\s*(\d{1,2})?\s*['′]?\s*(\d{1,2}(?:[.,]\d+)?)?\s*["″]?\s*([NSEWKDGB])/gi),
+  ];
+  if (dms.length >= 2) {
+    const [a, b] = dms;
+    const enlemIlk = /[NSKG]/i.test(a[4]);
+    const x = dmsOndalik(a[1], a[2], a[3], a[4]);
+    const y = dmsOndalik(b[1], b[2], b[3], b[4]);
+    return aday(enlemIlk ? x : y, enlemIlk ? y : x)!;
+  }
+
+  // Düz sayı çifti: nokta ondalıklı "40.77, 30.34" ya da virgül ondalıklı "40,77 30,34"
+  const noktali = metin.match(/(-?\d{1,3}\.\d+)\s*[,;\s]\s*(-?\d{1,3}\.\d+)/);
+  if (noktali) return aday(Number(noktali[1]), Number(noktali[2]))!;
+  const virgullu = metin.match(/(-?\d{1,3},\d+)\s*[;\s]\s*(-?\d{1,3},\d+)/);
+  if (virgullu) {
+    return aday(
+      Number(virgullu[1].replace(",", ".")),
+      Number(virgullu[2].replace(",", ".")),
+    )!;
+  }
+
+  return {
+    tamam: false,
+    hata: "Konum okunamadı. Örnek: 40.7745487, 30.3439116 ya da Google Haritalar bağlantısı.",
+  };
+}
+
 /** `/api/site-dogrula` yanıtı: adayın Google Haritalar'daki karşılığı. */
 export type GoogleDogrulama =
   | { durum: "anahtarsiz" }

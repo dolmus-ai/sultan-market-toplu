@@ -64,6 +64,7 @@ import { PALETLER } from "../src/lib/harita-stili.ts";
 import {
   adBenzerligi,
   derlemeyiCoz,
+  konumCoz,
   kayitliEsi,
   sadelestir,
   sakaryadaMi,
@@ -737,6 +738,16 @@ bekle("ad benzerliği aynı site", adBenzerligi("Ünbay Serdivan Konakları", "�
 bekle("ad benzerliği farklı site", adBenzerligi("Işık Sitesi", "Doğa Sitesi") === 0);
 bekle("ad benzerliği Türkçe harf", adBenzerligi("Sukur Konaklari", "Şükür Konakları") === 1);
 bekle("ad benzerliği yalnız genel sözcük", adBenzerligi("Evleri", "Sitesi") === 0);
+const kc = (m: string) => { const c = konumCoz(m); return c.tamam ? `${c.nokta.lat},${c.nokta.lng}` : "hata"; };
+bekle("konum düz koordinat", kc("40.7745487, 30.3439116") === "40.7745487,30.3439116");
+bekle("konum Türkçe ondalık", kc("40,7745487 30,3439116") === "40.7745487,30.3439116");
+bekle("konum ters sıra", kc("30.3439116, 40.7745487") === "40.7745487,30.3439116");
+bekle("konum bağlantıda yerin kendisi", kc("https://www.google.com/maps/place/X/@40.7747762,30.3443821,17z/data=!8m2!3d40.7745487!4d30.3439116!16s") === "40.7745487,30.3439116");
+bekle("konum bağlantıda harita ortası", kc("https://www.google.com/maps/@40.7747762,30.3443821,17z") === "40.7747762,30.3443821");
+bekle("konum derece-dakika-saniye", (() => { const c = konumCoz(`40°46'28.4"N 30°20'38.1"E`); return c.tamam && Math.abs(c.nokta.lat - 40.77456) < 0.0001 && Math.abs(c.nokta.lng - 30.34392) < 0.0001; })());
+bekle("konum kısa bağlantı reddedildi", kc("https://maps.app.goo.gl/abc123") === "hata");
+bekle("konum il dışı reddedildi", kc("41.0082, 28.9784") === "hata");
+bekle("konum anlamsız metin", kc("merhaba") === "hata");
 bekle("derleme dosyası dolu", gercek.length > 100, `-> ${gercek.length}`);
 bekle(
   "Overture kaydı kaynağıyla çözüldü",

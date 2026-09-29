@@ -9,6 +9,7 @@ import {
   derlemeyiCoz,
   kayitliEsi,
   kayitliyiAdayaCevir,
+  konumCoz,
   siteAra,
   type SiteAdayi,
 } from "@/lib/site";
@@ -612,6 +613,26 @@ function OnayKarti({
         </div>
       )}
 
+      <KonumYapistir
+        aday={aday}
+        onUygula={(nokta) => {
+          onGuncelle({
+            ...nokta,
+            eskiKonum: { lat: aday.lat, lng: aday.lng },
+            // Elle verilen konum Google eşleştirmesinin önüne geçer. Anahtar
+            // yoksa bunu hatırla ki işe yaramayan "Google'la eşle" çıkmasın.
+            dogrulama:
+              aday.dogrulama?.durum === "anahtarsiz" ? aday.dogrulama : undefined,
+          });
+          onGit(nokta);
+        }}
+        onGeriAl={() => {
+          if (!aday.eskiKonum) return;
+          onGuncelle({ ...aday.eskiKonum, eskiKonum: undefined });
+          onGit(aday.eskiKonum);
+        }}
+      />
+
       <GoogleDurumu
         aday={aday}
         onYeniden={() => onGoogleEsle(aday)}
@@ -663,6 +684,155 @@ function OnayKarti({
 }
 
 /**
+ * Google Haritalar'dan elle kopyalanan konumu pine uygular — anahtar
+ * gerektirmez. Kişi Google'da siteyi açıp haritaya sağ tıklar, en üstteki
+ * koordinata dokunup kopyalar (ya da adres çubuğundaki bağlantıyı) ve buraya
+ * yapıştırır.
+ */
+function KonumYapistir({
+  aday,
+  onUygula,
+  onGeriAl,
+}: {
+  aday: SiteAdayi;
+  onUygula: (nokta: Nokta) => void;
+  onGeriAl: () => void;
+}) {
+  const [acik, setAcik] = useState(false);
+  const [metin, setMetin] = useState("");
+  const [hata, setHata] = useState<string | null>(null);
+  const [sonuc, setSonuc] = useState<{ fark: number } | null>(null);
+  const [panoVar] = useState(
+    () => typeof navigator !== "undefined" && !!navigator.clipboard?.readText,
+  );
+
+  function uygula(girdi: string) {
+    const c = konumCoz(girdi);
+    if (!c.tamam) {
+      setHata(c.hata);
+      setSonuc(null);
+      return;
+    }
+    setHata(null);
+    setSonuc({ fark: haversine(aday, c.nokta) });
+    setMetin("");
+    setAcik(false);
+    onUygula(c.nokta);
+  }
+
+  async function panodan() {
+    try {
+      const pano = await navigator.clipboard.readText();
+      setMetin(pano);
+      uygula(pano);
+    } catch {
+      // İzin verilmediyse kurye kutuya elle yapıştırır.
+      setAcik(true);
+      setHata("Pano okunamadı — kutuya uzun basıp yapıştırın.");
+    }
+  }
+
+  return (
+    <div className="mt-3">
+      {sonuc && aday.eskiKonum && !acik && (
+        <div className="mb-2 rounded-2xl border border-yesil/40 bg-yesil/10 px-3 py-2.5">
+          <p className="text-[12px] font-bold text-yesil">
+            ✓ Pin yapıştırılan konuma taşındı · {mesafeYaz(sonuc.fark)}
+          </p>
+          <button
+            onClick={() => {
+              setSonuc(null);
+              onGeriAl();
+            }}
+            className="mt-1 text-[12px] font-bold text-gri underline-offset-2 hover:underline"
+          >
+            Eski konuma dön
+          </button>
+        </div>
+      )}
+
+      {!acik ? (
+        <button
+          onClick={() => {
+            setAcik(true);
+            setHata(null);
+          }}
+          className="flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl border border-cizgi bg-yuzey text-[13px] font-black hover:bg-yuzey2"
+        >
+          📋 Google Haritalar&apos;dan konum yapıştır
+        </button>
+      ) : (
+        <div className="rounded-2xl border border-cizgi bg-yuzey p-2.5">
+          <p className="px-1 text-[11px] font-semibold leading-snug text-gri">
+            Google Haritalar&apos;da siteyi açın, girişine sağ tıklayın (telefonda
+            basılı tutun), çıkan koordinata dokunup kopyalayın. Adres
+            çubuğundaki bağlantı da olur.
+          </p>
+          <div className="mt-2 flex gap-2">
+            <input
+              value={metin}
+              onChange={(e) => {
+                setMetin(e.target.value);
+                setHata(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") uygula(metin);
+              }}
+              placeholder="40.7745487, 30.3439116"
+              inputMode="text"
+              autoComplete="off"
+              aria-label="Konum ya da Google Haritalar bağlantısı"
+              className="h-11 min-w-0 flex-1 rounded-xl border border-cizgi bg-yuzey2 px-3 text-[16px] font-semibold outline-none focus:border-kirmizi"
+            />
+            <button
+              onClick={() => uygula(metin)}
+              disabled={!metin.trim()}
+              className="h-11 shrink-0 rounded-xl bg-kontrast px-4 text-[13px] font-black text-white disabled:opacity-40"
+            >
+              Uygula
+            </button>
+          </div>
+          <div className="mt-2 flex gap-2">
+            {panoVar && (
+              <button
+                onClick={() => void panodan()}
+                className="min-h-10 flex-1 rounded-xl bg-yuzey2 px-3 text-[12px] font-bold text-metin hover:bg-cizgi"
+              >
+                Panodan yapıştır
+              </button>
+            )}
+            <a
+              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                [aday.ad, aday.mahalle, aday.ilce, "Sakarya"].filter(Boolean).join(" "),
+              )}`}
+              target="_blank"
+              rel="noreferrer"
+              className="flex min-h-10 flex-1 items-center justify-center rounded-xl bg-yuzey2 px-3 text-[12px] font-bold text-metin hover:bg-cizgi"
+            >
+              Google&apos;da aç ↗
+            </a>
+            <button
+              onClick={() => {
+                setAcik(false);
+                setHata(null);
+              }}
+              className="min-h-10 rounded-xl px-3 text-[12px] font-bold text-gri"
+            >
+              Kapat
+            </button>
+          </div>
+          {hata && (
+            <p role="alert" className="mt-2 px-1 text-[12px] font-bold leading-snug text-kirmizi">
+              {hata}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
  * Adayın Google Haritalar'la eşleşme durumu. Eşleşince pin zaten Google'daki
  * noktaya taşınmış oluyor; kurye isterse eski noktaya dönebiliyor.
  */
@@ -677,6 +847,8 @@ function GoogleDurumu({
 }) {
   const d = aday.dogrulama;
   if (!d && aday.kaynak === "google") return null;
+  // Anahtar yoksa Google eşleştirmesi hiç yok; üstteki yapıştırma alanı yeter.
+  if (d?.durum === "anahtarsiz") return null;
   const adVar = aday.ad.trim().length >= 2;
 
   if (!d) {
@@ -727,15 +899,13 @@ function GoogleDurumu({
   }
 
   const metin =
-    d.durum === "anahtarsiz"
-      ? "Google eşleştirmesi kapalı: sunucuda Google anahtarı tanımlı değil."
-      : d.durum === "bulunamadi"
-        ? "Google Haritalar'da bu adla bulunamadı — pini girişe siz taşıyın."
-        : "Google'a ulaşılamadı.";
+    d.durum === "bulunamadi"
+      ? "Google Haritalar'da bu adla bulunamadı — pini girişe siz taşıyın."
+      : "Google'a ulaşılamadı.";
   return (
     <div className="mt-3 flex items-center gap-2 rounded-2xl bg-yuzey2 px-3 py-2.5">
       <p className="flex-1 text-[12px] font-semibold leading-snug text-gri">{metin}</p>
-      {d.durum !== "anahtarsiz" && adVar && (
+      {adVar && (
         <button
           onClick={onYeniden}
           className="shrink-0 rounded-hap bg-yuzey px-3 py-1.5 text-[12px] font-black"

@@ -47,6 +47,8 @@ type Props = {
   onSil: (site: KayitliSite) => void;
   onGit: (nokta: Nokta) => void;
   onKayitAc: (site: SiteAdayi, blok: string | null) => void;
+  /** Adayı Google Haritalar'da arayıp pini oraya taşır. */
+  onGoogleEsle: (aday: SiteAdayi) => void;
   onKapat: () => void;
 };
 
@@ -92,6 +94,7 @@ export default function AdresBulucu({
   onSil,
   onGit,
   onKayitAc,
+  onGoogleEsle,
   onKapat,
 }: Props) {
   const [sekme, setSekme] = useState<Sekme>("bul");
@@ -233,6 +236,7 @@ export default function AdresBulucu({
                 onSec(s);
               }}
               onGit={onGit}
+              onGoogleEsle={onGoogleEsle}
             />
           ) : secili ? (
             <SiteDetayi
@@ -501,6 +505,7 @@ function OnayKarti({
   onOnayla,
   onEsiniGoster,
   onGit,
+  onGoogleEsle,
 }: {
   aday: SiteAdayi;
   esi: KayitliSite | null;
@@ -510,6 +515,7 @@ function OnayKarti({
   onOnayla: () => void;
   onEsiniGoster: (s: KayitliSite) => void;
   onGit: (n: Nokta) => void;
+  onGoogleEsle: (aday: SiteAdayi) => void;
 }) {
   const adGecerli = aday.ad.trim().length >= 2;
 
@@ -606,6 +612,16 @@ function OnayKarti({
         </div>
       )}
 
+      <GoogleDurumu
+        aday={aday}
+        onYeniden={() => onGoogleEsle(aday)}
+        onEskiKonum={() => {
+          if (!aday.eskiKonum) return;
+          onGuncelle({ ...aday.eskiKonum, eskiKonum: undefined });
+          onGit(aday.eskiKonum);
+        }}
+      />
+
       <p className="mt-3 flex items-start gap-2 rounded-2xl bg-yuzey2 px-3 py-2.5 text-[12px] font-semibold leading-snug text-gri">
         <span className="text-[15px] leading-none">✋</span>
         Pini sürükle ya da haritaya dokun — girişin olduğu noktaya taşıyıp öyle
@@ -643,6 +659,102 @@ function OnayKarti({
         </motion.button>
       </div>
     </motion.div>
+  );
+}
+
+/**
+ * Adayın Google Haritalar'la eşleşme durumu. Eşleşince pin zaten Google'daki
+ * noktaya taşınmış oluyor; kurye isterse eski noktaya dönebiliyor.
+ */
+function GoogleDurumu({
+  aday,
+  onYeniden,
+  onEskiKonum,
+}: {
+  aday: SiteAdayi;
+  onYeniden: () => void;
+  onEskiKonum: () => void;
+}) {
+  const d = aday.dogrulama;
+  if (!d && aday.kaynak === "google") return null;
+  const adVar = aday.ad.trim().length >= 2;
+
+  if (!d) {
+    return adVar ? (
+      <button
+        onClick={onYeniden}
+        className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl border border-cizgi bg-yuzey text-[13px] font-black hover:bg-yuzey2"
+      >
+        <GoogleIsareti /> Konumu Google Haritalar&apos;la eşle
+      </button>
+    ) : null;
+  }
+
+  if (d.durum === "sorguluyor") {
+    return (
+      <p className="mt-3 flex items-center gap-2 rounded-2xl bg-yuzey2 px-3 py-2.5 text-[12px] font-semibold text-gri">
+        <Donen /> Google Haritalar&apos;da aranıyor…
+      </p>
+    );
+  }
+
+  if (d.durum === "eslesti") {
+    return (
+      <div className="mt-3 rounded-2xl border border-yesil/40 bg-yesil/10 px-3 py-2.5">
+        <p className="flex items-start gap-2 text-[12px] font-bold leading-snug text-yesil">
+          <GoogleIsareti />
+          <span>
+            Google Haritalar&apos;la eşleşti
+            {aday.eskiKonum
+              ? ` · pin ${mesafeYaz(d.fark)} taşındı`
+              : " · konum zaten doğru"}
+            <span className="block font-semibold text-metin">
+              {d.ad}
+              {d.adres ? ` — ${d.adres}` : ""}
+            </span>
+          </span>
+        </p>
+        {aday.eskiKonum && (
+          <button
+            onClick={onEskiKonum}
+            className="mt-1.5 text-[12px] font-bold text-gri underline-offset-2 hover:underline"
+          >
+            Eski konuma dön
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  const metin =
+    d.durum === "anahtarsiz"
+      ? "Google eşleştirmesi kapalı: sunucuda Google anahtarı tanımlı değil."
+      : d.durum === "bulunamadi"
+        ? "Google Haritalar'da bu adla bulunamadı — pini girişe siz taşıyın."
+        : "Google'a ulaşılamadı.";
+  return (
+    <div className="mt-3 flex items-center gap-2 rounded-2xl bg-yuzey2 px-3 py-2.5">
+      <p className="flex-1 text-[12px] font-semibold leading-snug text-gri">{metin}</p>
+      {d.durum !== "anahtarsiz" && adVar && (
+        <button
+          onClick={onYeniden}
+          className="shrink-0 rounded-hap bg-yuzey px-3 py-1.5 text-[12px] font-black"
+        >
+          Tekrar ara
+        </button>
+      )}
+    </div>
+  );
+}
+
+function GoogleIsareti() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden className="mt-px shrink-0">
+      <path
+        d="M12 2C8.1 2 5 5.1 5 9c0 5.3 7 13 7 13s7-7.7 7-13c0-3.9-3.1-7-7-7Zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5Z"
+        fill="currentColor"
+      />
+    </svg>
   );
 }
 

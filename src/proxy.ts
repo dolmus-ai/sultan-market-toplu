@@ -49,7 +49,8 @@ export default async function proxy(istek: NextRequest) {
       yol.startsWith("/api/navigasyon") ||
       yol.startsWith("/api/disa-aktar") ||
       yol.startsWith("/api/toplu-musteri") ||
-      yol.startsWith("/api/site-ara"));
+      yol.startsWith("/api/site-ara") ||
+      yol.startsWith("/api/site-dogrula"));
   const acikYol = yol.startsWith("/giris") || gelistirmeAcik;
 
   if (!user && !acikYol) {

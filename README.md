@@ -654,6 +654,29 @@ Haritadaki site pinine dokunmak paneli o sitenin kartıyla açar: bloklar,
 açılır) ve kendi eklediği siteyse **Haritadan kaldır**. Yeni kayıt akışının
 adres adımında da "Haritadaki sitelerden seç" var.
 
+### Google Haritalar'la eşleştirme
+
+Kurye bir adayı açtığı anda `GET /api/site-dogrula` aynı yeri Google'da arar
+(önce Places Text Search, o kapalıysa Geocoding). Ad eşleşir ve nokta 4 km
+içindeyse pin Google'daki noktaya taşınır; kartta "Google Haritalar'la
+eşleşti · pin 184 m taşındı" yazar, **Eski konuma dön** ile geri alınabilir.
+Google bulamazsa ya da yalnızca bir sokak adresi döndürürse pin yerinden
+oynatılmaz — Google adı tanımadığında sessizce mahallenin ortasını verir, o
+sonuç kabul edilmez. Kurye sorgu sürerken pini elle taşıdıysa onun kararı
+geçerli kalır.
+
+Anahtar: `GOOGLE_MAPS_API_KEY`, yoksa `GOOGLE_GEOKOD_ANAHTARI`. En iyi sonuç
+için anahtarda **Places API (New)** de açık olmalı; yalnızca Geocoding açıksa
+site adlarının bir kısmı bulunur. Anahtar yoksa kart "Google eşleştirmesi
+kapalı" der, uygulamanın kalanı etkilenmez.
+
+**Sokak adları.** Pinin Google'la aynı yerde olması, haritada çevresindeki
+sokak adlarının Google'dakiyle aynı görünmesi demek değil: zemin
+OpenStreetMap'ten geliyor ve OSM'de bazı sokaklar farklı adlandırılmış ya da
+çizilmiş. Zeminin de Google'la birebir aynı olması için
+`NEXT_PUBLIC_GOOGLE_HARITA_ANAHTARI` doldurulup Google karolarına geçilir
+(yukarıda, "İsteğe bağlı: zemini Google karolarına almak").
+
 ### Veri nereden geliyor
 
 | Kaynak | Ne zaman | Anahtar |

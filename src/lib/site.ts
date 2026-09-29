@@ -58,6 +58,10 @@ export type SiteAdayi = {
   bloklar: SiteBlogu[];
   kaynak: SiteKaynagi;
   kaynak_id: string | null;
+  /** Önizlemede Google Haritalar eşleştirmesinin durumu (kaydedilmez). */
+  dogrulama?: GoogleDogrulama | { durum: "sorguluyor" };
+  /** Google eşleşince pinin taşındığı yerden önceki nokta — geri almak için. */
+  eskiKonum?: Nokta;
 };
 
 /** Derleme dosyasının sıkıştırılmış satırı — betikteki alan adlarıyla. */
@@ -267,6 +271,68 @@ export function siteAdresMetni(
     .filter(Boolean)
     .join(", ");
 }
+
+/** Site adlarında ayırt edici olmayan sözcükler — eşleştirmede sayılmaz. */
+const GENEL_SOZCUKLER = new Set([
+  "sitesi",
+  "site",
+  "konaklari",
+  "konaklar",
+  "konutlari",
+  "konutlar",
+  "evleri",
+  "evler",
+  "apartmani",
+  "apartman",
+  "apt",
+  "villalari",
+  "villa",
+  "residence",
+  "rezidans",
+  "blok",
+  "bloklari",
+  "sakarya",
+  "serdivan",
+  "adapazari",
+]);
+
+/**
+ * İki site adının aynı yeri anlatma olasılığı (0–1): ayırt edici
+ * sözcüklerin ne kadarı ortak. "Ünbay Serdivan Konakları" ile "Ünbay
+ * Konakları" 1, "Işık Sitesi" ile "Doğa Sitesi" 0.
+ */
+export function adBenzerligi(a: string, b: string): number {
+  const sozcukler = (m: string) =>
+    new Set(
+      sadelestir(m)
+        .split(" ")
+        .filter((k) => k.length > 1 && !GENEL_SOZCUKLER.has(k)),
+    );
+  const x = sozcukler(a);
+  const y = sozcukler(b);
+  if (x.size === 0 || y.size === 0) return sadelestir(a) === sadelestir(b) ? 1 : 0;
+  let ortak = 0;
+  for (const k of x) {
+    if (y.has(k) || [...y].some((t) => t.startsWith(k) || k.startsWith(t))) ortak++;
+  }
+  return ortak / Math.min(x.size, y.size);
+}
+
+/** `/api/site-dogrula` yanıtı: adayın Google Haritalar'daki karşılığı. */
+export type GoogleDogrulama =
+  | { durum: "anahtarsiz" }
+  | { durum: "bulunamadi" }
+  | { durum: "hata" }
+  | {
+      durum: "eslesti";
+      lat: number;
+      lng: number;
+      ad: string;
+      adres: string | null;
+      motor: "places" | "geocoding";
+      /** Adayın eski noktasına uzaklık (metre). */
+      fark: number;
+    };
 
 export const KAYNAK_ETIKET: Record<SiteKaynagi, string> = {
   osm: "OpenStreetMap",

@@ -249,7 +249,11 @@ export async function GET(istek: Request) {
     return NextResponse.json({ hata: "En az 3 harf yazın." }, { status: 400 });
   }
 
-  const anahtar = process.env.GOOGLE_MAPS_API_KEY?.trim();
+  // Places için ayrı anahtar yoksa adres çözümlemenin anahtarı denenir;
+  // Places API o anahtarda kapalıysa istek düşer ve yalnızca OSM kalır.
+  const anahtar =
+    process.env.GOOGLE_MAPS_API_KEY?.trim() ||
+    process.env.GOOGLE_GEOKOD_ANAHTARI?.trim();
   const [google, osm] = await Promise.allSettled([
     anahtar ? googleAra(sorgu, anahtar) : Promise.resolve([]),
     nominatimAra(sorgu),

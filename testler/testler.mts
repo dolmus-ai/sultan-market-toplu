@@ -62,6 +62,7 @@ import {
 } from "../src/lib/google-karo.ts";
 import { PALETLER } from "../src/lib/harita-stili.ts";
 import {
+  adBenzerligi,
   derlemeyiCoz,
   kayitliEsi,
   sadelestir,
@@ -732,6 +733,10 @@ const gercek = derlemeyiCoz(
     readFileSync(new URL("../public/veri/sakarya-siteler.json", import.meta.url), "utf8"),
   ),
 );
+bekle("ad benzerliği aynı site", adBenzerligi("Ünbay Serdivan Konakları", "Ünbay Konakları") === 1);
+bekle("ad benzerliği farklı site", adBenzerligi("Işık Sitesi", "Doğa Sitesi") === 0);
+bekle("ad benzerliği Türkçe harf", adBenzerligi("Sukur Konaklari", "Şükür Konakları") === 1);
+bekle("ad benzerliği yalnız genel sözcük", adBenzerligi("Evleri", "Sitesi") === 0);
 bekle("derleme dosyası dolu", gercek.length > 100, `-> ${gercek.length}`);
 bekle(
   "Overture kaydı kaynağıyla çözüldü",

@@ -64,7 +64,12 @@ import {
   siparisleriGetir,
   topluSil,
 } from "@/lib/veri";
-import { sakaryadaMi, siteAdresMetni, type SiteAdayi } from "@/lib/site";
+import {
+  sakaryadaMi,
+  siteAdresMetni,
+  type GoogleDogrulama,
+  type SiteAdayi,
+} from "@/lib/site";
 import { binaAnahtari, bugununTarihi, gecikmeDk, para } from "@/lib/bicim";
 import { bekleyenler, kuyruguIsle, kuyrukVeyaGonder } from "@/lib/cevrimdisi";
 import type {
@@ -1660,7 +1665,61 @@ export default function KuryeUygulamasi({
   function siteyiOnizle(aday: SiteAdayi | null) {
     setSiteOnizleme(aday);
     setSeciliSiteId(null);
-    if (aday) bulucuyaUc(aday, true);
+    if (!aday) return;
+    bulucuyaUc(aday, true);
+    // Google'dan gelen aday zaten Google'ın noktasında; diğerlerini eşle.
+    if (aday.kaynak !== "google" && aday.ad.trim().length >= 2) {
+      void googleIleEsle(aday);
+    }
+  }
+
+  /**
+   * Adayı Google Haritalar'da arar; bulunursa pini Google'daki noktaya
+   * taşır. Kurye bu arada pini ya da adı değiştirdiyse sonucu uygulamaz.
+   */
+  async function googleIleEsle(aday: SiteAdayi) {
+    const anahtar = aday.anahtar;
+    const ayniAday = (o: SiteAdayi | null): o is SiteAdayi =>
+      o?.anahtar === anahtar;
+    setSiteOnizleme((o) =>
+      ayniAday(o) ? { ...o, dogrulama: { durum: "sorguluyor" } } : o,
+    );
+
+    let sonuc: GoogleDogrulama;
+    try {
+      const p = new URLSearchParams({
+        ad: aday.ad.trim(),
+        lat: String(aday.lat),
+        lng: String(aday.lng),
+      });
+      if (aday.mahalle) p.set("mahalle", aday.mahalle);
+      if (aday.ilce) p.set("ilce", aday.ilce);
+      const yanit = await fetch(`/api/site-dogrula?${p}`);
+      sonuc = yanit.ok ? ((await yanit.json()) as GoogleDogrulama) : { durum: "hata" };
+    } catch {
+      sonuc = { durum: "hata" };
+    }
+
+    setSiteOnizleme((o) => {
+      if (!ayniAday(o)) return o;
+      // Sorgu sürerken kurye pini elle taşıdıysa ya da adı değiştirdiyse
+      // onun kararı geçerli; yalnızca sonucu gösteriyoruz.
+      const elDegdi =
+        o.lat !== aday.lat || o.lng !== aday.lng || o.ad !== aday.ad;
+      if (sonuc.durum !== "eslesti" || elDegdi || sonuc.fark < 12) {
+        return { ...o, dogrulama: sonuc };
+      }
+      return {
+        ...o,
+        dogrulama: sonuc,
+        eskiKonum: { lat: o.lat, lng: o.lng },
+        lat: sonuc.lat,
+        lng: sonuc.lng,
+      };
+    });
+    if (sonuc.durum === "eslesti" && sonuc.fark >= 12) {
+      bulucuyaUc(sonuc, true);
+    }
   }
 
   function siteSec(site: KayitliSite | null) {
@@ -2526,6 +2585,7 @@ export default function KuryeUygulamasi({
             onSil={(site) => void siteyiKaldir(site)}
             onGit={(n) => bulucuyaUc(n, true, 18)}
             onKayitAc={siteyeKayitAc}
+            onGoogleEsle={(a) => void googleIleEsle(a)}
             onKapat={bulucuyuKapat}
           />
         )}

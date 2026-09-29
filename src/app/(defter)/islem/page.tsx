@@ -1,0 +1,404 @@
+"use client";
+
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import Shell from "@/components/Shell";
+import { BuyukHarfGirdi, TutarGirdi } from "@/components/Girdi";
+import KartSecici from "@/components/KartSecici";
+import { supabase } from "@/lib/supabase";
+import {
+  bugun,
+  kartliMi,
+  para,
+  parseTutar,
+  TUR_LABEL,
+  YONTEM_LABEL,
+} from "@/lib/format";
+import type { Cari, HareketTur, KartYontemi, OdemeYontemi } from "@/lib/types";
+
+const TURLER: { tur: HareketTur; renk: string }[] = [
+  { tur: "gelen_odeme", renk: "bg-green-700" },
+  { tur: "veresiye", renk: "bg-amber-600" },
+  { tur: "yapilan_odeme", renk: "bg-sky-700" },
+  { tur: "fatura", renk: "bg-stone-700" },
+];
+
+const ODEME_TURLERI: HareketTur[] = ["gelen_odeme", "yapilan_odeme"];
+
+function IslemInner() {
+  const router = useRouter();
+  const params = useSearchParams();
+
+  const [tur, setTur] = useState<HareketTur>(
+    (TURLER.find((t) => t.tur === params.get("tur"))?.tur ??
+      "gelen_odeme") as HareketTur
+  );
+  const [cariId, setCariId] = useState(params.get("cari") ?? "");
+  const [cariler, setCariler] = useState<Cari[]>([]);
+  const [arama, setArama] = useState("");
+  const [tutar, setTutar] = useState("");
+  const [yontem, setYontem] = useState<OdemeYontemi>("nakit");
+  const [kartId, setKartId] = useState("");
+  const [kartAdi, setKartAdi] = useState("");
+  const [tarih, setTarih] = useState(bugun());
+  const [aciklama, setAciklama] = useState("");
+  const [hata, setHata] = useState("");
+  const [bekliyor, setBekliyor] = useState(false);
+  const [tamam, setTamam] = useState<string | null>(null);
+  const [sonKayitId, setSonKayitId] = useState<string | null>(null);
+  const [borcKapandi, setBorcKapandi] = useState(false);
+
+  const gerekliTip =
+    tur === "gelen_odeme" || tur === "veresiye" ? "alici" : "satici";
+
+  useEffect(() => {
+    supabase
+      .from("cariler")
+      .select("*")
+      .eq("tip", gerekliTip)
+      .eq("aktif", true)
+      .order("unvan")
+      .then(({ data }) => setCariler((data as Cari[]) ?? []));
+  }, [gerekliTip]);
+
+  // Tür değişince seçili cari yanlış tipte kalmasın
+  useEffect(() => {
+    if (cariId && cariler.length && !cariler.some((c) => c.id === cariId)) {
+      setCariId("");
+    }
+  }, [cariler, cariId]);
+
+  const filtreli = useMemo(
+    () =>
+      cariler.filter((c) =>
+        c.unvan.toLocaleLowerCase("tr").includes(arama.toLocaleLowerCase("tr"))
+      ),
+    [cariler, arama]
+  );
+
+  const secili = cariler.find((c) => c.id === cariId);
+  const odemeMi = ODEME_TURLERI.includes(tur);
+  // Kartla ödemede hangi kartın kullanıldığı da kaydedilir
+  const kartGerekli = odemeMi && kartliMi(yontem);
+
+  const kartSec = useCallback((id: string, ad: string) => {
+    setKartId(id);
+    setKartAdi(ad);
+  }, []);
+
+  // Yazılan isim listede yoksa tek dokunuşla yeni cari aç ve seç
+  const hizliEkle = async () => {
+    const ad = arama.trim();
+    if (!ad) return;
+    const { data, error } = await supabase
+      .from("cariler")
+      .insert({ tip: gerekliTip, unvan: ad })
+      .select("*")
+      .single();
+    if (error || !data) {
+      setHata("Eklenemedi. Tekrar deneyin.");
+      return;
+    }
+    setCariler((mevcut) =>
+      [...mevcut, data as Cari].sort((a, b) =>
+        a.unvan.localeCompare(b.unvan, "tr")
+      )
+    );
+    setCariId(data.id);
+    setArama("");
+  };
+
+  const kaydet = async () => {
+    setHata("");
+    const t = parseTutar(tutar);
+    if (!cariId) {
+      setHata("Önce cari seçin.");
+      return;
+    }
+    if (isNaN(t) || t <= 0) {
+      setHata("Geçerli bir tutar girin.");
+      return;
+    }
+    if (kartGerekli && !kartId) {
+      setHata("Hangi kartla ödendiğini seçin veya yeni kart ekleyin.");
+      return;
+    }
+    setBekliyor(true);
+    const { data: kayit, error } = await supabase
+      .from("hareketler")
+      .insert({
+        cari_id: cariId,
+        tur,
+        tutar: t,
+        odeme_yontemi: odemeMi ? yontem : null,
+        kart_id: kartGerekli ? kartId : null,
+        aciklama: aciklama.trim() || null,
+        tarih,
+      })
+      .select("id")
+      .single();
+    setBekliyor(false);
+    if (error || !kayit) {
+      setHata("Kayıt yapılamadı. Tekrar deneyin.");
+      return;
+    }
+    // Ödeme borcu tam kapattıysa müşteriyi silme seçeneği sunulur
+    // (fiş taramasıyla açılan geçici veresiye müşterilerinin kalması gerekmiyor)
+    let kapandi = false;
+    if (tur === "gelen_odeme") {
+      const { data: oz } = await supabase
+        .from("cari_ozet")
+        .select("kalan_bakiye")
+        .eq("id", cariId)
+        .single();
+      kapandi = oz != null && Number(oz.kalan_bakiye) === 0;
+    }
+    setBorcKapandi(kapandi);
+    setSonKayitId(kayit.id);
+    setTamam(
+      `${TUR_LABEL[tur]} kaydedildi: ${secili?.unvan} — ${para(t)}` +
+        (kartGerekli && kartAdi ? ` (${YONTEM_LABEL[yontem]}: ${kartAdi})` : "")
+    );
+  };
+
+  const musteriSil = async () => {
+    if (!cariId) return;
+    if (
+      !confirm(
+        `${secili?.unvan ?? "Müşteri"} ve geçmişteki TÜM hareketleri kalıcı olarak silinecek. Bu işlem geri alınamaz. Emin misiniz?`
+      )
+    )
+      return;
+    const { error } = await supabase.from("cariler").delete().eq("id", cariId);
+    if (error) {
+      setHata("Silinemedi. Tekrar deneyin.");
+      return;
+    }
+    setCariler((mevcut) => mevcut.filter((c) => c.id !== cariId));
+    setBorcKapandi(false);
+    setSonKayitId(null);
+    setTamam(null);
+    setTutar("");
+    setAciklama("");
+    setCariId("");
+    setKartId("");
+    setKartAdi("");
+    setHata("Müşteri silindi.");
+  };
+
+  const geriAl = async () => {
+    if (sonKayitId) {
+      await supabase.from("hareketler").delete().eq("id", sonKayitId);
+    }
+    setSonKayitId(null);
+    setBorcKapandi(false);
+    setTamam(null);
+    setTutar("");
+    setAciklama("");
+    setHata("Kayıt geri alındı.");
+  };
+
+  if (tamam) {
+    return (
+      <Shell title="İşlem">
+        <div className="mt-10 rounded-2xl bg-white p-6 text-center shadow-sm">
+          <div className="text-4xl">✅</div>
+          <p className="mt-3 font-bold">{tamam}</p>
+          {borcKapandi && (
+            <p className="mt-2 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-800">
+              Borç tamamen kapandı. Müşterinin kalmasına gerek yoksa
+              silebilirsiniz.
+            </p>
+          )}
+          <div className="mt-6 flex flex-col gap-2">
+            {borcKapandi && (
+              <button
+                onClick={musteriSil}
+                className="rounded-xl bg-red-600 py-3 font-bold text-white"
+              >
+                Müşteriyi Sil (borç kapandı)
+              </button>
+            )}
+            <button
+              onClick={() => {
+                setTamam(null);
+                setBorcKapandi(false);
+                setTutar("");
+                setAciklama("");
+                setCariId("");
+              }}
+              className="rounded-xl bg-green-700 py-3 font-bold text-white"
+            >
+              Yeni İşlem
+            </button>
+            <button
+              onClick={() => router.push(`/cariler/${cariId}`)}
+              className="rounded-xl bg-stone-200 py-3 font-bold text-stone-700"
+            >
+              Cari Hesaba Git
+            </button>
+            <button
+              onClick={geriAl}
+              className="rounded-xl bg-red-50 py-3 font-bold text-red-600"
+            >
+              Geri Al (kaydı sil)
+            </button>
+          </div>
+        </div>
+      </Shell>
+    );
+  }
+
+  return (
+    <Shell title="İşlem Girişi">
+      <div className="grid grid-cols-2 gap-2">
+        {TURLER.map((t) => (
+          <button
+            key={t.tur}
+            onClick={() => setTur(t.tur)}
+            className={`rounded-xl py-3 text-sm font-bold ${
+              tur === t.tur
+                ? `${t.renk} text-white`
+                : "bg-white text-stone-500 shadow-sm"
+            }`}
+          >
+            {TUR_LABEL[t.tur]}
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-3 rounded-2xl bg-white p-4 shadow-sm">
+        <div className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-400">
+          {gerekliTip === "alici" ? "Müşteri" : "Toptancı"} Seç
+        </div>
+        {secili ? (
+          <div className="flex items-center justify-between rounded-xl bg-green-50 px-4 py-3">
+            <span className="font-bold text-green-800">{secili.unvan}</span>
+            <button
+              onClick={() => setCariId("")}
+              className="text-sm text-stone-400"
+            >
+              Değiştir
+            </button>
+          </div>
+        ) : (
+          <>
+            <BuyukHarfGirdi
+              placeholder="Ara…"
+              value={arama}
+              onValueChange={setArama}
+              className="w-full rounded-xl border border-stone-200 px-4 py-2.5 text-base outline-none focus:border-green-600"
+            />
+            <div className="mt-2 max-h-48 space-y-1 overflow-y-auto">
+              {filtreli.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => setCariId(c.id)}
+                  className="block w-full rounded-lg px-3 py-2.5 text-left text-sm font-semibold hover:bg-stone-50 active:bg-green-50"
+                >
+                  {c.unvan}
+                </button>
+              ))}
+              {arama.trim() &&
+                !filtreli.some(
+                  (c) =>
+                    c.unvan.toLocaleLowerCase("tr") ===
+                    arama.trim().toLocaleLowerCase("tr")
+                ) && (
+                  <button
+                    onClick={hizliEkle}
+                    className="block w-full rounded-lg bg-green-50 px-3 py-2.5 text-left text-sm font-bold text-green-800"
+                  >
+                    ➕ &quot;{arama.trim()}&quot; adıyla yeni{" "}
+                    {gerekliTip === "alici" ? "müşteri" : "toptancı"} ekle
+                  </button>
+                )}
+              {filtreli.length === 0 && !arama.trim() && (
+                <p className="py-3 text-center text-xs text-stone-400">
+                  Kayıt yok — yukarıya adını yazıp ekleyin.
+                </p>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+
+      <div className="mt-3 rounded-2xl bg-white p-4 shadow-sm">
+        <TutarGirdi
+          inputMode="decimal"
+          placeholder="0,00"
+          value={tutar}
+          onValueChange={setTutar}
+          className="w-full rounded-xl border-2 border-green-600 px-4 py-4 text-center text-3xl font-bold outline-none"
+        />
+
+        {odemeMi && (
+          <div className="mt-3 flex gap-2">
+            {(Object.keys(YONTEM_LABEL) as OdemeYontemi[]).map((y) => (
+              <button
+                key={y}
+                onClick={() => {
+                  // Yöntem değişince eski kart seçimi taşınmasın
+                  if (y !== yontem) kartSec("", "");
+                  setYontem(y);
+                }}
+                className={`flex-1 rounded-xl py-2.5 text-xs font-bold ${
+                  yontem === y
+                    ? "bg-green-700 text-white"
+                    : "bg-stone-100 text-stone-500"
+                }`}
+              >
+                {YONTEM_LABEL[y]}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {kartGerekli && (
+          <KartSecici
+            tip={yontem as KartYontemi}
+            kartId={kartId}
+            onSecim={kartSec}
+          />
+        )}
+
+        <div className="mt-3 flex gap-2">
+          <input
+            type="date"
+            value={tarih}
+            onChange={(e) => setTarih(e.target.value)}
+            className="flex-1 rounded-xl border border-stone-200 px-3 py-2.5 text-sm"
+          />
+          <BuyukHarfGirdi
+            placeholder="Açıklama (isteğe bağlı)"
+            value={aciklama}
+            onValueChange={setAciklama}
+            className="flex-[2] rounded-xl border border-stone-200 px-3 py-2.5 text-sm"
+          />
+        </div>
+
+        {hata && (
+          <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+            {hata}
+          </p>
+        )}
+
+        <button
+          onClick={kaydet}
+          disabled={bekliyor}
+          className="mt-3 w-full rounded-xl bg-green-700 py-4 text-lg font-bold text-white disabled:opacity-60"
+        >
+          {bekliyor ? "Kaydediliyor…" : "Kaydet"}
+        </button>
+      </div>
+    </Shell>
+  );
+}
+
+export default function IslemPage() {
+  return (
+    <Suspense>
+      <IslemInner />
+    </Suspense>
+  );
+}

@@ -245,3 +245,10 @@ body {
   cursor: pointer;
   will-change: transform;
 }
+
+/* Yakınlaştırma kilidi (KuryeUygulamasi): sayfa kayar ama büyümez.
+   Harita kendi hareketlerini touch-action: none ile yönetiyor. */
+html.zoom-kilitli,
+html.zoom-kilitli body {
+  touch-action: pan-x pan-y;
+}

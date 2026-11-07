@@ -565,15 +565,46 @@ export default function KuryeUygulamasi({
   }, [katmanlar.karanlik, sesAcik, zoomKilitli]);
 
   /*
-   * Yakınlaştırma kilidi viewport etiketine yazılıyor. Kilitliyken ölçek
-   * 1'e sabitleniyor; açıkken 5 kata kadar büyütülebiliyor.
+   * Yakınlaştırma kilidi. Yalnızca viewport etiketine yazmak mobilde
+   * yetmiyordu: iOS Safari `user-scalable=no`yu yok sayıyor, Next de etiketi
+   * kendi değeriyle yeniden yazabiliyor. Kilitliyken üç katman var:
+   *  - viewport etiketi (Android'de ölçeği 1'e de döndürür),
+   *  - <html>e `zoom-kilitli` sınıfı → `touch-action: pan-x pan-y`
+   *    (Chrome/Android ve iOS'ta iki parmak ve çift dokunma yakınlaşmasını
+   *    keser, kaydırma çalışır),
+   *  - iOS'un `gesture*` olayları ile haritanın dışındaki iki parmak
+   *    hareketi engellenir. Harita kendi iki parmak yakınlaştırmasını
+   *    yapmaya devam eder.
    */
   useEffect(() => {
+    const kok = document.documentElement;
     const meta = document.querySelector<HTMLMetaElement>('meta[name="viewport"]');
-    if (!meta) return;
-    meta.content = zoomKilitli
-      ? "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
-      : "width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes, viewport-fit=cover";
+    if (meta) {
+      meta.content = zoomKilitli
+        ? "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+        : "width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes, viewport-fit=cover";
+    }
+    kok.classList.toggle("zoom-kilitli", zoomKilitli);
+    if (!zoomKilitli) return;
+
+    const haritada = (e: Event) =>
+      e.target instanceof Element && e.target.closest(".maplibregl-map") != null;
+    const jestEngelle = (e: Event) => {
+      if (!haritada(e)) e.preventDefault();
+    };
+    const dokunmaEngelle = (e: TouchEvent) => {
+      if (e.touches.length > 1 && !haritada(e)) e.preventDefault();
+    };
+    const secenek = { passive: false } as const;
+    document.addEventListener("gesturestart", jestEngelle, secenek);
+    document.addEventListener("gesturechange", jestEngelle, secenek);
+    document.addEventListener("touchmove", dokunmaEngelle, secenek);
+    return () => {
+      kok.classList.remove("zoom-kilitli");
+      document.removeEventListener("gesturestart", jestEngelle);
+      document.removeEventListener("gesturechange", jestEngelle);
+      document.removeEventListener("touchmove", dokunmaEngelle);
+    };
   }, [zoomKilitli]);
 
   /* ------------------------- Bildirim ------------------------- */

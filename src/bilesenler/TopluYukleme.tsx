@@ -409,7 +409,7 @@ export default function TopluYukleme({
       >
         <div className="mx-auto mb-4 h-1.5 w-11 rounded-full bg-cizgi" />
 
-        <p className="text-[11px] font-black uppercase tracking-wider text-gri">
+        <p className="text-[10.5px] font-black uppercase tracking-wider text-gri">
           Toplu yükleme
         </p>
         <h2 className="mt-0.5 text-xl font-extrabold tracking-tight">
@@ -449,19 +449,19 @@ export default function TopluYukleme({
                 >
                   📄
                 </motion.span>
-                <span className="text-[15px] font-black">Dosya seç</span>
-                <span className="text-[12px] text-gri">.xlsx veya .csv</span>
+                <span className="text-[13.5px] font-black">Dosya seç</span>
+                <span className="text-[11px] text-gri">.xlsx veya .csv</span>
               </motion.button>
 
               <a
                 href="/api/toplu-musteri"
                 download
-                className="mt-3 flex h-12 w-full items-center justify-center rounded-hap bg-yuzey2 text-[13px] font-bold text-gri"
+                className="mt-3 flex h-12 w-full items-center justify-center rounded-hap bg-yuzey2 text-[12px] font-bold text-gri"
               >
                 Örnek dosyayı indir
               </a>
 
-              <div className="mt-3 space-y-2 px-1 text-[12px] leading-relaxed text-gri">
+              <div className="mt-3 space-y-2 px-1 text-[11px] leading-relaxed text-gri">
                 <p>
                   <b>Abone defteri</b> — iki sayfa. <b>SERVİS</b> sayfasında
                   abone listesi (ABONE NO, ad, TEL, ADRES), <b>ÇİZELGE</b>
@@ -480,7 +480,7 @@ export default function TopluYukleme({
               </div>
 
               {durum.ad === "hata" && (
-                <p className="mt-3 rounded-2xl bg-kirmizi-sis px-4 py-3 text-[13px] font-bold text-kirmizi">
+                <p className="mt-3 rounded-2xl bg-kirmizi-sis px-4 py-3 text-[12px] font-bold text-kirmizi">
                   {durum.mesaj}
                 </p>
               )}
@@ -501,7 +501,7 @@ export default function TopluYukleme({
                 transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
                 className="h-9 w-9 rounded-full border-[3px] border-cizgi border-t-kirmizi"
               />
-              <span className="text-[14px] font-bold text-gri">
+              <span className="text-[12.5px] font-bold text-gri">
                 Dosya okunuyor…
               </span>
             </motion.div>
@@ -515,7 +515,7 @@ export default function TopluYukleme({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
             >
-              <p className="mt-3 text-[12px] font-bold text-gri">
+              <p className="mt-3 text-[11px] font-bold text-gri">
                 {durum.bicim === "abone"
                   ? "Abone defteri tanındı."
                   : "Müşteri listesi tanındı."}
@@ -532,7 +532,7 @@ export default function TopluYukleme({
               {durum.uyarilar.map((u) => (
                 <p
                   key={u}
-                  className="mt-2 rounded-2xl bg-turuncu/10 px-3.5 py-2.5 text-[12px] font-bold text-turuncu"
+                  className="mt-2 rounded-2xl bg-turuncu/10 px-3.5 py-2.5 text-[11px] font-bold text-turuncu"
                 >
                   {u}
                 </p>
@@ -541,20 +541,20 @@ export default function TopluYukleme({
               <ul className="ince-kaydirma mt-3 max-h-56 divide-y divide-cizgi overflow-y-auto rounded-[20px] border border-cizgi bg-yuzey">
                 {durum.satirlar.slice(0, 200).map((s) => (
                   <li key={s.sira} className="flex items-center gap-3 px-3.5 py-2.5">
-                    <span className="w-7 shrink-0 text-[11px] font-black text-gri">
+                    <span className="w-7 shrink-0 text-[10.5px] font-black text-gri">
                       {s.abone_no ?? s.sira}
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[13px] font-bold">
+                      <span className="block truncate text-[12px] font-bold">
                         {s.ad || "—"}
                       </span>
-                      <span className="block truncate text-[11px] text-gri">
+                      <span className="block truncate text-[10.5px] text-gri">
                         {s.adres_metni || "—"}
                       </span>
                       {s.abonelikler.map((p) => (
                         <span
                           key={p.kaynakSatir}
-                          className="mt-0.5 block truncate text-[11px] font-bold text-kirmizi"
+                          className="mt-0.5 block truncate text-[10.5px] font-bold text-kirmizi"
                         >
                           {gunlerYaz(p.gunler)}
                           {p.kalemler.length > 0 &&
@@ -565,12 +565,12 @@ export default function TopluYukleme({
                       ))}
                     </span>
                     {s.hata ? (
-                      <span className="shrink-0 rounded-hap bg-kirmizi px-2 py-0.5 text-[10px] font-black uppercase text-white">
+                      <span className="shrink-0 rounded-hap bg-kirmizi px-2 py-0.5 text-[9.5px] font-black uppercase text-white">
                         {s.hata}
                       </span>
                     ) : (
                       s.lat == null && (
-                        <span className="shrink-0 rounded-hap bg-kontrast px-2 py-0.5 text-[10px] font-black uppercase text-white">
+                        <span className="shrink-0 rounded-hap bg-kontrast px-2 py-0.5 text-[9.5px] font-black uppercase text-white">
                           Konum yok
                         </span>
                       )
@@ -579,7 +579,7 @@ export default function TopluYukleme({
                 ))}
               </ul>
               {durum.satirlar.length > 200 && (
-                <p className="mt-2 px-1 text-[12px] text-gri">
+                <p className="mt-2 px-1 text-[11px] text-gri">
                   İlk 200 satır gösteriliyor; tamamı yüklenecek.
                 </p>
               )}
@@ -588,7 +588,7 @@ export default function TopluYukleme({
                 whileTap={{ scale: 0.97 }}
                 disabled={durum.gecerli === 0}
                 onClick={() => void yukle(durum)}
-                className="mt-4 h-14 w-full rounded-hap bg-kirmizi text-[15px] font-black text-white disabled:opacity-50"
+                className="mt-4 h-14 w-full rounded-hap bg-kirmizi text-[13.5px] font-black text-white disabled:opacity-50"
               >
                 {durum.gecerli} müşteriyi yükle
                 {durum.abonelik > 0 && ` · ${durum.abonelik} abonelik`}
@@ -605,10 +605,10 @@ export default function TopluYukleme({
               exit={{ opacity: 0 }}
               className="py-10"
             >
-              <p className="text-center text-[11px] font-black uppercase tracking-wider text-gri">
+              <p className="text-center text-[10.5px] font-black uppercase tracking-wider text-gri">
                 {durum.asama === "kayit" ? "1 / 2 · Kayıt" : "2 / 2 · Konum"}
               </p>
-              <p className="mt-1 text-center text-[15px] font-black">
+              <p className="mt-1 text-center text-[13.5px] font-black">
                 {durum.biten} / {durum.toplam}
               </p>
               <div className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-yuzey2">
@@ -620,7 +620,7 @@ export default function TopluYukleme({
                   transition={{ type: "spring", stiffness: 120, damping: 20 }}
                 />
               </div>
-              <p className="mt-3 text-center text-[13px] text-gri">
+              <p className="mt-3 text-center text-[12px] text-gri">
                 {durum.asama === "kayit"
                   ? "Kaydediliyor, sayfayı kapatma."
                   : "Adresler haritada aranıyor, sayfayı kapatma."}
@@ -645,31 +645,31 @@ export default function TopluYukleme({
               >
                 ✓
               </motion.span>
-              <p className="mt-4 text-[17px] font-black">
+              <p className="mt-4 text-[15px] font-black">
                 {durum.eklenen} müşteri eklendi
               </p>
               {durum.mevcut > 0 && (
-                <p className="mt-1 text-[14px] font-bold text-gri">
+                <p className="mt-1 text-[12.5px] font-bold text-gri">
                   {durum.mevcut} müşteri zaten kayıtlıydı, üstüne yazılmadı
                 </p>
               )}
               {durum.abonelik > 0 && (
-                <p className="mt-1 text-[14px] font-bold text-gri">
+                <p className="mt-1 text-[12.5px] font-bold text-gri">
                   {durum.abonelik} abonelik kuruldu
                 </p>
               )}
               {durum.konumlanan > 0 && (
-                <p className="mt-1 text-[14px] font-bold text-gri">
+                <p className="mt-1 text-[12.5px] font-bold text-gri">
                   {durum.konumlanan} adres haritaya oturdu
                 </p>
               )}
               {durum.atlanan > 0 && (
-                <p className="mt-1 text-[13px] font-semibold text-kirmizi">
+                <p className="mt-1 text-[12px] font-semibold text-kirmizi">
                   {durum.atlanan} satır kaydedilemedi
                 </p>
               )}
               {durum.konumNotu && (
-                <p className="mt-3 rounded-2xl bg-turuncu/10 px-3.5 py-2.5 text-[12px] font-bold text-turuncu">
+                <p className="mt-3 rounded-2xl bg-turuncu/10 px-3.5 py-2.5 text-[11px] font-bold text-turuncu">
                   {durum.konumNotu}
                 </p>
               )}
@@ -679,7 +679,7 @@ export default function TopluYukleme({
 
         <button
           onClick={onKapat}
-          className="mt-2 flex h-12 w-full items-center justify-center rounded-hap text-[14px] font-bold text-gri"
+          className="mt-2 flex h-12 w-full items-center justify-center rounded-hap text-[12.5px] font-bold text-gri"
         >
           {durum.ad === "bitti" ? "Kapat" : "Vazgeç"}
         </button>
@@ -704,8 +704,8 @@ function Kutu({
   };
   return (
     <div className="flex-1 rounded-[20px] border border-cizgi bg-yuzey p-3 text-center">
-      <p className={`text-[22px] font-black ${renkler[ton]}`}>{sayi}</p>
-      <p className="text-[11px] font-bold uppercase tracking-wide text-gri">
+      <p className={`text-[19px] font-black ${renkler[ton]}`}>{sayi}</p>
+      <p className="text-[10.5px] font-bold uppercase tracking-wide text-gri">
         {etiket}
       </p>
     </div>

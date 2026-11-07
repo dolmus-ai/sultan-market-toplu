@@ -31,8 +31,11 @@ export const viewport: Viewport = {
   themeColor: "#e30a17",
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
+  // İki parmakla yakınlaştırma açık: küçük yazıyı okumak isteyen büyütebilsin.
+  // Harita kendi hareketlerini yakalıyor; sayfa yakınlaşması yalnızca
+  // panellerin üstünde çalışır.
+  maximumScale: 5,
+  userScalable: true,
   viewportFit: "cover",
 };
 

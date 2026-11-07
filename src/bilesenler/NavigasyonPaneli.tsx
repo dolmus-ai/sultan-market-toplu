@@ -77,10 +77,10 @@ export default function NavigasyonPaneli({
             <div className="flex items-center gap-3 p-4">
               <ManevraIkonu manevra={adim.manevra} />
               <div className="min-w-0 flex-1">
-                <p className="text-[30px] font-black leading-none tracking-tight">
+                <p className="text-[26px] font-black leading-none tracking-tight">
                   {mesafeYaz(adimaKalanM)}
                 </p>
-                <p className="mt-1.5 truncate text-[15px] font-bold leading-tight text-white/90">
+                <p className="mt-1.5 truncate text-[13.5px] font-bold leading-tight text-white/90">
                   {adim.yol || adim.tarif}
                 </p>
               </div>
@@ -105,7 +105,7 @@ export default function NavigasyonPaneli({
             {sonrakiAdim && sonrakiAdim.manevra !== "varis" && (
               <div className="flex items-center gap-3 border-t border-white/15 bg-black/15 px-4 py-2.5">
                 <ManevraIkonu manevra={sonrakiAdim.manevra} kucuk />
-                <p className="truncate text-[13px] font-semibold text-white/85">
+                <p className="truncate text-[12px] font-semibold text-white/85">
                   Sonra: {sonrakiAdim.tarif}
                 </p>
               </div>
@@ -145,13 +145,13 @@ export default function NavigasyonPaneli({
       >
         <div className="mb-3 flex items-start gap-3">
           <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-black uppercase tracking-wider text-gri">
+            <p className="text-[10.5px] font-black uppercase tracking-wider text-gri">
               {durum === "secim" ? "Rota seç" : "Yolda"}
             </p>
-            <p className="truncate text-[17px] font-extrabold">
+            <p className="truncate text-[15px] font-extrabold">
               {hedef.musteri?.ad ?? "Teslimat"}
             </p>
-            <p className="truncate text-[12px] font-medium text-gri">
+            <p className="truncate text-[11px] font-medium text-gri">
               {hedef.adres?.adres_metni ?? ""}
             </p>
           </div>
@@ -191,16 +191,16 @@ export default function NavigasyonPaneli({
             ) : (
               <div className="mb-3 flex items-end gap-4">
                 <div>
-                  <p className="text-[28px] font-black leading-none text-kirmizi">
+                  <p className="text-[24px] font-black leading-none text-kirmizi">
                     {sureYaz(secili?.sureSn ?? 0)}
                   </p>
-                  <p className="mt-1 text-[12px] font-bold text-gri">
+                  <p className="mt-1 text-[11px] font-bold text-gri">
                     {mesafeYaz(secili?.mesafeM ?? 0)} ·{" "}
                     {varisSaati(secili?.sureSn ?? 0)} varış
                   </p>
                 </div>
                 {secili?.motor === "yerel" && (
-                  <p className="ml-auto max-w-[45%] text-right text-[11px] font-semibold leading-tight text-gri">
+                  <p className="ml-auto max-w-[45%] text-right text-[10.5px] font-semibold leading-tight text-gri">
                     Yol ağı servisi kapalı — kuş uçuşu tahmin
                   </p>
                 )}
@@ -220,13 +220,13 @@ export default function NavigasyonPaneli({
                         : "border-cizgi bg-yuzey hover:bg-yuzey2"
                     }`}
                   >
-                    <span className="block text-[11px] font-black uppercase tracking-wide text-gri">
+                    <span className="block text-[10.5px] font-black uppercase tracking-wide text-gri">
                       {s.ad}
                     </span>
-                    <span className="block text-[14px] font-black">
+                    <span className="block text-[12.5px] font-black">
                       {sureYaz(s.sureSn)}
                     </span>
-                    <span className="block text-[11px] font-semibold text-gri">
+                    <span className="block text-[10.5px] font-semibold text-gri">
                       {mesafeYaz(s.mesafeM)}
                     </span>
                   </button>
@@ -241,7 +241,7 @@ export default function NavigasyonPaneli({
                   <motion.button
                     whileTap={{ scale: 0.97 }}
                     onClick={onBasla}
-                    className="flex h-14 flex-1 items-center justify-center gap-2 rounded-hap bg-kirmizi text-[15px] font-black text-white shadow-kirmizi"
+                    className="flex h-14 flex-1 items-center justify-center gap-2 rounded-hap bg-kirmizi text-[13.5px] font-black text-white shadow-kirmizi"
                   >
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
                       <path
@@ -286,14 +286,14 @@ export default function NavigasyonPaneli({
                 <motion.button
                   whileTap={{ scale: 0.97 }}
                   onClick={onTeslim}
-                  className="flex h-14 flex-1 items-center justify-center rounded-hap bg-yesil text-[15px] font-black text-white"
+                  className="flex h-14 flex-1 items-center justify-center rounded-hap bg-yesil text-[13.5px] font-black text-white"
                 >
                   ✓ Teslim ettim
                 </motion.button>
               ) : (
                 <button
                   onClick={onBitir}
-                  className="flex h-14 flex-1 items-center justify-center rounded-hap border border-cizgi bg-yuzey text-[15px] font-black"
+                  className="flex h-14 flex-1 items-center justify-center rounded-hap border border-cizgi bg-yuzey text-[13.5px] font-black"
                 >
                   Navigasyonu bitir
                 </button>
@@ -324,13 +324,13 @@ function Sutun({
   return (
     <div className={yon}>
       <p
-        className={`text-[26px] font-black leading-none tracking-tight ${
+        className={`text-[23px] font-black leading-none tracking-tight ${
           vurgu ? "text-kirmizi" : "text-metin"
         }`}
       >
         {ust}
       </p>
-      <p className="mt-1 text-[12px] font-bold text-gri">{alt}</p>
+      <p className="mt-1 text-[11px] font-bold text-gri">{alt}</p>
     </div>
   );
 }

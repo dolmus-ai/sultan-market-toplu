@@ -87,7 +87,7 @@ export default function VardiyaOzeti({
 
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-[11px] font-black uppercase tracking-wider text-gri">
+            <p className="text-[10.5px] font-black uppercase tracking-wider text-gri">
               Vardiya özeti
             </p>
             <h2 className="mt-0.5 text-xl font-extrabold tracking-tight">
@@ -111,19 +111,19 @@ export default function VardiyaOzeti({
         <div className="mt-4 grid grid-cols-2 gap-2">
           <Kutu ust="Teslim edilen" alt={String(teslimEdilen)} />
           <Kutu ust="Teslim edilemeyen" alt={String(basarisiz)} uyari={basarisiz > 0} />
-          <Kutu ust="Yol" alt={mesafeYaz(toplamMesafeM)} />
-          <Kutu ust="Sürüş" alt={sureYaz(toplamSureSn)} />
+          <Kutu ust="Yol (GPS)" alt={mesafeYaz(toplamMesafeM)} />
+          <Kutu ust="Hareket" alt={sureYaz(toplamSureSn)} />
         </div>
 
         {/* Tahsilat dökümü */}
-        <p className="mb-2 mt-5 text-[11px] font-black uppercase tracking-wider text-gri">
+        <p className="mb-2 mt-5 text-[10.5px] font-black uppercase tracking-wider text-gri">
           Tahsilat · {tahsilatlar.length} kayıt
         </p>
         <ul className="divide-y divide-cizgi overflow-hidden rounded-[20px] border border-cizgi bg-yuzey">
           {(Object.keys(ozet.yonteme) as OdemeYontemi[]).map((y) => (
             <li key={y} className="flex items-center justify-between px-4 py-3">
-              <span className="text-[14px] font-bold">{odemeAdi(y, yontemler)}</span>
-              <span className="text-[15px] font-black">
+              <span className="text-[12.5px] font-bold">{odemeAdi(y, yontemler)}</span>
+              <span className="text-[13.5px] font-black">
                 {para(ozet.yonteme[y] ?? 0)}
               </span>
             </li>
@@ -134,10 +134,10 @@ export default function VardiyaOzeti({
             </li>
           )}
           <li className="flex items-center justify-between bg-yuzey2 px-4 py-3">
-            <span className="text-[13px] font-black uppercase tracking-wide text-gri">
+            <span className="text-[12px] font-black uppercase tracking-wide text-gri">
               Toplam
             </span>
-            <span className="text-[17px] font-black">{para(ozet.toplam)}</span>
+            <span className="text-[15px] font-black">{para(ozet.toplam)}</span>
           </li>
         </ul>
 
@@ -145,13 +145,13 @@ export default function VardiyaOzeti({
         {!kapatmaAcik ? (
           <button
             onClick={() => setKapatmaAcik(true)}
-            className="mt-5 flex h-14 w-full items-center justify-center rounded-hap bg-kontrast text-[15px] font-black text-white"
+            className="mt-5 flex h-14 w-full items-center justify-center rounded-hap bg-kontrast text-[13.5px] font-black text-white"
           >
             Vardiyayı bitir · Kasayı teslim et
           </button>
         ) : (
           <div className="mt-5 rounded-[22px] border border-cizgi bg-yuzey p-4">
-            <p className="text-[12px] font-bold text-gri">
+            <p className="text-[11px] font-bold text-gri">
               Kasaya teslim edilen nakit
             </p>
             <div className="mt-2 flex items-center gap-2">
@@ -160,12 +160,12 @@ export default function VardiyaOzeti({
                 inputMode="decimal"
                 value={nakit}
                 onChange={(e) => setNakit(e.target.value)}
-                className="h-14 flex-1 rounded-2xl border border-cizgi bg-yuzey2 px-4 text-[19px] font-black outline-none focus:border-kirmizi focus:bg-yuzey focus:ring-4 focus:ring-kirmizi/12"
+                className="h-14 flex-1 rounded-2xl border border-cizgi bg-yuzey2 px-4 text-[17px] font-black outline-none focus:border-kirmizi focus:bg-yuzey focus:ring-4 focus:ring-kirmizi/12"
               />
-              <span className="text-[19px] font-black text-gri">₺</span>
+              <span className="text-[17px] font-black text-gri">₺</span>
             </div>
 
-            <div className="mt-2 flex items-center justify-between text-[12px] font-semibold">
+            <div className="mt-2 flex items-center justify-between text-[11px] font-semibold">
               <span className="text-gri">
                 Beklenen nakit {para(ozet.nakit)}
               </span>
@@ -181,14 +181,14 @@ export default function VardiyaOzeti({
               onChange={(e) => setNotlar(e.target.value)}
               rows={2}
               placeholder="Fark varsa açıklama…"
-              className="mt-3 w-full resize-none rounded-2xl border border-cizgi bg-yuzey2 px-4 py-3 text-[14px] font-medium outline-none placeholder:text-gri/60 focus:border-kirmizi focus:bg-yuzey"
+              className="mt-3 w-full resize-none rounded-2xl border border-cizgi bg-yuzey2 px-4 py-3 text-[12.5px] font-medium outline-none placeholder:text-gri/60 focus:border-kirmizi focus:bg-yuzey"
             />
 
             <motion.button
               whileTap={{ scale: 0.97 }}
               disabled={islemde}
               onClick={() => onVardiyayiKapat(sayilan, notlar)}
-              className="mt-3 flex h-14 w-full items-center justify-center rounded-hap bg-kirmizi text-[15px] font-black text-white shadow-kirmizi disabled:opacity-60"
+              className="mt-3 flex h-14 w-full items-center justify-center rounded-hap bg-kirmizi text-[13.5px] font-black text-white shadow-kirmizi disabled:opacity-60"
             >
               {islemde ? "Kapatılıyor…" : "Vardiyayı kapat"}
             </motion.button>
@@ -217,7 +217,7 @@ function Kutu({
       <p className="text-[10px] font-black uppercase tracking-wider text-gri">
         {ust}
       </p>
-      <p className="mt-0.5 text-[19px] font-black">{alt}</p>
+      <p className="mt-0.5 text-[17px] font-black">{alt}</p>
     </div>
   );
 }

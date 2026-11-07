@@ -36,20 +36,20 @@ export default function Hata({
         <div className="mt-6 flex flex-col gap-2">
           <button
             onClick={reset}
-            className="flex h-14 items-center justify-center rounded-hap bg-kirmizi text-[15px] font-black text-white shadow-kirmizi"
+            className="flex h-14 items-center justify-center rounded-hap bg-kirmizi text-[13.5px] font-black text-white shadow-kirmizi"
           >
             Tekrar dene
           </button>
           <button
             onClick={() => window.location.reload()}
-            className="flex h-14 items-center justify-center rounded-hap border border-cizgi bg-yuzey text-[15px] font-bold"
+            className="flex h-14 items-center justify-center rounded-hap border border-cizgi bg-yuzey text-[13.5px] font-bold"
           >
             Sayfayı yenile
           </button>
         </div>
 
         {error.digest && (
-          <p className="mt-5 text-[11px] font-semibold text-gri">
+          <p className="mt-5 text-[10.5px] font-semibold text-gri">
             Hata kodu: {error.digest}
           </p>
         )}

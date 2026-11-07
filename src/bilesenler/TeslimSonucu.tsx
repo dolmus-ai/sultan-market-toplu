@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 
 import { SEBEP_ETIKET, para, paraAlinirMi } from "@/lib/bicim";
+import { fotoKucult } from "@/lib/foto";
 import type {
   BasarisizlikSebebi,
   OdemeYontemi,
@@ -21,6 +22,8 @@ export type TeslimSonuc =
       kasaya: boolean;
       /** Ödemeyi yapan kişi. */
       odeyen: string;
+      /** İsteğe bağlı teslim fotoğrafı. */
+      foto?: Blob | null;
     }
   | {
       tur: "teslim";
@@ -28,12 +31,14 @@ export type TeslimSonuc =
       /** Ödemenin alınamadığı kişi — kapıdaki kişi müşteriden farklı olabiliyor. */
       alinmayanKisi: string;
       not: string;
+      foto?: Blob | null;
     }
   | {
       tur: "basarisiz";
       sebep: BasarisizlikSebebi;
       not: string;
       yarinTekrar: boolean;
+      foto?: Blob | null;
     };
 
 const SEBEPLER: BasarisizlikSebebi[] = [
@@ -51,8 +56,6 @@ export default function TeslimSonucu({
   islemde,
   yontemler,
   baslangicOdeme = "alindi",
-  onYontemEkle,
-  onYontemKaldir,
   onKapat,
   onOnay,
   zorunlu = false,
@@ -65,8 +68,6 @@ export default function TeslimSonucu({
   yontemler: OdemeYontemiTanimi[];
   /** Ekran hangi seçenekle açılsın — haritadan "Alınamadı" ile gelinebiliyor. */
   baslangicOdeme?: "alindi" | "alinmadi";
-  onYontemEkle: (ad: string) => Promise<void>;
-  onYontemKaldir: (kod: string) => Promise<void>;
   onKapat: () => void;
   onOnay: (sonuc: TeslimSonuc) => void;
   /**
@@ -88,9 +89,7 @@ export default function TeslimSonucu({
   const [denendi, setDenendi] = useState(false);
   const [odemeNotu, setOdemeNotu] = useState("");
 
-  const [duzenle, setDuzenle] = useState(false);
-  const [yeniYontem, setYeniYontem] = useState("");
-  const [yontemIslemde, setYontemIslemde] = useState(false);
+  const [foto, setFoto] = useState<{ blob: Blob; url: string } | null>(null);
 
   const [sebep, setSebep] = useState<BasarisizlikSebebi>("adreste_yok");
   const [not, setNot] = useState("");
@@ -114,21 +113,29 @@ export default function TeslimSonucu({
         !odemeNotu.trim() && "açıklama",
       ].filter((x): x is string => !!x);
 
+  // Hızlı kapat: tutar siparişin tamamı, ödeyen müşterinin kendisi. Tek
+  // dokunuşla teslim kapanır; farklı bir durum varsa aşağıdaki form duruyor.
+  const hizliKapatilir = (siparis.tutar ?? 0) > 0 && musteriAdi !== "";
+  const hizliYontemler = [...yontemler]
+    .sort((a, b) =>
+      a.kod === siparis.odeme_yontemi ? -1 : b.kod === siparis.odeme_yontemi ? 1 : 0,
+    )
+    .slice(0, 4);
+
+  function hizliKapat(kod: OdemeYontemi) {
+    onOnay({
+      tur: "teslim",
+      odemeAlindi: true,
+      tahsilat: { tutar: siparis.tutar, yontem: kod },
+      kasaya: paraAlinirMi(kod, yontemler),
+      odeyen: musteriAdi,
+      foto: foto?.blob ?? null,
+    });
+  }
+
   function kapat() {
     // Zorunlu kipte dışarı dokunmak ekranı kapatmaz.
     if (!zorunlu) onKapat();
-  }
-
-  async function yontemEkle() {
-    const ad = yeniYontem.trim();
-    if (!ad || yontemIslemde) return;
-    setYontemIslemde(true);
-    try {
-      await onYontemEkle(ad);
-      setYeniYontem("");
-    } finally {
-      setYontemIslemde(false);
-    }
   }
 
   return (
@@ -149,15 +156,15 @@ export default function TeslimSonucu({
       >
         <div className="mx-auto mb-4 h-1.5 w-11 rounded-full bg-cizgi" />
 
-        <p className="text-[11px] font-black uppercase tracking-wider text-gri">
+        <p className="text-[10.5px] font-black uppercase tracking-wider text-gri">
           {mod === "teslim" ? "Teslimatı kapat" : "Teslim edilemedi"}
         </p>
         <h2 className="mt-0.5 truncate text-xl font-extrabold tracking-tight">
           {siparis.musteri?.ad ?? "Müşteri"}
         </h2>
         {zorunlu && mod === "teslim" && (
-          <p className="mt-2 flex items-start gap-2 rounded-2xl bg-yesil/10 px-3 py-2.5 text-[12px] font-bold leading-snug text-yesil">
-            <span className="text-[14px] leading-none">✓</span>
+          <p className="mt-2 flex items-start gap-2 rounded-2xl bg-yesil/10 px-3 py-2.5 text-[11px] font-bold leading-snug text-yesil">
+            <span className="text-[12.5px] leading-none">✓</span>
             Teslim işaretlendi. Ödeme bilgisini girmeden haritaya dönülemez.
           </p>
         )}
@@ -173,7 +180,7 @@ export default function TeslimSonucu({
                 <button
                   key={String(s.deger)}
                   onClick={() => setOdemeAlindi(s.deger)}
-                  className="relative flex-1 rounded-hap px-3 py-2.5 text-[14px] font-black"
+                  className="relative flex-1 rounded-hap px-3 py-2.5 text-[12.5px] font-black"
                 >
                   {odemeAlindi === s.deger && (
                     <motion.span
@@ -204,8 +211,37 @@ export default function TeslimSonucu({
                   exit={{ opacity: 0, y: -8 }}
                   transition={{ duration: 0.18 }}
                 >
+                  {hizliKapatilir && (
+                    <div className="mt-3 rounded-2xl border border-yesil/30 bg-yesil/5 p-2.5">
+                      <p className="text-[11px] font-bold text-gri">
+                        Hızlı kapat · {para(siparis.tutar)} tamamı ·{" "}
+                        {musteriAdi}
+                      </p>
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {hizliYontemler.map((y) => (
+                          <motion.button
+                            key={y.kod}
+                            whileTap={{ scale: 0.96 }}
+                            disabled={islemde}
+                            onClick={() => hizliKapat(y.kod)}
+                            className={`min-h-9 rounded-hap px-3.5 text-[12px] font-black disabled:opacity-60 ${
+                              y.kod === "veresiye"
+                                ? "bg-turuncu text-white"
+                                : "bg-yesil text-white"
+                            }`}
+                          >
+                            ✓ {y.kod === "veresiye" ? "Veresiye yaz" : `${y.ad} aldım`}
+                          </motion.button>
+                        ))}
+                      </div>
+                      <p className="mt-1.5 text-[10.5px] font-semibold text-gri">
+                        Farklı tutar ya da kişi için aşağıyı doldurun.
+                      </p>
+                    </div>
+                  )}
+
                   <div className="mt-4 flex items-center justify-between">
-                    <p className="text-[12px] font-bold text-gri">
+                    <p className="text-[11px] font-bold text-gri">
                       Ödeme yöntemi <Zorunlu />
                       {planlanan && (
                         <span className="ml-1 font-semibold">
@@ -213,12 +249,6 @@ export default function TeslimSonucu({
                         </span>
                       )}
                     </p>
-                    <button
-                      onClick={() => setDuzenle(!duzenle)}
-                      className="text-[12px] font-bold text-kirmizi"
-                    >
-                      {duzenle ? "Bitti" : "Düzenle"}
-                    </button>
                   </div>
 
                   <div className="mt-2 flex flex-wrap gap-1.5">
@@ -227,7 +257,7 @@ export default function TeslimSonucu({
                         <button
                           onClick={() => setYontem(y.kod)}
                           aria-pressed={yontem === y.kod}
-                          className={`min-h-11 rounded-hap px-4 py-2 text-[14px] font-bold transition-colors ${
+                          className={`min-h-11 rounded-hap px-4 py-2 text-[12.5px] font-bold transition-colors ${
                             yontem === y.kod
                               ? "bg-kontrast text-white"
                               : denendi && !yontem
@@ -237,55 +267,12 @@ export default function TeslimSonucu({
                         >
                           {y.ad}
                         </button>
-                        {duzenle && yontemler.length > 1 && (
-                          <motion.button
-                            initial={{ scale: 0 }}
-                            animate={{ scale: 1 }}
-                            exit={{ scale: 0 }}
-                            onClick={() => onYontemKaldir(y.kod)}
-                            aria-label={`${y.ad} yöntemini kaldır`}
-                            className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-kirmizi text-[11px] font-black text-white"
-                          >
-                            ×
-                          </motion.button>
-                        )}
                       </motion.div>
                     ))}
                   </div>
 
-                  <AnimatePresence initial={false}>
-                    {duzenle && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: "auto" }}
-                        exit={{ opacity: 0, height: 0 }}
-                        className="overflow-hidden"
-                      >
-                        <div className="mt-3 flex gap-2">
-                          <input
-                            value={yeniYontem}
-                            onChange={(e) => setYeniYontem(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") void yontemEkle();
-                            }}
-                            placeholder="Yeni yöntem — örn. Havale"
-                            className="h-11 flex-1 rounded-2xl border border-cizgi bg-yuzey2 px-3.5 text-[14px] font-semibold outline-none placeholder:text-gri/60 focus:border-kirmizi focus:bg-yuzey"
-                          />
-                          <motion.button
-                            whileTap={{ scale: 0.95 }}
-                            onClick={() => void yontemEkle()}
-                            disabled={!yeniYontem.trim() || yontemIslemde}
-                            className="h-11 shrink-0 rounded-2xl bg-kontrast px-4 text-[14px] font-black text-white disabled:opacity-40"
-                          >
-                            Ekle
-                          </motion.button>
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-
                   <div className="mt-4">
-                    <p className="mb-2 text-[12px] font-bold text-gri">
+                    <p className="mb-2 text-[11px] font-bold text-gri">
                       {veresiye ? "Veresiye tutarı" : "Ödenen tutar"} <Zorunlu />
                     </p>
                     <div className="flex items-center gap-2">
@@ -297,13 +284,13 @@ export default function TeslimSonucu({
                         placeholder="0,00"
                         aria-label="Ödenen tutar"
                         aria-invalid={denendi && sayisalTutar <= 0}
-                        className={`h-14 min-w-0 flex-1 rounded-2xl border bg-yuzey2 px-4 text-[19px] font-black outline-none placeholder:text-gri/40 focus:border-kirmizi focus:bg-yuzey focus:ring-4 focus:ring-kirmizi/12 ${
+                        className={`h-14 min-w-0 flex-1 rounded-2xl border bg-yuzey2 px-4 text-[17px] font-black outline-none placeholder:text-gri/40 focus:border-kirmizi focus:bg-yuzey focus:ring-4 focus:ring-kirmizi/12 ${
                           denendi && sayisalTutar <= 0 ? "border-kirmizi" : "border-cizgi"
                         }`}
                       />
-                      <span className="text-[19px] font-black text-gri">₺</span>
+                      <span className="text-[17px] font-black text-gri">₺</span>
                     </div>
-                    <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[12px] font-semibold">
+                    <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] font-semibold">
                       {(siparis.tutar ?? 0) > 0 ? (
                         <button
                           onClick={() => setTutar(String(siparis.tutar).replace(".", ","))}
@@ -321,7 +308,7 @@ export default function TeslimSonucu({
                       )}
                     </div>
                     {yontem && !paraAlinir && (
-                      <p className="mt-2 rounded-2xl bg-yuzey2 px-4 py-2.5 text-[12px] font-semibold text-gri">
+                      <p className="mt-2 rounded-2xl bg-yuzey2 px-4 py-2.5 text-[11px] font-semibold text-gri">
                         {veresiye
                           ? "Para alınmadı; tutar bu kişinin borcu olarak yazılır, kasaya işlenmez."
                           : "Bu yöntemde kurye elden para almıyor; tutar kayda geçer ama kasaya işlenmez."}
@@ -330,7 +317,7 @@ export default function TeslimSonucu({
                   </div>
 
                   <div className="mt-4">
-                    <p className="mb-2 text-[12px] font-bold text-gri">
+                    <p className="mb-2 text-[11px] font-bold text-gri">
                       {veresiye ? "Veresiye yazılan kişi" : "Ödemeyi yapan"} <Zorunlu />
                     </p>
                     <input
@@ -342,14 +329,14 @@ export default function TeslimSonucu({
                       aria-label="Ödemeyi yapan"
                       autoComplete="off"
                       aria-invalid={denendi && !odeyen.trim()}
-                      className={`h-12 w-full rounded-2xl border bg-yuzey2 px-4 text-[16px] font-bold outline-none placeholder:text-gri/60 focus:border-kirmizi focus:bg-yuzey ${
+                      className={`h-12 w-full rounded-2xl border bg-yuzey2 px-4 text-[14px] font-bold outline-none placeholder:text-gri/60 focus:border-kirmizi focus:bg-yuzey ${
                         denendi && !odeyen.trim() ? "border-kirmizi" : "border-cizgi"
                       }`}
                     />
                     {musteriAdi && odeyen.trim() !== musteriAdi && (
                       <button
                         onClick={() => setOdeyen(musteriAdi)}
-                        className="mt-2 rounded-hap bg-yuzey2 px-3 py-1.5 text-[12px] font-semibold text-gri hover:bg-cizgi"
+                        className="mt-2 rounded-hap bg-yuzey2 px-3 py-1.5 text-[11px] font-semibold text-gri hover:bg-cizgi"
                       >
                         Müşterinin kendisi · {musteriAdi}
                       </button>
@@ -365,19 +352,19 @@ export default function TeslimSonucu({
                   transition={{ duration: 0.18 }}
                 >
                   <div className="mt-4">
-                    <p className="mb-2 text-[12px] font-bold text-gri">
+                    <p className="mb-2 text-[11px] font-bold text-gri">
                       Kimden alınamadı <Zorunlu />
                     </p>
                     <input
                       value={kisi}
                       onChange={(e) => setKisi(e.target.value)}
                       placeholder="Kapıdaki kişinin adı"
-                      className="h-12 w-full rounded-2xl border border-cizgi bg-yuzey2 px-4 text-[16px] font-bold outline-none placeholder:text-gri/60 focus:border-kirmizi focus:bg-yuzey"
+                      className="h-12 w-full rounded-2xl border border-cizgi bg-yuzey2 px-4 text-[14px] font-bold outline-none placeholder:text-gri/60 focus:border-kirmizi focus:bg-yuzey"
                     />
                   </div>
 
                   <div className="mt-3">
-                    <p className="mb-2 text-[12px] font-bold text-gri">
+                    <p className="mb-2 text-[11px] font-bold text-gri">
                       Açıklama <Zorunlu />
                     </p>
                     <textarea
@@ -385,17 +372,19 @@ export default function TeslimSonucu({
                       onChange={(e) => setOdemeNotu(e.target.value)}
                       rows={3}
                       placeholder="Örn. üzeri yoktu, akşam kasadan ödeyecek"
-                      className="w-full resize-none rounded-2xl border border-cizgi bg-yuzey2 px-4 py-3 text-[16px] font-medium outline-none placeholder:text-gri/60 focus:border-kirmizi focus:bg-yuzey"
+                      className="w-full resize-none rounded-2xl border border-cizgi bg-yuzey2 px-4 py-3 text-[14px] font-medium outline-none placeholder:text-gri/60 focus:border-kirmizi focus:bg-yuzey"
                     />
                   </div>
 
-                  <p className="mt-3 rounded-2xl bg-yuzey2 px-4 py-3 text-[13px] font-semibold text-gri">
+                  <p className="mt-3 rounded-2xl bg-yuzey2 px-4 py-3 text-[12px] font-semibold text-gri">
                     Teslimat tamamlanacak, {para(siparis.tutar ?? 0)} borç olarak
                     kaydedilecek.
                   </p>
                 </motion.div>
               )}
             </AnimatePresence>
+
+            <FotoAlani foto={foto} onFoto={setFoto} />
 
             <AnimatePresence initial={false}>
               {denendi && eksikler.length > 0 && (
@@ -404,7 +393,7 @@ export default function TeslimSonucu({
                   animate={{ opacity: 1, height: "auto" }}
                   exit={{ opacity: 0, height: 0 }}
                   role="alert"
-                  className="mt-4 overflow-hidden rounded-2xl bg-kirmizi-sis px-4 py-2.5 text-[13px] font-bold text-kirmizi-koyu"
+                  className="mt-4 overflow-hidden rounded-2xl bg-kirmizi-sis px-4 py-2.5 text-[12px] font-bold text-kirmizi-koyu"
                 >
                   Eksik: {eksikler.join(", ")}
                 </motion.p>
@@ -425,16 +414,18 @@ export default function TeslimSonucu({
                         tahsilat: { tutar: sayisalTutar, yontem },
                         kasaya: paraAlinir,
                         odeyen: odeyen.trim(),
+                        foto: foto?.blob ?? null,
                       }
                     : {
                         tur: "teslim",
                         odemeAlindi: false,
                         alinmayanKisi: kisi.trim(),
                         not: odemeNotu.trim(),
+                        foto: foto?.blob ?? null,
                       },
                 );
               }}
-              className={`mt-4 flex h-14 w-full items-center justify-center rounded-hap text-[15px] font-black text-white transition-colors disabled:opacity-60 ${
+              className={`mt-4 flex h-14 w-full items-center justify-center rounded-hap text-[13.5px] font-black text-white transition-colors disabled:opacity-60 ${
                 eksikler.length > 0 ? "bg-yesil/55" : "bg-yesil"
               }`}
             >
@@ -444,13 +435,13 @@ export default function TeslimSonucu({
         ) : (
           <>
             <div className="mt-4">
-              <p className="mb-2 text-[12px] font-bold text-gri">Sebep</p>
+              <p className="mb-2 text-[11px] font-bold text-gri">Sebep</p>
               <div className="flex flex-wrap gap-1.5">
                 {SEBEPLER.map((s) => (
                   <button
                     key={s}
                     onClick={() => setSebep(s)}
-                    className={`rounded-hap px-3.5 py-2 text-[13px] font-bold transition-colors ${
+                    className={`rounded-hap px-3.5 py-2 text-[12px] font-bold transition-colors ${
                       sebep === s
                         ? "bg-kontrast text-white"
                         : "bg-yuzey2 text-gri"
@@ -463,7 +454,7 @@ export default function TeslimSonucu({
             </div>
 
             <div className="mt-4">
-              <p className="mb-2 text-[12px] font-bold text-gri">
+              <p className="mb-2 text-[11px] font-bold text-gri">
                 Not (isteğe bağlı)
               </p>
               <textarea
@@ -471,9 +462,11 @@ export default function TeslimSonucu({
                 onChange={(e) => setNot(e.target.value)}
                 rows={2}
                 placeholder="Örn. komşuya bıraktım, akşam tekrar denesinler"
-                className="w-full resize-none rounded-2xl border border-cizgi bg-yuzey2 px-4 py-3 text-[14px] font-medium outline-none placeholder:text-gri/60 focus:border-kirmizi focus:bg-yuzey"
+                className="w-full resize-none rounded-2xl border border-cizgi bg-yuzey2 px-4 py-3 text-[12.5px] font-medium outline-none placeholder:text-gri/60 focus:border-kirmizi focus:bg-yuzey"
               />
             </div>
+
+            <FotoAlani foto={foto} onFoto={setFoto} />
 
             <button
               onClick={() => setYarinTekrar(!yarinTekrar)}
@@ -488,7 +481,7 @@ export default function TeslimSonucu({
               >
                 {yarinTekrar && <span className="text-xs font-black">✓</span>}
               </span>
-              <span className="flex-1 text-[14px] font-bold">
+              <span className="flex-1 text-[12.5px] font-bold">
                 Yarın tekrar denensin
               </span>
             </button>
@@ -497,9 +490,15 @@ export default function TeslimSonucu({
               whileTap={{ scale: 0.97 }}
               disabled={islemde}
               onClick={() =>
-                onOnay({ tur: "basarisiz", sebep, not, yarinTekrar })
+                onOnay({
+                  tur: "basarisiz",
+                  sebep,
+                  not,
+                  yarinTekrar,
+                  foto: foto?.blob ?? null,
+                })
               }
-              className="mt-5 flex h-14 w-full items-center justify-center rounded-hap bg-turuncu text-[15px] font-black text-white disabled:opacity-60"
+              className="mt-5 flex h-14 w-full items-center justify-center rounded-hap bg-turuncu text-[13.5px] font-black text-white disabled:opacity-60"
             >
               {islemde ? "Kaydediliyor…" : "Kaydet"}
             </motion.button>
@@ -510,17 +509,17 @@ export default function TeslimSonucu({
           <button
             onClick={onGeriAl}
             disabled={islemde}
-            className="mt-2 flex min-h-12 w-full flex-col items-center justify-center rounded-hap py-1 text-[14px] font-bold text-kirmizi disabled:opacity-60"
+            className="mt-2 flex min-h-12 w-full flex-col items-center justify-center rounded-hap py-1 text-[12.5px] font-bold text-kirmizi disabled:opacity-60"
           >
             Teslimi geri al
-            <span className="text-[11px] font-semibold text-gri">
+            <span className="text-[10.5px] font-semibold text-gri">
               Pin eski rengine döner, teslim edilmemiş sayılır
             </span>
           </button>
         ) : (
           <button
             onClick={onKapat}
-            className="mt-2 flex h-12 w-full items-center justify-center rounded-hap text-[14px] font-bold text-gri"
+            className="mt-2 flex h-12 w-full items-center justify-center rounded-hap text-[12.5px] font-bold text-gri"
           >
             Vazgeç
           </button>
@@ -535,5 +534,75 @@ function Zorunlu() {
     <span className="text-kirmizi" aria-label="zorunlu">
       *
     </span>
+  );
+}
+
+/** İsteğe bağlı teslim fotoğrafı: kamera açılır, küçültülüp önizlenir. */
+function FotoAlani({
+  foto,
+  onFoto,
+}: {
+  foto: { blob: Blob; url: string } | null;
+  onFoto: (f: { blob: Blob; url: string } | null) => void;
+}) {
+  const girdi = useRef<HTMLInputElement>(null);
+  const [hazirlaniyor, setHazirlaniyor] = useState(false);
+
+  async function secildi(dosya: File | undefined) {
+    if (!dosya) return;
+    setHazirlaniyor(true);
+    try {
+      const blob = await fotoKucult(dosya);
+      if (foto) URL.revokeObjectURL(foto.url);
+      onFoto({ blob, url: URL.createObjectURL(blob) });
+    } finally {
+      setHazirlaniyor(false);
+    }
+  }
+
+  return (
+    <div className="mt-3 flex items-center gap-2">
+      <input
+        ref={girdi}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(e) => {
+          void secildi(e.target.files?.[0]);
+          e.target.value = "";
+        }}
+      />
+      {foto ? (
+        <>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={foto.url}
+            alt="Teslim fotoğrafı"
+            className="h-12 w-12 shrink-0 rounded-xl object-cover"
+          />
+          <span className="flex-1 text-[11px] font-bold text-gri">
+            Fotoğraf eklendi
+          </span>
+          <button
+            onClick={() => {
+              URL.revokeObjectURL(foto.url);
+              onFoto(null);
+            }}
+            className="rounded-hap bg-yuzey2 px-3 py-1.5 text-[11px] font-bold text-gri"
+          >
+            Kaldır
+          </button>
+        </>
+      ) : (
+        <button
+          onClick={() => girdi.current?.click()}
+          disabled={hazirlaniyor}
+          className="flex min-h-10 flex-1 items-center justify-center gap-2 rounded-2xl border border-dashed border-cizgi text-[12px] font-bold text-gri disabled:opacity-60"
+        >
+          📷 {hazirlaniyor ? "Hazırlanıyor…" : "Fotoğraf ekle (isteğe bağlı)"}
+        </button>
+      )}
+    </div>
   );
 }

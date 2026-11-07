@@ -6,7 +6,6 @@ import {
   abonelikleriGetir,
   kuryeGetir,
   odemeYontemleriGetir,
-  sepetleriGetir,
   sitelerGetir,
   siparisleriGetir,
 } from "@/lib/veri";
@@ -30,12 +29,11 @@ export default async function HaritaSayfasi() {
     { onConflict: "id", ignoreDuplicates: true },
   );
 
-  const [kurye, teslimatlar, abonelikler, sepetler, yontemler, siteler, profil] =
+  const [kurye, teslimatlar, abonelikler, yontemler, siteler, profil] =
     await Promise.all([
       kuryeGetir(db, user.id),
       siparisleriGetir(db, bugununTarihi()),
       abonelikleriGetir(db),
-      sepetleriGetir(db),
       odemeYontemleriGetir(db),
       sitelerGetir(db),
       // Defter ekibi (profiles kaydı olan) deftere geri dönebilir.
@@ -47,7 +45,6 @@ export default async function HaritaSayfasi() {
       kurye={kurye}
       baslangicTeslimatlar={teslimatlar}
       baslangicAbonelikler={abonelikler}
-      baslangicSepetler={sepetler}
       baslangicYontemler={yontemler.filter((y) => y.aktif)}
       baslangicSiteler={siteler}
       defterErisimi={profil.data != null}

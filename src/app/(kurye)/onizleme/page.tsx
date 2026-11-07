@@ -5,7 +5,6 @@ import type {
   Abonelik,
   KayitliSite,
   Kalem,
-  Sepet,
   Siparis,
   SiparisDurumu,
   Urun,
@@ -148,22 +147,6 @@ const ABONELIKLER: Abonelik[] = [0, 3, 6, 9].map((i) => ({
   })),
 }));
 
-const SEPETLER: Sepet[] = [1, 4, 7].map((i) => ({
-  id: `sepet-${i}`,
-  musteri_id: `musteri-${i}`,
-  adres_id: `adres-${i}`,
-  durum: "acik",
-  tutar: 0,
-  updated_at: new Date().toISOString(),
-  musteri: TESLIMATLAR[i].musteri,
-  adres: TESLIMATLAR[i].adres,
-  kalemler: TESLIMATLAR[i].kalemler.map((k) => ({
-    id: `s-${k.id}`,
-    miktar: k.miktar,
-    urun: { fiyat: k.urun!.fiyat },
-  })),
-}));
-
 /** Defterden gelmiş gibi konumsuz aboneler — "Toplu düzelt" sekmesi için. */
 const DEFTER_ABONELERI: Abonelik[] = [
   ["Ayten Kaya", "DAYMINT AB 10"],
@@ -291,7 +274,6 @@ export default async function OnizlemeSayfasi({
       }}
       baslangicTeslimatlar={TESLIMATLAR}
       baslangicAbonelikler={abonelikler}
-      baslangicSepetler={SEPETLER}
       baslangicSiteler={SITELER}
       baslangicYontemler={[
         { kod: "nakit", ad: "Nakit", para_alinir: true, sira: 10, aktif: true },

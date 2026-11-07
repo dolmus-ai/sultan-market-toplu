@@ -1710,14 +1710,14 @@ export default function Harita({
       {yuklenemedi && (
         <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center p-6">
           <div className="pointer-events-auto max-w-sm rounded-[22px] border border-cizgi bg-yuzey p-5 text-center shadow-lg">
-            <p className="text-[15px] font-black">Harita yüklenemedi</p>
-            <p className="mt-1 text-[13px] text-gri">
+            <p className="text-[13.5px] font-black">Harita yüklenemedi</p>
+            <p className="mt-1 text-[12px] text-gri">
               {googleHatasi ??
                 "Harita sunucusuna ulaşılamıyor. Teslimat listesi çalışmaya devam ediyor; bağlantını kontrol edip yeniden deneyebilirsin."}
             </p>
             <button
               onClick={stiliYenidenYukle}
-              className="mt-4 w-full rounded-hap bg-kirmizi px-4 py-2.5 text-[14px] font-black text-white"
+              className="mt-4 w-full rounded-hap bg-kirmizi px-4 py-2.5 text-[12.5px] font-black text-white"
             >
               Yeniden dene
             </button>

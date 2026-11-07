@@ -64,12 +64,6 @@ const TURLER: { deger: KayitTuru; baslik: string; alt: string; simge: string }[]
     alt: "Belirli günlerde kendiliğinden sipariş üretir",
     simge: "🔁",
   },
-  {
-    deger: "sepet",
-    baslik: "Sepet",
-    alt: "Müşteri toplamaya devam ediyor, henüz sipariş değil",
-    simge: "🧺",
-  },
 ];
 
 export default function KayitEkle({
@@ -465,7 +459,7 @@ export default function KayitEkle({
                   <button
                     key={m}
                     onClick={() => setMusteriModu(m)}
-                    className="relative flex-1 rounded-hap px-3 py-2 text-[13px] font-black"
+                    className="relative flex-1 rounded-hap px-3 py-2 text-[12px] font-black"
                   >
                     {musteriModu === m && (
                       <motion.span
@@ -509,17 +503,17 @@ export default function KayitEkle({
                         }`}
                       >
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate text-[14px] font-bold">
+                          <span className="block truncate text-[12.5px] font-bold">
                             {m.ad}
                           </span>
-                          <span className="block truncate text-[12px] text-gri">
+                          <span className="block truncate text-[11px] text-gri">
                             {m.telefon ?? "Telefon yok"}
                           </span>
                         </span>
                       </motion.button>
                     ))}
                     {sonuclar.length === 0 && (
-                      <p className="px-1 py-4 text-center text-[13px] text-gri">
+                      <p className="px-1 py-4 text-center text-[12px] text-gri">
                         Eşleşen müşteri yok. Yeni müşteri açabilirsin.
                       </p>
                     )}
@@ -583,10 +577,10 @@ export default function KayitEkle({
                       }`}
                     >
                       <span className="min-w-0 flex-1">
-                        <span className="block text-[13px] font-black">
+                        <span className="block text-[12px] font-black">
                           {a.baslik}
                         </span>
-                        <span className="block text-[12px] text-gri">
+                        <span className="block text-[11px] text-gri">
                           {a.adres_metni}
                         </span>
                       </span>
@@ -684,7 +678,7 @@ export default function KayitEkle({
                           geokod.durum === "araniyor" ||
                           yeniAdres.adres_metni.trim().length < 5
                         }
-                        className="flex h-12 flex-[2] items-center justify-center gap-2 rounded-2xl border border-cizgi bg-yuzey text-[14px] font-bold text-gri disabled:opacity-50"
+                        className="flex h-12 flex-[2] items-center justify-center gap-2 rounded-2xl border border-cizgi bg-yuzey text-[12.5px] font-bold text-gri disabled:opacity-50"
                       >
                         {geokod.durum === "araniyor" ? (
                           <>
@@ -710,7 +704,7 @@ export default function KayitEkle({
                           setGeokod({ durum: "bos" });
                         }}
                         disabled={!kuryeKonumu}
-                        className="h-12 flex-1 rounded-2xl border border-cizgi bg-yuzey text-[14px] font-bold text-gri disabled:opacity-50"
+                        className="h-12 flex-1 rounded-2xl border border-cizgi bg-yuzey text-[12.5px] font-bold text-gri disabled:opacity-50"
                       >
                         📍 Kapıdayım
                       </motion.button>
@@ -722,7 +716,7 @@ export default function KayitEkle({
                           initial={{ opacity: 0, height: 0 }}
                           animate={{ opacity: 1, height: "auto" }}
                           exit={{ opacity: 0, height: 0 }}
-                          className={`mt-2 overflow-hidden rounded-2xl border px-3.5 py-2.5 text-[12px] font-bold ${
+                          className={`mt-2 overflow-hidden rounded-2xl border px-3.5 py-2.5 text-[11px] font-bold ${
                             geokod.durum === "bulundu" && geokod.kaba
                               ? "border-turuncu bg-turuncu/10 text-turuncu"
                               : "border-yesil bg-yesil/10 text-yesil"
@@ -752,7 +746,7 @@ export default function KayitEkle({
                           initial={{ opacity: 0 }}
                           animate={{ opacity: 1 }}
                           exit={{ opacity: 0 }}
-                          className="mt-2 rounded-2xl bg-yuzey2 px-3.5 py-2.5 text-[12px] font-semibold text-gri"
+                          className="mt-2 rounded-2xl bg-yuzey2 px-3.5 py-2.5 text-[11px] font-semibold text-gri"
                         >
                           Adres haritada bulunamadı. Mahalle ve ilçeyi yazmayı
                           ya da kapıdayken &quot;Kapıdayım&quot;a basmayı dene.
@@ -760,7 +754,7 @@ export default function KayitEkle({
                       )}
                     </AnimatePresence>
 
-                    <p className="mt-1.5 px-1 text-[11px] text-gri">
+                    <p className="mt-1.5 px-1 text-[10.5px] text-gri">
                       Konum işaretlenmezse kaydederken adres kendiliğinden
                       haritada aranır; bulunamazsa kayıt haritada görünmez ve
                       sonradan düzeltilebilir.
@@ -789,10 +783,10 @@ export default function KayitEkle({
                   >
                     <span className="text-2xl leading-none">{t.simge}</span>
                     <span className="min-w-0 flex-1">
-                      <span className="block text-[15px] font-black">
+                      <span className="block text-[13.5px] font-black">
                         {t.baslik}
                       </span>
-                      <span className="block text-[12px] text-gri">{t.alt}</span>
+                      <span className="block text-[11px] text-gri">{t.alt}</span>
                     </span>
                     <span className="text-gri">›</span>
                   </motion.button>
@@ -817,12 +811,12 @@ export default function KayitEkle({
                     onChange={(e) => setTutar(e.target.value)}
                     inputMode="decimal"
                     placeholder="0"
-                    className={`${GIRDI} text-[19px] font-black`}
+                    className={`${GIRDI} text-[17px] font-black`}
                   />
-                  <span className="text-[19px] font-black text-gri">₺</span>
+                  <span className="text-[17px] font-black text-gri">₺</span>
                 </div>
                 {sayisalTutar > 0 && (
-                  <p className="mt-1 px-1 text-[12px] font-semibold text-gri">
+                  <p className="mt-1 px-1 text-[11px] font-semibold text-gri">
                     {para(sayisalTutar)}
                   </p>
                 )}
@@ -855,7 +849,7 @@ export default function KayitEkle({
                         <button
                           key={y.kod}
                           onClick={() => setYontem(y.kod)}
-                          className={`rounded-hap px-3.5 py-2 text-[13px] font-bold transition-colors ${
+                          className={`rounded-hap px-3.5 py-2 text-[12px] font-bold transition-colors ${
                             yontem === y.kod
                               ? "bg-kontrast text-white"
                               : "bg-yuzey2 text-gri"
@@ -878,7 +872,7 @@ export default function KayitEkle({
                     >
                       {acil && <span className="text-xs font-black">✓</span>}
                     </span>
-                    <span className="flex-1 text-[14px] font-bold">Acil</span>
+                    <span className="flex-1 text-[12.5px] font-bold">Acil</span>
                   </button>
                 </>
               )}
@@ -900,7 +894,7 @@ export default function KayitEkle({
                         <button
                           key={s.deger}
                           onClick={() => setSiklik(s.deger)}
-                          className={`rounded-hap px-3.5 py-2 text-[13px] font-bold transition-colors ${
+                          className={`rounded-hap px-3.5 py-2 text-[12px] font-bold transition-colors ${
                             siklik === s.deger
                               ? "bg-kontrast text-white"
                               : "bg-yuzey2 text-gri"
@@ -935,7 +929,7 @@ export default function KayitEkle({
                                         : [...o, gun].sort((a, b) => a - b),
                                     )
                                   }
-                                  className={`flex-1 rounded-xl py-2.5 text-[12px] font-black transition-colors ${
+                                  className={`flex-1 rounded-xl py-2.5 text-[11px] font-black transition-colors ${
                                     secili
                                       ? "bg-kirmizi text-white"
                                       : "bg-yuzey2 text-gri"
@@ -996,7 +990,7 @@ export default function KayitEkle({
               initial={{ opacity: 0, y: -4 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
-              className="mt-3 rounded-2xl bg-kirmizi-sis px-4 py-3 text-[13px] font-bold text-kirmizi"
+              className="mt-3 rounded-2xl bg-kirmizi-sis px-4 py-3 text-[12px] font-bold text-kirmizi"
             >
               {hata}
             </motion.p>
@@ -1006,7 +1000,7 @@ export default function KayitEkle({
         <div className="mt-5 flex gap-2">
           <button
             onClick={geri}
-            className="h-13 flex-1 rounded-hap bg-yuzey2 py-3.5 text-[14px] font-bold text-gri"
+            className="h-13 flex-1 rounded-hap bg-yuzey2 py-3.5 text-[12.5px] font-bold text-gri"
           >
             {adim === "musteri" ? "Vazgeç" : "Geri"}
           </button>
@@ -1019,7 +1013,7 @@ export default function KayitEkle({
                 else if (adim === "adres") void adresiOnayla();
                 else void kaydet();
               }}
-              className="flex-[2] rounded-hap bg-kirmizi py-3.5 text-[14px] font-black text-white disabled:opacity-60"
+              className="flex-[2] rounded-hap bg-kirmizi py-3.5 text-[12.5px] font-black text-white disabled:opacity-60"
             >
               {islemde ? "Kaydediliyor…" : adim === "detay" ? "Kaydet" : "Devam"}
             </motion.button>
@@ -1035,7 +1029,7 @@ export default function KayitEkle({
 /* ------------------------------------------------------------------ */
 
 const GIRDI =
-  "h-12 w-full rounded-2xl border border-cizgi bg-yuzey2 px-4 text-[15px] font-semibold outline-none placeholder:text-gri/60 focus:border-kirmizi focus:bg-yuzey";
+  "h-12 w-full rounded-2xl border border-cizgi bg-yuzey2 px-4 text-[13.5px] font-semibold outline-none placeholder:text-gri/60 focus:border-kirmizi focus:bg-yuzey";
 
 function Sayfa({
   anahtar,
@@ -1060,13 +1054,13 @@ function Sayfa({
 function Baslik({ ust, ana, alt }: { ust: string; ana: string; alt?: string }) {
   return (
     <div>
-      <p className="text-[11px] font-black uppercase tracking-wider text-gri">
+      <p className="text-[10.5px] font-black uppercase tracking-wider text-gri">
         {ust}
       </p>
       <h2 className="mt-0.5 truncate text-xl font-extrabold tracking-tight">
         {ana}
       </h2>
-      {alt && <p className="truncate text-[13px] text-gri">{alt}</p>}
+      {alt && <p className="truncate text-[12px] text-gri">{alt}</p>}
     </div>
   );
 }
@@ -1094,7 +1088,7 @@ function SiteSecici({
       <button
         type="button"
         onClick={() => setAcik(true)}
-        className="mt-2 flex h-10 w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-cizgi text-[13px] font-bold text-gri hover:bg-yuzey2"
+        className="mt-2 flex h-10 w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-cizgi text-[12px] font-bold text-gri hover:bg-yuzey2"
       >
         🏘️ Haritadaki sitelerden seç
       </button>
@@ -1106,7 +1100,7 @@ function SiteSecici({
       {secilen ? (
         <div className="px-1.5 py-1">
           <div className="flex items-center gap-2">
-            <p className="min-w-0 flex-1 truncate text-[13px] font-black">
+            <p className="min-w-0 flex-1 truncate text-[12px] font-black">
               🏘️ {secilen.ad}
             </p>
             <button
@@ -1115,7 +1109,7 @@ function SiteSecici({
                 setSecilen(null);
                 setBlok(null);
               }}
-              className="text-[12px] font-bold text-gri"
+              className="text-[11px] font-bold text-gri"
             >
               Değiştir
             </button>
@@ -1131,7 +1125,7 @@ function SiteSecici({
                     setBlok(yeni);
                     onSec(secilen, yeni);
                   }}
-                  className={`rounded-hap border px-2.5 py-1 text-[12px] font-bold ${
+                  className={`rounded-hap border px-2.5 py-1 text-[11px] font-bold ${
                     blok === b.ad
                       ? "border-kontrast bg-kontrast text-white"
                       : "border-cizgi bg-yuzey"
@@ -1150,7 +1144,7 @@ function SiteSecici({
             value={sorgu}
             onChange={(e) => setSorgu(e.target.value)}
             placeholder="Site adı ya da mahalle"
-            className="h-10 w-full rounded-xl bg-yuzey2 px-3 text-[14px] font-semibold outline-none"
+            className="h-10 w-full rounded-xl bg-yuzey2 px-3 text-[12.5px] font-semibold outline-none"
           />
           {sonuclar.map((a) => {
             const site = siteler.find((s) => `kayit:${s.id}` === a.anahtar);
@@ -1166,8 +1160,8 @@ function SiteSecici({
                 className="mt-1 flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left hover:bg-yuzey2"
               >
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[13px] font-black">{a.ad}</span>
-                  <span className="block truncate text-[11px] text-gri">
+                  <span className="block truncate text-[12px] font-black">{a.ad}</span>
+                  <span className="block truncate text-[10.5px] text-gri">
                     {[a.mahalle, a.ilce].filter(Boolean).join(" · ")}
                   </span>
                 </span>
@@ -1176,7 +1170,7 @@ function SiteSecici({
             );
           })}
           {sonuclar.length === 0 && (
-            <p className="px-2 py-2 text-[12px] text-gri">Eşleşen site yok.</p>
+            <p className="px-2 py-2 text-[11px] text-gri">Eşleşen site yok.</p>
           )}
         </>
       )}
@@ -1193,7 +1187,7 @@ function Alan({
 }) {
   return (
     <label className="mt-3 block">
-      <span className="mb-1.5 block px-1 text-[12px] font-bold text-gri">
+      <span className="mb-1.5 block px-1 text-[11px] font-bold text-gri">
         {etiket}
       </span>
       {children}

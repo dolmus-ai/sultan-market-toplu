@@ -97,3 +97,59 @@ export async function onaySesi() {
     osilator.stop(bas + 0.45);
   });
 }
+
+/**
+ * Tam ekran liste açılıp kapanırken kısa bir "vuuş".
+ *
+ * Süzgeçten geçirilmiş gürültü: açılırken tiz tarafa, kapanırken pes tarafa
+ * kayıyor; altında hafif bir tık. Kısa ve kısık — sahada rahatsız etmesin.
+ */
+export async function kaydirmaSesi(acilis: boolean) {
+  const ctx = sesBaglami();
+  if (!ctx) return;
+  try {
+    if (ctx.state === "suspended") await ctx.resume();
+  } catch {
+    return;
+  }
+  if (ctx.state !== "running") return;
+
+  const simdi = ctx.currentTime;
+  const sure = 0.24;
+
+  // Beyaz gürültü tamponu
+  const ornek = Math.floor(ctx.sampleRate * sure);
+  const tampon = ctx.createBuffer(1, ornek, ctx.sampleRate);
+  const veri = tampon.getChannelData(0);
+  for (let i = 0; i < ornek; i++) veri[i] = Math.random() * 2 - 1;
+  const gurultu = ctx.createBufferSource();
+  gurultu.buffer = tampon;
+
+  const suzgec = ctx.createBiquadFilter();
+  suzgec.type = "bandpass";
+  suzgec.Q.value = 1.4;
+  suzgec.frequency.setValueAtTime(acilis ? 500 : 2600, simdi);
+  suzgec.frequency.exponentialRampToValueAtTime(acilis ? 2600 : 450, simdi + sure);
+
+  const zarf = ctx.createGain();
+  zarf.gain.setValueAtTime(0.0001, simdi);
+  zarf.gain.exponentialRampToValueAtTime(0.22, simdi + 0.05);
+  zarf.gain.exponentialRampToValueAtTime(0.0001, simdi + sure);
+
+  gurultu.connect(suzgec).connect(zarf).connect(ctx.destination);
+  gurultu.start(simdi);
+  gurultu.stop(simdi + sure);
+
+  // Sonunda yumuşak tık
+  const tik = ctx.createOscillator();
+  const tikZarf = ctx.createGain();
+  const tikBas = simdi + sure - 0.04;
+  tik.type = "sine";
+  tik.frequency.setValueAtTime(acilis ? 880 : 520, tikBas);
+  tikZarf.gain.setValueAtTime(0.0001, tikBas);
+  tikZarf.gain.exponentialRampToValueAtTime(0.08, tikBas + 0.01);
+  tikZarf.gain.exponentialRampToValueAtTime(0.0001, tikBas + 0.12);
+  tik.connect(tikZarf).connect(ctx.destination);
+  tik.start(tikBas);
+  tik.stop(tikBas + 0.14);
+}

@@ -225,10 +225,10 @@ export default function KonumTamamla({
       >
         <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-cizgi sm:hidden" />
 
-        <p className="text-[11px] font-black uppercase tracking-wide text-gri">
+        <p className="text-[10.5px] font-black uppercase tracking-wide text-gri">
           Adres
         </p>
-        <h2 className="mt-0.5 text-[24px] font-black leading-tight">
+        <h2 className="mt-0.5 text-[21px] font-black leading-tight">
           Haritaya oturt
         </h2>
 
@@ -238,7 +238,7 @@ export default function KonumTamamla({
               key="yukleniyor"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="mt-4 text-[14px] font-semibold text-gri"
+              className="mt-4 text-[12.5px] font-semibold text-gri"
             >
               Konumu olmayan adresler okunuyor…
             </motion.p>
@@ -251,12 +251,12 @@ export default function KonumTamamla({
               animate={{ opacity: 1, y: 0 }}
             >
               {durum.adresler.length === 0 ? (
-                <p className="mt-4 text-[14px] font-semibold text-gri">
+                <p className="mt-4 text-[12.5px] font-semibold text-gri">
                   Bütün adreslerin konumu var. Yapılacak bir şey yok.
                 </p>
               ) : (
                 <>
-                  <p className="mt-3 text-[14px] font-semibold leading-relaxed text-gri">
+                  <p className="mt-3 text-[12.5px] font-semibold leading-relaxed text-gri">
                     <b className="text-kontrast">
                       {durum.adresler.length} adresin
                     </b>{" "}
@@ -265,20 +265,20 @@ export default function KonumTamamla({
                     sokakların mahallesi, sabit noktalar. Aynı siteyi anlatanlar
                     tek seferde bulunup hepsine yazılacak.
                   </p>
-                  <p className="mt-2 text-[13px] font-semibold leading-relaxed text-gri">
+                  <p className="mt-2 text-[12px] font-semibold leading-relaxed text-gri">
                     Kalan <b className="text-kontrast">{durum.kalan}</b> tarif
                     (&ldquo;Keçecilerin orası&rdquo; gibi) aranmıyor; işlem bitince listede
                     çıkar, haritadan elle işaretlersiniz.
                   </p>
 
                   <div className="mt-4 rounded-[20px] border border-cizgi bg-yuzey p-3">
-                    <p className="text-[11px] font-black uppercase tracking-wide text-gri">
+                    <p className="text-[10.5px] font-black uppercase tracking-wide text-gri">
                       Örnek
                     </p>
                     {durum.adresler.slice(0, 3).map((a) => (
                       <p
                         key={a.id}
-                        className="mt-1 truncate text-[13px] font-semibold"
+                        className="mt-1 truncate text-[12px] font-semibold"
                       >
                         {a.adres_metni}
                       </p>
@@ -288,7 +288,7 @@ export default function KonumTamamla({
                   <motion.button
                     whileTap={{ scale: 0.98 }}
                     onClick={() => calistir(durum.adresler)}
-                    className="mt-5 w-full rounded-hap bg-kirmizi py-4 text-[15px] font-black text-white"
+                    className="mt-5 w-full rounded-hap bg-kirmizi py-4 text-[13.5px] font-black text-white"
                   >
                     Başlat
                   </motion.button>
@@ -304,8 +304,8 @@ export default function KonumTamamla({
               animate={{ opacity: 1 }}
               className="mt-4"
             >
-              <p className="text-[14px] font-bold">Konumlar aranıyor…</p>
-              <p className="mt-1 text-[13px] font-semibold text-gri">
+              <p className="text-[12.5px] font-bold">Konumlar aranıyor…</p>
+              <p className="mt-1 text-[12px] font-semibold text-gri">
                 {durum.biten} / {durum.toplam} yer · {durum.oturan} adres oturdu
               </p>
               <div className="mt-3 h-2 overflow-hidden rounded-full bg-yuzey2">
@@ -317,7 +317,7 @@ export default function KonumTamamla({
                   transition={{ type: "spring", stiffness: 180, damping: 28 }}
                 />
               </div>
-              <p className="mt-3 text-[12px] font-semibold text-gri">
+              <p className="mt-3 text-[11px] font-semibold text-gri">
                 Kapatabilirsiniz; yazılan konumlar kalır, kalanlarla sonra
                 devam edebilirsiniz.
               </p>
@@ -331,10 +331,10 @@ export default function KonumTamamla({
               animate={{ opacity: 1, y: 0 }}
               className="mt-4"
             >
-              <p className="text-[15px] font-black">
+              <p className="text-[13.5px] font-black">
                 {durum.oturan} adres haritaya oturdu
               </p>
-              <p className="mt-1 text-[13px] font-semibold text-gri">
+              <p className="mt-1 text-[12px] font-semibold text-gri">
                 {durum.grup} ayrı yer arandı.
                 {durum.kalan.length > 0 &&
                   ` ${durum.kalan.length} adres bulunamadı.`}
@@ -342,17 +342,17 @@ export default function KonumTamamla({
 
               {durum.kalan.length > 0 && (
                 <div className="mt-4 max-h-56 overflow-y-auto rounded-[20px] border border-cizgi bg-yuzey p-3">
-                  <p className="text-[11px] font-black uppercase tracking-wide text-gri">
+                  <p className="text-[10.5px] font-black uppercase tracking-wide text-gri">
                     Elle konulacaklar
                   </p>
                   {durum.kalan.slice(0, 60).map((k, i) => (
-                    <p key={i} className="mt-1.5 text-[12px] font-semibold">
+                    <p key={i} className="mt-1.5 text-[11px] font-semibold">
                       <span className="block truncate">{k.adres}</span>
                       <span className="text-gri">{k.sebep}</span>
                     </p>
                   ))}
                   {durum.kalan.length > 60 && (
-                    <p className="mt-2 text-[12px] font-semibold text-gri">
+                    <p className="mt-2 text-[11px] font-semibold text-gri">
                       …ve {durum.kalan.length - 60} tane daha.
                     </p>
                   )}
@@ -362,7 +362,7 @@ export default function KonumTamamla({
               <motion.button
                 whileTap={{ scale: 0.98 }}
                 onClick={onKapat}
-                className="mt-5 w-full rounded-hap bg-kontrast py-4 text-[15px] font-black text-white"
+                className="mt-5 w-full rounded-hap bg-kontrast py-4 text-[13.5px] font-black text-white"
               >
                 Kapat
               </motion.button>
@@ -376,14 +376,14 @@ export default function KonumTamamla({
               animate={{ opacity: 1 }}
               className="mt-4"
             >
-              <p className="rounded-[20px] border border-cizgi bg-yuzey p-3.5 text-[13px] font-semibold leading-relaxed">
+              <p className="rounded-[20px] border border-cizgi bg-yuzey p-3.5 text-[12px] font-semibold leading-relaxed">
                 {durum.mesaj}
               </p>
 
               <motion.button
                 whileTap={{ scale: 0.98 }}
                 onClick={onKapat}
-                className="mt-5 w-full rounded-hap bg-kontrast py-4 text-[15px] font-black text-white"
+                className="mt-5 w-full rounded-hap bg-kontrast py-4 text-[13.5px] font-black text-white"
               >
                 Kapat
               </motion.button>

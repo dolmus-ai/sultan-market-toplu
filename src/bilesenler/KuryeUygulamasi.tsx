@@ -26,13 +26,9 @@ import TopluYukleme from "./TopluYukleme";
 import VardiyaOzeti from "./VardiyaOzeti";
 import NavigasyonPaneli, { type NavigasyonDurumu } from "./NavigasyonPaneli";
 import AdresBulucu, { BinaSimgesi } from "./AdresBulucu";
-import {
-  AbonelikSatiri,
-  ListeArama,
-  SepetSatiri,
-  TeslimatSatiri,
-} from "./Listeler";
+import { AbonelikSatiri, ListeArama, TeslimatSatiri } from "./Listeler";
 import { SultanAmblem } from "./SultanLogo";
+import YonetimMenusu from "./YonetimMenusu";
 
 import { tarayiciIstemcisi } from "@/lib/supabase/client";
 import { haversine, mesafeYaz, sureYaz } from "@/lib/rota";
@@ -50,10 +46,7 @@ import {
   abonelikleriGetir,
   abonelikSil,
   odemeYontemiEkle,
-  sepetiSiparise,
-  sepetleriGetir,
   odemeYontemiKaldir,
-  sepetSil,
   siparisSil,
   acikVardiyaGetir,
   kuryeKonumlariGetir,
@@ -62,6 +55,7 @@ import {
   siteSil,
   sitelerGetir,
   siparisleriGetir,
+  gunSiparisleriGetir,
   topluSil,
 } from "@/lib/veri";
 import {
@@ -70,8 +64,18 @@ import {
   type GoogleDogrulama,
   type SiteAdayi,
 } from "@/lib/site";
-import { binaAnahtari, bugununTarihi, gecikmeDk, para } from "@/lib/bicim";
+import {
+  binaAnahtari,
+  bugununTarihi,
+  gecikmeDk,
+  odemeAdi,
+  para,
+  paraAlinirMi,
+} from "@/lib/bicim";
+import { waAc } from "@/lib/whatsapp";
 import { bekleyenler, kuyruguIsle, kuyrukVeyaGonder } from "@/lib/cevrimdisi";
+import { teslimFotosuBagla, teslimFotosuYukle } from "@/lib/foto";
+import { kaydirmaSesi } from "@/lib/jingle";
 import type {
   Abonelik,
   KayitliSite,
@@ -81,22 +85,54 @@ import type {
   RotaSonucu,
   Adres,
   OdemeYontemiTanimi,
-  Sepet,
   Siparis,
   SiparisDurumu,
   Tahsilat,
   Vardiya,
 } from "@/lib/tipler";
 
-type Sekme = "teslimatlar" | "abonelikler" | "sepetler";
+type Sekme = "teslimatlar" | "abonelikler";
 
 const SEKMELER: { anahtar: Sekme; ad: string }[] = [
   { anahtar: "teslimatlar", ad: "Teslimatlar" },
   { anahtar: "abonelikler", ad: "Abonelikler" },
-  { anahtar: "sepetler", ad: "Sepetler" },
 ];
 
 const AKTIF_DURUMLAR: SiparisDurumu[] = ["bekliyor", "hazirlaniyor", "yolda"];
+
+/** Teslimatlar listesinin durum süzgeci. */
+type DurumSuzgeci = "acik" | "teslim" | "basarisiz" | "tumu";
+
+const DURUM_SUZGECLERI: { anahtar: DurumSuzgeci; ad: string }[] = [
+  { anahtar: "acik", ad: "Açık" },
+  { anahtar: "teslim", ad: "Teslim" },
+  { anahtar: "basarisiz", ad: "Edilemedi" },
+  { anahtar: "tumu", ad: "Tümü" },
+];
+
+function suzgeceUyar(s: Siparis, suzgec: DurumSuzgeci): boolean {
+  if (suzgec === "tumu") return true;
+  if (suzgec === "teslim") return s.durum === "teslim";
+  if (suzgec === "basarisiz") return s.durum === "basarisiz";
+  return s.durum !== "teslim";
+}
+
+/** "2026-11-07" → "7 Kas Cuma"; bugünse "Bugün". */
+function gunEtiketi(tarih: string | null): string {
+  if (!tarih) return "Bugün";
+  const g = new Date(`${tarih}T12:00:00`);
+  return g.toLocaleDateString("tr-TR", {
+    day: "numeric",
+    month: "short",
+    weekday: "short",
+  });
+}
+
+/** Uzun basma ipucu kaç kez gösterildi; -1: kurye uzun basmayı kullandı. */
+const IPUCU_ANAHTARI = "sultan-uzun-bas-ipucu";
+
+/** Vardiyada GPS'ten ölçülen yol — vardiya kimliğine göre saklanır. */
+const YOL_ANAHTARI = "sultan-yol-";
 
 /**
  * Tek seferde çizilen en fazla satır.
@@ -157,7 +193,11 @@ const TERCIH_ANAHTARI = "sultan-tercih";
  * Kayıtlı tercihler. Sunucuda boş döner; bu değerler yalnızca açılışta
  * kapalı olan panellerde kullanıldığı için hidrasyon uyuşmazlığı doğurmaz.
  */
-function tercihOku(): { karanlik?: boolean; ses?: boolean } {
+function tercihOku(): {
+  karanlik?: boolean;
+  ses?: boolean;
+  zoomKilitli?: boolean;
+} {
   if (typeof window === "undefined") return {};
   try {
     return JSON.parse(localStorage.getItem(TERCIH_ANAHTARI) ?? "{}");
@@ -170,7 +210,6 @@ type Props = {
   kurye: Kurye | null;
   baslangicTeslimatlar: Siparis[];
   baslangicAbonelikler: Abonelik[];
-  baslangicSepetler: Sepet[];
   /** Listede gösterilecek aktif ödeme yöntemleri. */
   baslangicYontemler: OdemeYontemiTanimi[];
   /** Adres bulucuda onaylanıp haritaya eklenmiş siteler. */
@@ -192,7 +231,6 @@ export default function KuryeUygulamasi({
   kurye,
   baslangicTeslimatlar,
   baslangicAbonelikler,
-  baslangicSepetler,
   baslangicYontemler,
   baslangicSiteler = [],
 }: Props) {
@@ -202,7 +240,6 @@ export default function KuryeUygulamasi({
 
   const [teslimatlar, setTeslimatlar] = useState(baslangicTeslimatlar);
   const [abonelikler, setAbonelikler] = useState(baslangicAbonelikler);
-  const [sepetler, setSepetler] = useState(baslangicSepetler);
   const [yontemler, setYontemler] = useState(baslangicYontemler);
   const [siteler, setSiteler] = useState(baslangicSiteler);
 
@@ -220,7 +257,27 @@ export default function KuryeUygulamasi({
     etiket: string;
   } | null>(null);
 
-  const [ekleMenu, setEkleMenu] = useState(false);
+  const [yonetimAcik, setYonetimAcik] = useState(false);
+  /** Seçim modu rota için mi (En kısa yol) yoksa yönetim için mi (sil/Excel). */
+  const [secimTuru, setSecimTuru] = useState<"rota" | "yonetim">("rota");
+  /** Teslimatlar listesinde gösterilen geçmiş gün; null bugün. */
+  const [gecmisGun, setGecmisGun] = useState<string | null>(null);
+  const gecmisGunRef = useRef<string | null>(null);
+  const [gecmisTeslimatlar, setGecmisTeslimatlar] = useState<Siparis[]>([]);
+  const [gecmisYukleniyor, setGecmisYukleniyor] = useState(false);
+  const [durumSuzgec, setDurumSuzgec] = useState<DurumSuzgeci>("acik");
+  /** Günlük dağıtım listesi: satırlarda tek dokunuşluk ✓ ve ⤼. */
+  const [hizliListe, setHizliListe] = useState(false);
+  /** Rota duraklarını ▲ ▼ ile elle sıralama. */
+  const [siraDuzenle, setSiraDuzenle] = useState(false);
+  /** Vardiyada GPS'ten ölçülen gerçek yol ve hareket süresi. */
+  const [yolOzeti, setYolOzeti] = useState({ m: 0, sn: 0 });
+  const yolRef = useRef<{
+    m: number;
+    sn: number;
+    son: { nokta: Nokta; t: number } | null;
+  }>({ m: 0, sn: 0, son: null });
+  const vardiyaIdRef = useRef<string | null>(null);
   const [kayitEkle, setKayitEkle] = useState(false);
   const [topluYukleme, setTopluYukleme] = useState(false);
   const [konumTamamla, setKonumTamamla] = useState(false);
@@ -243,26 +300,38 @@ export default function KuryeUygulamasi({
   } | null>(null);
   /** Haritada açık balon — kayıt listeden tazelensin diye yalnızca kimlik tutuluyor. */
   const [balonSecim, setBalonSecim] = useState<{
-    tur: "teslimat" | "abonelik" | "sepet";
+    tur: "teslimat" | "abonelik";
     id: string;
   } | null>(null);
 
   const [sekme, setSekme] = useState<Sekme>("teslimatlar");
-  const [panel, setPanel] = useState<PanelDurumu>("yari");
+  // Açılışta harita ekranı kaplar; liste yukarı kaydırınca tam ekran açılır.
+  const [panel, setPanelHam] = useState<PanelDurumu>("kapali");
+  /** Liste tam ekran (sağdan sola güçlü kaydırmayla açılır). */
+  const [tamEkran, setTamEkran] = useState(false);
+  /**
+   * Alt panelin yüksekliğini değiştiren her işlem (pine uçma, ayrıntı,
+   * navigasyon) haritayı göstermek istiyor: tam ekran liste kapanır.
+   */
+  function setPanel(d: PanelDurumu) {
+    setPanelHam(d);
+    setTamEkran(false);
+  }
   const [seciliId, setSeciliId] = useState<string | null>(null);
 
   const [secimModu, setSecimModu] = useState(false);
   const [secilenler, setSecilenler] = useState<string[]>([]);
   const [topluSilOnay, setTopluSilOnay] = useState(false);
   const [indiriliyor, setIndiriliyor] = useState(false);
-  /** Abonelik ve sepet listelerinde ad/telefon/adres araması. */
+  /** Listelerde ad/telefon/adres araması. */
   const [arama, setArama] = useState("");
   const [rota, setRota] = useState<RotaSonucu | null>(null);
   const [rotaHesapla, setRotaHesapla] = useState(false);
 
   const [katmanlar, setKatmanlar] = useState<Katmanlar>(() => ({
     abonelikler: true,
-    sepetler: true,
+    // Sepetler bölümü kaldırıldı; harita katmanı hep kapalı.
+    sepetler: false,
     teslimEdilenler: false,
     ucBoyut: true,
     isiHaritasi: false,
@@ -295,6 +364,10 @@ export default function KuryeUygulamasi({
   const [navAdimIndeks, setNavAdimIndeks] = useState(0);
   const [navTakip, setNavTakip] = useState(true);
   const [sesAcik, setSesAcik] = useState(() => tercihOku().ses ?? true);
+  /** İki parmakla sayfa yakınlaştırma kilidi — kurye kendisi açıp kapatıyor. */
+  const [zoomKilitli, setZoomKilitli] = useState(
+    () => tercihOku().zoomKilitli ?? false,
+  );
 
   // Konum geri çağırımı içinden güncel navigasyon durumuna erişmek için.
   const navRef = useRef<{
@@ -360,8 +433,11 @@ export default function KuryeUygulamasi({
   const saatHazir = simdi != null;
 
   const secili = useMemo(
-    () => teslimatlar.find((s) => s.id === seciliId) ?? null,
-    [teslimatlar, seciliId],
+    () =>
+      teslimatlar.find((s) => s.id === seciliId) ??
+      gecmisTeslimatlar.find((s) => s.id === seciliId) ??
+      null,
+    [teslimatlar, gecmisTeslimatlar, seciliId],
   );
 
   /**
@@ -426,19 +502,36 @@ export default function KuryeUygulamasi({
     [rota],
   );
 
+  const aramaAnahtari = arama.trim().toLocaleLowerCase("tr");
+
+  /** Listede gösterilen günün teslimatları (iptaller hiçbir yerde yok). */
+  const gunTeslimatlari = useMemo(
+    () =>
+      (gecmisGun ? gecmisTeslimatlar : teslimatlar).filter(
+        (s) => s.durum !== "iptal",
+      ),
+    [gecmisGun, gecmisTeslimatlar, teslimatlar],
+  );
+
+  const suzgecSayilari = useMemo(() => {
+    const say = {} as Record<DurumSuzgeci, number>;
+    for (const { anahtar } of DURUM_SUZGECLERI)
+      say[anahtar] = gunTeslimatlari.filter((s) =>
+        suzgeceUyar(s, anahtar),
+      ).length;
+    return say;
+  }, [gunTeslimatlari]);
+
   const siraliTeslimatlar = useMemo(() => {
-    // İptaller hiçbir katmanda görünmüyor; kapanmış kayıt teslimat listesini
-    // şişiriyordu.
-    const acik = teslimatlar.filter((s) => s.durum !== "iptal");
-    const liste = katmanlar.teslimEdilenler
-      ? acik
-      : acik.filter((s) => s.durum !== "teslim");
-    if (rotaSirasi.size === 0) return liste;
+    let liste = gunTeslimatlari.filter((s) => suzgeceUyar(s, durumSuzgec));
+    if (aramaAnahtari)
+      liste = liste.filter((s) => kayitAra(s, aramaAnahtari));
+    if (rotaSirasi.size === 0 || gecmisGun) return liste;
     return [...liste].sort(
       (a, b) =>
         (rotaSirasi.get(a.id) ?? 999) - (rotaSirasi.get(b.id) ?? 999),
     );
-  }, [teslimatlar, katmanlar.teslimEdilenler, rotaSirasi]);
+  }, [gunTeslimatlari, durumSuzgec, aramaAnahtari, rotaSirasi, gecmisGun]);
 
   /* Temayı belgeye yansıt ve tercihleri sakla. */
   useEffect(() => {
@@ -448,12 +541,28 @@ export default function KuryeUygulamasi({
     try {
       localStorage.setItem(
         TERCIH_ANAHTARI,
-        JSON.stringify({ karanlik: katmanlar.karanlik, ses: sesAcik }),
+        JSON.stringify({
+          karanlik: katmanlar.karanlik,
+          ses: sesAcik,
+          zoomKilitli,
+        }),
       );
     } catch {
       /* depolama kapalıysa yok say */
     }
-  }, [katmanlar.karanlik, sesAcik]);
+  }, [katmanlar.karanlik, sesAcik, zoomKilitli]);
+
+  /*
+   * Yakınlaştırma kilidi viewport etiketine yazılıyor. Kilitliyken ölçek
+   * 1'e sabitleniyor; açıkken 5 kata kadar büyütülebiliyor.
+   */
+  useEffect(() => {
+    const meta = document.querySelector<HTMLMetaElement>('meta[name="viewport"]');
+    if (!meta) return;
+    meta.content = zoomKilitli
+      ? "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+      : "width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes, viewport-fit=cover";
+  }, [zoomKilitli]);
 
   /* ------------------------- Bildirim ------------------------- */
   const uyar = useCallback(
@@ -492,6 +601,7 @@ export default function KuryeUygulamasi({
     void acikVardiyaGetir(db, kurye.id).then(async (v) => {
       if (iptal) return;
       setVardiya(v);
+      yolYukle(v?.id ?? null);
       const t = v ? await vardiyaTahsilatlari(db, v.id) : [];
       if (!iptal) setTahsilatlar(t);
     });
@@ -500,6 +610,24 @@ export default function KuryeUygulamasi({
       iptal = true;
     };
   }, [db, kurye]);
+
+  /** Vardiya değişince GPS yol ölçümünü o vardiyanın kaydından yükler. */
+  function yolYukle(id: string | null) {
+    vardiyaIdRef.current = id;
+    let kayit = { m: 0, sn: 0 };
+    if (id) {
+      try {
+        kayit = {
+          ...kayit,
+          ...JSON.parse(localStorage.getItem(YOL_ANAHTARI + id) ?? "{}"),
+        };
+      } catch {
+        /* depolama kapalı */
+      }
+    }
+    yolRef.current = { m: kayit.m, sn: kayit.sn, son: null };
+    setYolOzeti(kayit);
+  }
 
   /* ------------------------- Diğer kuryeler ------------------------- */
   useEffect(() => {
@@ -544,24 +672,58 @@ export default function KuryeUygulamasi({
   const teslimatlariTazele = useCallback(async () => {
     try {
       setTeslimatlar(await siparisleriGetir(db, bugununTarihi()));
+      const gun = gecmisGunRef.current;
+      if (gun) setGecmisTeslimatlar(await gunSiparisleriGetir(db, gun));
     } catch {
       /* ağ yoksa eldeki liste kalsın */
     }
   }, [db]);
 
+  /** Teslimatlar listesini başka bir güne çevirir; null bugün. */
+  async function gunuGoster(tarih: string | null) {
+    const bugun = bugununTarihi();
+    const gun = tarih && tarih < bugun ? tarih : null;
+    gecmisGunRef.current = gun;
+    setGecmisGun(gun);
+    setSeciliId(null);
+    setSecimModu(false);
+    setSecilenler([]);
+    setHizliListe(false);
+    setSiraDuzenle(false);
+    // Geçmiş günde "açık" süzgeci çoğu zaman boş kalır; hepsini göster.
+    setDurumSuzgec(gun ? "tumu" : "acik");
+    if (!gun) {
+      setGecmisTeslimatlar([]);
+      return;
+    }
+    setGecmisYukleniyor(true);
+    try {
+      setGecmisTeslimatlar(await gunSiparisleriGetir(db, gun));
+    } catch {
+      uyar("O günün teslimatları alınamadı.");
+      setGecmisTeslimatlar([]);
+    } finally {
+      setGecmisYukleniyor(false);
+    }
+  }
+
+  function gunKaydir(fark: number) {
+    const g = new Date(`${gecmisGun ?? bugununTarihi()}T12:00:00`);
+    g.setDate(g.getDate() + fark);
+    const yil = g.getFullYear();
+    const ay = String(g.getMonth() + 1).padStart(2, "0");
+    const gn = String(g.getDate()).padStart(2, "0");
+    void gunuGoster(`${yil}-${ay}-${gn}`);
+  }
+
   /**
-   * Abonelik ve sepet listelerini baştan okur.
+   * Abonelik listesini baştan okur.
    *
-   * Teslimatların canlı akışı var, bu ikisinin yok: toplu yüklemeden sonra
+   * Teslimatların canlı akışı var, aboneliklerin yok: toplu yüklemeden sonra
    * yeni kayıtların görünmesi için elle tazeleniyor.
    */
   const listeleriTazele = useCallback(async () => {
-    const [yeniAbonelikler, yeniSepetler] = await Promise.all([
-      abonelikleriGetir(db),
-      sepetleriGetir(db),
-    ]);
-    setAbonelikler(yeniAbonelikler);
-    setSepetler(yeniSepetler);
+    setAbonelikler(await abonelikleriGetir(db));
   }, [db]);
 
   useEffect(() => {
@@ -703,6 +865,37 @@ export default function KuryeUygulamasi({
 
         setKuryeKonumu(nokta);
 
+        /*
+         * Vardiya yolu gerçek GPS izinden: yalnızca iyi ölçümler sayılıyor ve
+         * nokta 15 m'den fazla ilerleyince ekleniyor; yerinde dururken
+         * titreşen GPS yol üretmesin. Saniyede 40 m'yi aşan sıçrama atlanıyor.
+         */
+        if (vardiyaIdRef.current && (dogruluk ?? Infinity) <= 50) {
+          const yol = yolRef.current;
+          if (!yol.son) {
+            yol.son = { nokta, t: simdiki };
+          } else {
+            const d = haversine(yol.son.nokta, nokta);
+            const dt = (simdiki - yol.son.t) / 1000;
+            if (d >= 15) {
+              if (dt > 0 && d / dt < 40) {
+                yol.m += d;
+                yol.sn += Math.min(dt, 120);
+                setYolOzeti({ m: yol.m, sn: yol.sn });
+                try {
+                  localStorage.setItem(
+                    YOL_ANAHTARI + vardiyaIdRef.current,
+                    JSON.stringify({ m: yol.m, sn: yol.sn }),
+                  );
+                } catch {
+                  /* depolama kapalı */
+                }
+              }
+              yol.son = { nokta, t: simdiki };
+            }
+          }
+        }
+
         if (konumaUcRef.current) {
           konumaUcRef.current = false;
           haritaApi.current?.ucur(nokta, 17);
@@ -808,17 +1001,11 @@ export default function KuryeUygulamasi({
   }, [aktifTeslimatlar]);
 
   /* ------------------------- Liste süzme ------------------------- */
-  const aramaAnahtari = arama.trim().toLocaleLowerCase("tr");
 
   const suzulmusAbonelikler = useMemo(() => {
     if (!aramaAnahtari) return abonelikler;
     return abonelikler.filter((a) => kayitAra(a, aramaAnahtari));
   }, [abonelikler, aramaAnahtari]);
-
-  const suzulmusSepetler = useMemo(() => {
-    if (!aramaAnahtari) return sepetler;
-    return sepetler.filter((s) => kayitAra(s, aramaAnahtari));
-  }, [sepetler, aramaAnahtari]);
 
   /**
    * Açık sekmede listelenen kayıtlar — "Tümünü seç" bunları seçer. Arama
@@ -827,13 +1014,10 @@ export default function KuryeUygulamasi({
    */
   const gorunurKimlikler = useMemo(
     () =>
-      (sekme === "teslimatlar"
-        ? siraliTeslimatlar
-        : sekme === "abonelikler"
-          ? suzulmusAbonelikler
-          : suzulmusSepetler
-      ).map((k) => k.id),
-    [sekme, siraliTeslimatlar, suzulmusAbonelikler, suzulmusSepetler],
+      (sekme === "teslimatlar" ? siraliTeslimatlar : suzulmusAbonelikler).map(
+        (k) => k.id,
+      ),
+    [sekme, siraliTeslimatlar, suzulmusAbonelikler],
   );
   const tumuSecili =
     gorunurKimlikler.length > 0 &&
@@ -1013,6 +1197,7 @@ export default function KuryeUygulamasi({
       secimDegistir(id);
       return;
     }
+    if (gecmisGun) void gunuGoster(null);
     setSeciliId(id);
     setPanel("yari");
     const s = teslimatlar.find((t) => t.id === id);
@@ -1034,12 +1219,7 @@ export default function KuryeUygulamasi({
   async function secilenleriSil() {
     const idler = secilenler.filter((id) => gorunurKimlikler.includes(id));
     if (idler.length === 0) return;
-    const tablo =
-      sekme === "teslimatlar"
-        ? "siparisler"
-        : sekme === "abonelikler"
-          ? "abonelikler"
-          : "sepetler";
+    const tablo = sekme === "teslimatlar" ? "siparisler" : "abonelikler";
 
     setIslemde(true);
     try {
@@ -1047,8 +1227,7 @@ export default function KuryeUygulamasi({
       const kalan = <T extends { id: string }>(o: T[]) =>
         o.filter((x) => !silinen.has(x.id));
       if (sekme === "teslimatlar") setTeslimatlar(kalan);
-      else if (sekme === "abonelikler") setAbonelikler(kalan);
-      else setSepetler(kalan);
+      else setAbonelikler(kalan);
 
       setSecilenler((o) => o.filter((id) => !silinen.has(id)));
       if (seciliId && silinen.has(seciliId)) setSeciliId(null);
@@ -1086,9 +1265,7 @@ export default function KuryeUygulamasi({
     const kayitlar =
       sekme === "teslimatlar"
         ? suz(siraliTeslimatlar)
-        : sekme === "abonelikler"
-          ? suz(suzulmusAbonelikler)
-          : suz(suzulmusSepetler);
+        : suz(suzulmusAbonelikler);
 
     if (kayitlar.length === 0) {
       uyar("İndirilecek kayıt yok.");
@@ -1212,12 +1389,137 @@ export default function KuryeUygulamasi({
       durum,
       kurye_id: kurye?.id ?? s.kurye_id,
     }));
+    const s = teslimatlar.find((x) => x.id === id);
+    if (durum === "yolda" && s?.musteri?.telefon) {
+      uyar("Yola çıkıldı", {
+        etiket: "💬 WhatsApp'la haber ver",
+        calistir: () => {
+          waAc(s.musteri?.telefon, "yolda", s.musteri?.ad);
+        },
+      });
+    }
+  }
+
+  /* ---------------- Hızlı liste: tek dokunuşla teslim / atla ---------------- */
+
+  /**
+   * Planlanan ödeme yöntemiyle, tutarın tamamı müşteriden alınmış sayılarak
+   * teslim eder. Planlanan yöntem ya da tutar yoksa normal ödeme ekranı açılır.
+   */
+  async function hizliTeslim(s: Siparis) {
+    const ad = s.musteri?.ad?.trim() ?? "";
+    const yontem = s.odeme_yontemi;
+    if (!(s.tutar > 0) || !yontem || !ad) {
+      setSeciliId(s.id);
+      setTeslimBaslangic("alindi");
+      setTeslimModu("teslim");
+      return;
+    }
+    await teslimSonucuUygula(
+      {
+        tur: "teslim",
+        odemeAlindi: true,
+        tahsilat: { tutar: s.tutar, yontem },
+        kasaya: paraAlinirMi(yontem, yontemler),
+        odeyen: ad,
+      },
+      s,
+    );
+    uyar(`✓ ${ad} · ${para(s.tutar)} ${odemeAdi(yontem)}`, {
+      etiket: "Geri al",
+      calistir: () => void hizliGeriAl(s),
+    });
+  }
+
+  async function hizliAtla(s: Siparis) {
+    await teslimSonucuUygula(
+      { tur: "basarisiz", sebep: "diger", not: "Bugün atlandı", yarinTekrar: false },
+      s,
+    );
+    uyar(`${s.musteri?.ad ?? "Teslimat"} bugün atlandı`, {
+      etiket: "Geri al",
+      calistir: () => void hizliGeriAl(s),
+    });
+  }
+
+  /** Hızlı teslim ya da atlamayı geri alır: sipariş önceki hâline döner. */
+  async function hizliGeriAl(onceki: Siparis) {
+    const yama = {
+      durum: onceki.durum,
+      teslim_zamani: onceki.teslim_zamani,
+      odeme_alindi: onceki.odeme_alindi,
+      odeme_alinmayan_kisi: onceki.odeme_alinmayan_kisi,
+      odeme_notu: onceki.odeme_notu,
+      odeme_yapan: onceki.odeme_yapan,
+      odeme_tutari: onceki.odeme_tutari,
+      basarisizlik_sebebi: onceki.basarisizlik_sebebi,
+      basarisizlik_notu: onceki.basarisizlik_notu,
+      deneme_sayisi: onceki.deneme_sayisi,
+    };
+    await siparisGuncelle(onceki.id, yama, (s) => ({ ...s, ...yama }));
+    // Hızlı teslimde kasaya işlenen tahsilat da geri alınır.
+    if (tahsilatlar.some((t) => t.siparis_id === onceki.id)) {
+      setTahsilatlar((o) => o.filter((t) => t.siparis_id !== onceki.id));
+      const { error } = await db
+        .from("tahsilatlar")
+        .delete()
+        .eq("siparis_id", onceki.id);
+      if (error) {
+        uyar("Teslim geri alındı ama kasa kaydı silinemedi — yöneticiye bildirin.");
+        return;
+      }
+    }
+    uyar("Geri alındı");
+  }
+
+  /* ---------------- Durakları elle sıralama ---------------- */
+
+  /** Elle verilen sıradan düz çizgili bir rota kurar. */
+  function elleRota(sira: string[]): RotaSonucu {
+    const bas = kuryeKonumu ?? MARKET.nokta;
+    const noktalar = sira
+      .map((id) => teslimatlar.find((s) => s.id === id)?.adres)
+      .filter((a): a is Adres => a?.lat != null && a.lng != null)
+      .map((a) => ({ lat: a.lat!, lng: a.lng! }));
+    const tumu = [bas, ...noktalar];
+    let mesafe = 0;
+    for (let i = 1; i < tumu.length; i++) mesafe += haversine(tumu[i - 1], tumu[i]);
+    return {
+      sira,
+      geometri: tumu.map((n) => [n.lng, n.lat] as [number, number]),
+      toplamMesafeM: mesafe,
+      // Şehir içi motor ortalaması ~25 km/sa.
+      toplamSureSn: mesafe / 7,
+      motor: "yerel",
+      elle: true,
+    };
+  }
+
+  function durakTasi(id: string, yon: -1 | 1) {
+    if (!rota) return;
+    const sira = [...rota.sira];
+    const i = sira.indexOf(id);
+    const j = i + yon;
+    if (i < 0 || j < 0 || j >= sira.length) return;
+    [sira[i], sira[j]] = [sira[j], sira[i]];
+    setRota(elleRota(sira));
   }
 
   /** Teslim ettim / teslim edilemedi akışının sonucu. */
-  async function teslimSonucuUygula(sonuc: TeslimSonuc) {
-    if (!secili) return;
-    const id = secili.id;
+  async function teslimSonucuUygula(
+    sonuc: TeslimSonuc,
+    hedef: Siparis | null = secili,
+  ) {
+    if (!hedef) return;
+    const id = hedef.id;
+
+    // Fotoğraf arka planda yüklenir; teslim kaydını bekletmez.
+    if (sonuc.foto) {
+      const foto = sonuc.foto;
+      void teslimFotosuYukle(db, id, foto).catch(() =>
+        uyar("Teslim kaydedildi ama fotoğraf yüklenemedi."),
+      );
+    }
 
     if (sonuc.tur === "teslim") {
       const zaman = new Date().toISOString();
@@ -1287,7 +1589,7 @@ export default function KuryeUygulamasi({
         durum: "basarisiz",
         basarisizlik_sebebi: sonuc.sebep,
         basarisizlik_notu: sonuc.not || null,
-        deneme_sayisi: (secili.deneme_sayisi ?? 0) + 1,
+        deneme_sayisi: (hedef.deneme_sayisi ?? 0) + 1,
         kurye_id: kurye?.id ?? null,
       };
       if (sonuc.yarinTekrar) {
@@ -1373,7 +1675,6 @@ export default function KuryeUygulamasi({
 
     setTeslimatlar((o) => o.map(yeniAdres));
     setAbonelikler((o) => o.map(yeniAdres));
-    setSepetler((o) => o.map(yeniAdres));
     setKonumDuzeltme(null);
     uyar("Konum güncellendi.");
   }
@@ -1395,6 +1696,7 @@ export default function KuryeUygulamasi({
       .single();
     await db.from("kuryeler").update({ vardiyada: true }).eq("id", kurye.id);
     setVardiya((data as Vardiya) ?? null);
+    yolYukle((data as Vardiya | null)?.id ?? null);
     setTahsilatlar([]);
     setIslemde(false);
     uyar("Vardiya başladı");
@@ -1420,6 +1722,7 @@ export default function KuryeUygulamasi({
     await db.from("kuryeler").update({ vardiyada: false }).eq("id", kurye.id);
 
     setVardiya(null);
+    yolYukle(null);
     setTahsilatlar([]);
     setVardiyaOzeti(false);
     setIslemde(false);
@@ -1467,13 +1770,10 @@ export default function KuryeUygulamasi({
     } else if (kayit.tur === "abonelik") {
       setAbonelikler((o) => birlestir(o, kayit.abonelik));
       setSekme("abonelikler");
-    } else {
-      setSepetler((o) => birlestir(o, kayit.sepet));
-      setSekme("sepetler");
     }
     setKayitEkle(false);
     setDuzenlenen(null);
-    setPanel("yari");
+    setPanel("acik");
     uyar(mesaj);
   }
 
@@ -1506,9 +1806,6 @@ export default function KuryeUygulamasi({
       } else if (kayit.tur === "abonelik") {
         await abonelikSil(db, kayit.abonelik.id);
         setAbonelikler((o) => o.filter((x) => x.id !== kayit.abonelik.id));
-      } else {
-        await sepetSil(db, kayit.sepet.id);
-        setSepetler((o) => o.filter((x) => x.id !== kayit.sepet.id));
       }
       setIslemKayit(null);
       setSilOnay(false);
@@ -1591,15 +1888,12 @@ export default function KuryeUygulamasi({
     tur: "teslimat" | "abonelik" | "sepet",
     id: string,
   ) {
-    if (tur === "sepet") {
-      const sp = sepetler.find((x) => x.id === id);
-      return haritaPini(
-        "sepet",
-        id,
-        sp?.adres?.lat != null
-          ? { lat: sp.adres.lat, lng: sp.adres.lng! }
-          : null,
-      );
+    if (tur === "sepet") return;
+    // Kurye uzun basmayı öğrendi: ipucu bir daha çıkmasın.
+    try {
+      localStorage.setItem(IPUCU_ANAHTARI, "-1");
+    } catch {
+      /* depolama kapalı */
     }
 
     const siparis =
@@ -1623,24 +1917,6 @@ export default function KuryeUygulamasi({
     // Yeşile dönmüş pine tekrar uzun basmak işareti kaldırıyor.
     if (siparis.durum === "teslim") return void teslimGeriAl(siparis.id);
     teslimFormuAc(siparis, true);
-  }
-
-  /** Sepeti güne ait teslimata çevirir — sepetin tek çıkış kapısı. */
-  async function sepetiCevir(sepet: Sepet) {
-    setIslemde(true);
-    try {
-      const siparis = await sepetiSiparise(db, sepet);
-      setSepetler((o) => o.filter((x) => x.id !== sepet.id));
-      setTeslimatlar((o) => [siparis, ...o]);
-      setBalonSecim(null);
-      setIslemKayit(null);
-      setSekme("teslimatlar");
-      uyar(`${sepet.musteri?.ad ?? "Sepet"} teslimata çevrildi`);
-    } catch {
-      uyar("Sepet çevrilemedi");
-    } finally {
-      setIslemde(false);
-    }
   }
 
   /* ------------------------- Adres bulucu ------------------------- */
@@ -1878,9 +2154,8 @@ export default function KuryeUygulamasi({
         null;
       return { tur: "abonelik", abonelik: a, bugunku };
     }
-    const sp = sepetler.find((x) => x.id === balonSecim.id);
-    return sp ? { tur: "sepet", sepet: sp } : null;
-  }, [balonSecim, teslimatlar, abonelikler, sepetler]);
+    return null;
+  }, [balonSecim, teslimatlar, abonelikler]);
 
   const balonNoktasi = useMemo(() => {
     if (!balonKayit) return null;
@@ -1889,22 +2164,41 @@ export default function KuryeUygulamasi({
         ? balonKayit.siparis.adres
         : balonKayit.tur === "abonelik"
           ? balonKayit.abonelik.adres
-          : balonKayit.sepet.adres;
+          : null;
     if (adres?.lat == null || adres.lng == null) return null;
     return { lat: adres.lat, lng: adres.lng };
   }, [balonKayit]);
 
   /** Haritadaki bir pine dokunuldu: balonu aç, paneli kapat, oraya uç. */
   function haritaPini(
-    tur: "teslimat" | "abonelik" | "sepet",
+    tur: "teslimat" | "abonelik",
     id: string,
     nokta: Nokta | null,
   ) {
     if (secimModu && tur === "teslimat") return secimDegistir(id);
     setBalonSecim({ tur, id });
+    uzunBasmaIpucu();
     if (tur === "teslimat") setSeciliId(id);
     setPanel("kapali");
     if (nokta) haritaApi.current?.ucur(nokta);
+  }
+
+  /**
+   * Uzun basma gizli bir hareket: kurye bilmiyorsa hiç kullanmıyor. İlk üç
+   * balonda kısa bir ipucu çıkıyor; kurye bir kez uzun basınca bir daha yok.
+   */
+  function uzunBasmaIpucu() {
+    try {
+      const n = Number(localStorage.getItem(IPUCU_ANAHTARI) ?? 0);
+      if (n < 0 || n >= 3) return;
+      localStorage.setItem(IPUCU_ANAHTARI, String(n + 1));
+    } catch {
+      return;
+    }
+    window.setTimeout(
+      () => uyar("💡 İpucu: pine uzun basınca teslim edildi olarak işaretlenir"),
+      600,
+    );
   }
 
   /* ------------------------- Görünüm ------------------------- */
@@ -1916,7 +2210,7 @@ export default function KuryeUygulamasi({
         ref={haritaApi}
         teslimatlar={teslimatlar}
         abonelikler={bugunAbonelikler}
-        sepetler={sepetler}
+        sepetler={[]}
         seciliId={seciliId}
         secimModu={secimModu}
         secilenler={secilenler}
@@ -1966,16 +2260,6 @@ export default function KuryeUygulamasi({
               : null,
           );
         }}
-        onSepetSecim={(id) => {
-          const sp = sepetler.find((x) => x.id === id);
-          haritaPini(
-            "sepet",
-            id,
-            sp?.adres?.lat != null
-              ? { lat: sp.adres.lat, lng: sp.adres.lng! }
-              : null,
-          );
-        }}
         onUzunBasis={uzunBasis}
         balon={
           balonKayit && balonNoktasi
@@ -1999,25 +2283,20 @@ export default function KuryeUygulamasi({
                       setTeslimBaslangic("alinmadi");
                       setTeslimModu("teslim");
                     }}
-                    onSiparise={(sepet) => void sepetiCevir(sepet)}
                     onSil={() => {
                       const kayit: EklenenKayit =
                         balonKayit.tur === "teslimat"
                           ? { tur: "teslimat", siparis: balonKayit.siparis }
-                          : balonKayit.tur === "abonelik"
-                            ? { tur: "abonelik", abonelik: balonKayit.abonelik }
-                            : { tur: "sepet", sepet: balonKayit.sepet };
+                          : { tur: "abonelik", abonelik: balonKayit.abonelik };
                       void kayitSil(kayit);
                     }}
                     onDetay={() => {
                       if (balonKayit.tur === "teslimat")
                         setSeciliId(balonKayit.siparis.id);
                       setSekme(
-                        balonKayit.tur === "teslimat"
-                          ? "teslimatlar"
-                          : balonKayit.tur === "abonelik"
-                            ? "abonelikler"
-                            : "sepetler",
+                        balonKayit.tur === "abonelik"
+                          ? "abonelikler"
+                          : "teslimatlar",
                       );
                       setBalonSecim(null);
                       setPanel("yari");
@@ -2056,15 +2335,15 @@ export default function KuryeUygulamasi({
         className="pointer-events-none absolute inset-x-0 top-0 z-20 p-3 pt-[calc(env(safe-area-inset-top)+12px)]"
       >
         <div className="pointer-events-auto flex items-center gap-2.5 rounded-[22px] border border-cizgi bg-yuzey/85 p-2 pr-3 shadow-yumusak backdrop-blur-2xl">
-          <SultanAmblem boyut={38} />
+          <SultanAmblem boyut={32} />
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[13px] font-extrabold leading-tight">
+            <p className="truncate text-[12px] font-extrabold leading-tight">
               {kurye?.ad || "Kurye"}
               <span className="ml-1.5 font-bold text-gri">
                 · {aktifTeslimatlar.length} teslimat
               </span>
             </p>
-            <p className="truncate text-[11px] font-semibold text-gri">
+            <p className="truncate text-[10.5px] font-semibold text-gri">
               {para(kasaToplami)} kasada · {para(toplamTahsilat)} kalan
               {!marketAcik ? (
                 <span className="text-turuncu">
@@ -2084,7 +2363,7 @@ export default function KuryeUygulamasi({
           {bekleyenSayisi > 0 && (
             <span
               title="Sinyal gelince gönderilecek"
-              className="flex shrink-0 items-center gap-1 rounded-hap bg-turuncu/15 px-2 py-1 text-[11px] font-black text-turuncu"
+              className="flex shrink-0 items-center gap-1 rounded-hap bg-turuncu/15 px-2 py-1 text-[10.5px] font-black text-turuncu"
             >
               <motion.span
                 className="h-1.5 w-1.5 rounded-full bg-turuncu"
@@ -2098,7 +2377,7 @@ export default function KuryeUygulamasi({
             onClick={() => (bulucuAcik ? bulucuyuKapat() : bulucuyuAc())}
             aria-label="Adres bulucu"
             title="Adres bulucu — Sakarya siteleri"
-            className={`flex h-8 shrink-0 items-center gap-1.5 rounded-hap px-2.5 text-[11px] font-black transition-colors ${
+            className={`flex h-8 shrink-0 items-center gap-1.5 rounded-hap px-2.5 text-[10.5px] font-black transition-colors ${
               bulucuAcik
                 ? "bg-kurum text-white"
                 : "bg-yuzey2 text-metin hover:bg-cizgi"
@@ -2109,7 +2388,7 @@ export default function KuryeUygulamasi({
           </button>
           <button
             onClick={vardiyaDegistir}
-            className={`rounded-hap px-3 py-1.5 text-[11px] font-black uppercase tracking-wide transition-colors ${
+            className={`rounded-hap px-3 py-1.5 text-[10.5px] font-black uppercase tracking-wide transition-colors ${
               kurye?.vardiyada
                 ? "bg-kirmizi text-white"
                 : "bg-yuzey2 text-gri hover:bg-cizgi"
@@ -2153,8 +2432,22 @@ export default function KuryeUygulamasi({
           }
           konumuYenidenBul();
         }}
-        onKatmanPaneli={setKatmanPaneli}
+        onKatmanPaneli={(acik) => {
+          setKatmanPaneli(acik);
+          // Katman paneli alt panelin arkasında kalmasın.
+          if (acik) setPanel("kapali");
+        }}
         onKatman={(k) => setKatmanlar((o) => ({ ...o, [k]: !o[k] }))}
+        zoomKilitli={zoomKilitli}
+        onZoomKilidi={() => {
+          const yeni = !zoomKilitli;
+          setZoomKilitli(yeni);
+          uyar(
+            yeni
+              ? "🔒 Yakınlaştırma kilitlendi"
+              : "🔓 İki parmakla yakınlaştırma açık",
+          );
+        }}
       />
 
       {/* Rota özeti */}
@@ -2164,30 +2457,35 @@ export default function KuryeUygulamasi({
             initial={{ y: -20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: -20, opacity: 0 }}
-            className="absolute left-3 right-[68px] top-[calc(env(safe-area-inset-top)+80px)] z-20 flex items-center gap-3 rounded-[20px] border border-kontrast/10 bg-kontrast/92 p-3 text-white shadow-yuzen backdrop-blur-xl"
+            className="absolute left-3 right-[68px] top-[calc(env(safe-area-inset-top)+70px)] z-20 flex items-center gap-3 rounded-[20px] border border-kontrast/10 bg-kontrast/92 p-3 text-white shadow-yuzen backdrop-blur-xl"
           >
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-kirmizi text-sm font-black">
               {rota.sira.length}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-[13px] font-extrabold">
+              <p className="text-[12px] font-extrabold">
                 {mesafeYaz(rota.toplamMesafeM)} · {sureYaz(rota.toplamSureSn)}
               </p>
-              <p className="text-[11px] font-semibold text-white/60">
-                {rota.motor === "osrm"
-                  ? "Gerçek yol ağı üzerinde optimize edildi"
-                  : "Kuş uçuşu + 2-opt ile optimize edildi"}
+              <p className="text-[10.5px] font-semibold text-white/60">
+                {rota.elle
+                  ? "Elle sıralandı · kuş uçuşu tahmini"
+                  : rota.motor === "osrm"
+                    ? "Gerçek yol ağı üzerinde optimize edildi"
+                    : "Kuş uçuşu + 2-opt ile optimize edildi"}
               </p>
             </div>
             <button
               onClick={rotayiUstlen}
               disabled={islemde}
-              className="rounded-hap bg-kirmizi px-3.5 py-2 text-[12px] font-black disabled:opacity-60"
+              className="rounded-hap bg-kirmizi px-3.5 py-2 text-[11px] font-black disabled:opacity-60"
             >
               Üstlen
             </button>
             <button
-              onClick={() => setRota(null)}
+              onClick={() => {
+                setRota(null);
+                setSiraDuzenle(false);
+              }}
               aria-label="Rotayı kapat"
               className="flex h-8 w-8 items-center justify-center rounded-full bg-yuzey/10 text-white/70"
             >
@@ -2220,12 +2518,8 @@ export default function KuryeUygulamasi({
             >
               <div className="mx-auto mb-4 h-1.5 w-11 rounded-full bg-cizgi" />
 
-              <p className="text-[11px] font-black uppercase tracking-wider text-gri">
-                {islemKayit.tur === "teslimat"
-                  ? "Teslimat"
-                  : islemKayit.tur === "abonelik"
-                    ? "Abonelik"
-                    : "Sepet"}
+              <p className="text-[10.5px] font-black uppercase tracking-wider text-gri">
+                {islemKayit.tur === "abonelik" ? "Abonelik" : "Teslimat"}
               </p>
               <h2 className="mt-0.5 truncate text-xl font-extrabold tracking-tight">
                 {kayitBilgisi(islemKayit).ad}
@@ -2241,29 +2535,9 @@ export default function KuryeUygulamasi({
                 className="mt-3 flex w-full items-center gap-3 rounded-[20px] border border-cizgi bg-yuzey p-3.5 text-left hover:bg-yuzey2"
               >
                 <span className="text-xl leading-none">✏️</span>
-                <span className="flex-1 text-[15px] font-black">Düzenle</span>
+                <span className="flex-1 text-[13.5px] font-black">Düzenle</span>
                 <span className="text-gri">›</span>
               </motion.button>
-
-              {islemKayit.tur === "sepet" && (
-                <motion.button
-                  whileTap={{ scale: 0.98 }}
-                  disabled={islemde || !islemKayit.sepet.adres_id}
-                  onClick={() => void sepetiCevir(islemKayit.sepet)}
-                  className="mt-2 flex w-full items-center gap-3 rounded-[20px] border border-cizgi bg-yuzey p-3.5 text-left hover:bg-yuzey2 disabled:opacity-50"
-                >
-                  <span className="text-xl leading-none">📦</span>
-                  <span className="flex-1">
-                    <span className="block text-[15px] font-black">
-                      Siparişe çevir
-                    </span>
-                    <span className="block text-[12px] text-gri">
-                      Sepet kapanır, bugünün teslimatı olarak listeye düşer
-                    </span>
-                  </span>
-                  <span className="text-gri">›</span>
-                </motion.button>
-              )}
 
               {/*
                 Kurye teslimat adresinde duruyor ve tarayıcı onu bambaşka bir
@@ -2283,10 +2557,10 @@ export default function KuryeUygulamasi({
                 >
                   <span className="text-xl leading-none">🧍</span>
                   <span className="flex-1">
-                    <span className="block text-[15px] font-black">
+                    <span className="block text-[13.5px] font-black">
                       Buradayım
                     </span>
-                    <span className="block text-[12px] text-gri">
+                    <span className="block text-[11px] text-gri">
                       Konumum bu adres olsun
                     </span>
                   </span>
@@ -2306,10 +2580,10 @@ export default function KuryeUygulamasi({
                 >
                   <span className="text-xl leading-none">📍</span>
                   <span className="flex-1">
-                    <span className="block text-[15px] font-black">
+                    <span className="block text-[13.5px] font-black">
                       Konumu düzelt
                     </span>
-                    <span className="block text-[12px] text-gri">
+                    <span className="block text-[11px] text-gri">
                       {kayitBilgisi(islemKayit).konumVar
                         ? "Haritada doğru noktaya taşı"
                         : "Bu adresin konumu yok — haritada işaretle"}
@@ -2328,13 +2602,13 @@ export default function KuryeUygulamasi({
                     exit={{ opacity: 0, y: -8 }}
                     className="mt-2 rounded-[20px] border border-kirmizi bg-kirmizi-sis p-3.5"
                   >
-                    <p className="text-[14px] font-bold text-kirmizi-koyu">
+                    <p className="text-[12.5px] font-bold text-kirmizi-koyu">
                       Bu kayıt kalıcı olarak silinecek. Emin misin?
                     </p>
                     <div className="mt-3 flex gap-2">
                       <button
                         onClick={() => setSilOnay(false)}
-                        className="flex-1 rounded-hap bg-yuzey py-3 text-[14px] font-bold text-gri"
+                        className="flex-1 rounded-hap bg-yuzey py-3 text-[12.5px] font-bold text-gri"
                       >
                         Vazgeç
                       </button>
@@ -2342,7 +2616,7 @@ export default function KuryeUygulamasi({
                         whileTap={{ scale: 0.97 }}
                         disabled={islemde}
                         onClick={() => void kayitSil(islemKayit)}
-                        className="flex-[2] rounded-hap bg-kirmizi py-3 text-[14px] font-black text-white disabled:opacity-60"
+                        className="flex-[2] rounded-hap bg-kirmizi py-3 text-[12.5px] font-black text-white disabled:opacity-60"
                       >
                         {islemde ? "Siliniyor…" : "Evet, sil"}
                       </motion.button>
@@ -2361,11 +2635,11 @@ export default function KuryeUygulamasi({
                   >
                     <span className="text-xl leading-none">🗑️</span>
                     <span className="flex-1">
-                      <span className="block text-[15px] font-black text-kirmizi">
+                      <span className="block text-[13.5px] font-black text-kirmizi">
                         Sil
                       </span>
                       {kayitBilgisi(islemKayit).teslimEdildi && (
-                        <span className="block text-[12px] text-gri">
+                        <span className="block text-[11px] text-gri">
                           Teslim edilmiş sipariş silinemez
                         </span>
                       )}
@@ -2379,90 +2653,9 @@ export default function KuryeUygulamasi({
                   setIslemKayit(null);
                   setSilOnay(false);
                 }}
-                className="mt-3 flex h-12 w-full items-center justify-center rounded-hap text-[14px] font-bold text-gri"
+                className="mt-3 flex h-12 w-full items-center justify-center rounded-hap text-[12.5px] font-bold text-gri"
               >
                 Kapat
-              </button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Yeni kayıt / toplu yükleme seçimi */}
-      <AnimatePresence>
-        {ekleMenu && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => setEkleMenu(false)}
-            className="absolute inset-0 z-50 flex items-end bg-black/45 backdrop-blur-[2px]"
-          >
-            <motion.div
-              initial={{ y: 60 }}
-              animate={{ y: 0 }}
-              exit={{ y: 60 }}
-              transition={{ type: "spring", stiffness: 400, damping: 34 }}
-              onClick={(e) => e.stopPropagation()}
-              className="w-full rounded-t-[28px] border-t border-cizgi bg-yuzey px-4 pb-[calc(env(safe-area-inset-bottom)+16px)] pt-4"
-            >
-              <div className="mx-auto mb-4 h-1.5 w-11 rounded-full bg-cizgi" />
-              <h2 className="text-xl font-extrabold tracking-tight">Ekle</h2>
-
-              {[
-                {
-                  simge: "👤",
-                  baslik: "Yeni kayıt",
-                  alt: "Müşteri, adres ve teslimat / abonelik / sepet",
-                  tikla: () => {
-                    setEkleMenu(false);
-                    setKayitEkle(true);
-                  },
-                },
-                {
-                  simge: "📄",
-                  baslik: "Excel'den toplu yükle",
-                  alt: "Müşteri ve adresleri tek dosyada aktar",
-                  tikla: () => {
-                    setEkleMenu(false);
-                    setTopluYukleme(true);
-                  },
-                },
-                {
-                  simge: "📍",
-                  baslik: "Adresleri haritaya oturt",
-                  alt: "Defterdeki tarifleri yapay zekâyla konuma çevir",
-                  tikla: () => {
-                    setEkleMenu(false);
-                    setKonumTamamla(true);
-                  },
-                },
-              ].map((s2, i) => (
-                <motion.button
-                  key={s2.baslik}
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.04 * i + 0.05 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={s2.tikla}
-                  className="mt-3 flex w-full items-center gap-3 rounded-[20px] border border-cizgi bg-yuzey p-3.5 text-left hover:bg-yuzey2"
-                >
-                  <span className="text-2xl leading-none">{s2.simge}</span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-[15px] font-black">
-                      {s2.baslik}
-                    </span>
-                    <span className="block text-[12px] text-gri">{s2.alt}</span>
-                  </span>
-                  <span className="text-gri">›</span>
-                </motion.button>
-              ))}
-
-              <button
-                onClick={() => setEkleMenu(false)}
-                className="mt-3 flex h-12 w-full items-center justify-center rounded-hap text-[14px] font-bold text-gri"
-              >
-                Vazgeç
               </button>
             </motion.div>
           </motion.div>
@@ -2488,6 +2681,36 @@ export default function KuryeUygulamasi({
               setKayitAdresi(null);
               kayitEklendi(kayit, mesaj);
             }}
+          />
+        )}
+        {yonetimAcik && (
+          <YonetimMenusu
+            key="yonetim"
+            sekmeAdi={SEKMELER.find((s) => s.anahtar === sekme)?.ad ?? ""}
+            yontemler={yontemler}
+            indiriliyor={indiriliyor}
+            onExcelIndir={() => void excelIndir()}
+            onTopluYukle={() => {
+              setYonetimAcik(false);
+              setTopluYukleme(true);
+            }}
+            onAdresOturt={() => {
+              setYonetimAcik(false);
+              setKonumTamamla(true);
+            }}
+            onTopluSec={() => {
+              setYonetimAcik(false);
+              if (gecmisGun) void gunuGoster(null);
+              setSecimTuru("yonetim");
+              setSecimModu(true);
+              setBalonSecim(null);
+              setSecilenler([]);
+              setSeciliId(null);
+              setPanel("yari");
+            }}
+            onYontemEkle={yontemEkle}
+            onYontemKaldir={yontemKaldir}
+            onKapat={() => setYonetimAcik(false)}
           />
         )}
         {konumTamamla && (
@@ -2539,10 +2762,10 @@ export default function KuryeUygulamasi({
             initial={{ y: -16, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: -16, opacity: 0 }}
-            className="absolute left-3 right-[68px] top-[calc(env(safe-area-inset-top)+80px)] z-30 flex items-center gap-3 rounded-[20px] border border-cizgi bg-yuzey/90 p-3 shadow-yumusak backdrop-blur-2xl"
+            className="absolute left-3 right-[68px] top-[calc(env(safe-area-inset-top)+70px)] z-30 flex items-center gap-3 rounded-[20px] border border-cizgi bg-yuzey/90 p-3 shadow-yumusak backdrop-blur-2xl"
           >
             <span className="text-lg">🧍</span>
-            <p className="flex-1 text-[12px] font-bold leading-snug">
+            <p className="flex-1 text-[11px] font-bold leading-snug">
               Konumunuz teslimat adresine alındı.
               <span className="block font-semibold text-gri">
                 GPS iyi sinyal bulunca kendiliğinden devralır.
@@ -2550,7 +2773,7 @@ export default function KuryeUygulamasi({
             </p>
             <button
               onClick={konumuYenidenBul}
-              className="shrink-0 rounded-hap bg-yuzey2 px-3 py-1.5 text-[12px] font-black text-gri"
+              className="shrink-0 rounded-hap bg-yuzey2 px-3 py-1.5 text-[11px] font-black text-gri"
             >
               Yenile
             </button>
@@ -2599,15 +2822,15 @@ export default function KuryeUygulamasi({
             initial={{ y: -16, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: -16, opacity: 0 }}
-            className="absolute inset-x-3 top-[calc(env(safe-area-inset-top)+80px)] z-30 mx-auto flex max-w-md items-center gap-3 rounded-[20px] bg-kurum p-3 text-white shadow-yuzen"
+            className="absolute inset-x-3 top-[calc(env(safe-area-inset-top)+70px)] z-30 mx-auto flex max-w-md items-center gap-3 rounded-[20px] bg-kurum p-3 text-white shadow-yuzen"
           >
             <span className="text-lg">🏘️</span>
-            <p className="flex-1 text-[13px] font-bold">
+            <p className="flex-1 text-[12px] font-bold">
               Eklemek istediğin sitenin girişine dokun.
             </p>
             <button
               onClick={() => setHaritadanSecim(false)}
-              className="rounded-hap bg-yuzey/20 px-3 py-1.5 text-[12px] font-black"
+              className="rounded-hap bg-yuzey/20 px-3 py-1.5 text-[11px] font-black"
             >
               Vazgeç
             </button>
@@ -2622,15 +2845,15 @@ export default function KuryeUygulamasi({
             initial={{ y: -16, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: -16, opacity: 0 }}
-            className="absolute left-3 right-[68px] top-[calc(env(safe-area-inset-top)+80px)] z-30 flex items-center gap-3 rounded-[20px] bg-kirmizi p-3 text-white shadow-kirmizi"
+            className="absolute left-3 right-[68px] top-[calc(env(safe-area-inset-top)+70px)] z-30 flex items-center gap-3 rounded-[20px] bg-kirmizi p-3 text-white shadow-kirmizi"
           >
             <span className="text-lg">📍</span>
-            <p className="flex-1 text-[13px] font-bold">
+            <p className="flex-1 text-[12px] font-bold">
               Doğru konumu haritada işaretleyin.
             </p>
             <button
               onClick={() => setKonumDuzeltme(null)}
-              className="rounded-hap bg-yuzey/20 px-3 py-1.5 text-[12px] font-black"
+              className="rounded-hap bg-yuzey/20 px-3 py-1.5 text-[11px] font-black"
             >
               Vazgeç
             </button>
@@ -2650,14 +2873,14 @@ export default function KuryeUygulamasi({
           >
             {/* Üst satır: sayaç, tümünü seç, kapat */}
             <div className="flex items-center gap-2 pl-2">
-              <p className="min-w-0 flex-1 truncate text-[13px] font-extrabold">
+              <p className="min-w-0 flex-1 truncate text-[12px] font-extrabold">
                 {secilenler.length} / {gorunurKimlikler.length}{" "}
                 {sekme === "teslimatlar" ? "durak" : "kayıt"} seçildi
               </p>
               <button
                 onClick={tumunuSecDegistir}
                 disabled={gorunurKimlikler.length === 0}
-                className="min-h-10 rounded-hap bg-yuzey/10 px-3 text-[12px] font-black disabled:opacity-50"
+                className="min-h-10 rounded-hap bg-yuzey/10 px-3 text-[11px] font-black disabled:opacity-50"
               >
                 {tumuSecili ? "Seçimi kaldır" : "Tümünü seç"}
               </button>
@@ -2667,32 +2890,36 @@ export default function KuryeUygulamasi({
                   setSecilenler([]);
                 }}
                 aria-label="Seçimden çık"
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-yuzey/10 text-[18px] leading-none"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-yuzey/10 text-[16px] leading-none"
               >
                 ×
               </button>
             </div>
             {/* Alt satır: eylemler */}
             <div className="mt-2 flex gap-2">
+              {secimTuru === "yonetim" && (
+              <>
               <button
                 onClick={() => setTopluSilOnay(true)}
                 disabled={secilenler.length === 0 || islemde}
-                className="min-h-11 flex-1 rounded-hap bg-yuzey/10 px-3 text-[12px] font-black text-[#ff8a93] disabled:opacity-50"
+                className="min-h-11 flex-1 rounded-hap bg-yuzey/10 px-3 text-[11px] font-black text-[#ff8a93] disabled:opacity-50"
               >
                 🗑 Sil{secilenler.length > 0 ? ` (${secilenler.length})` : ""}
               </button>
               <button
                 onClick={() => void excelIndir()}
                 disabled={indiriliyor || secilenler.length === 0}
-                className="min-h-11 flex-1 rounded-hap bg-yuzey/10 px-3 text-[12px] font-black disabled:opacity-50"
+                className="min-h-11 flex-1 rounded-hap bg-yuzey/10 px-3 text-[11px] font-black disabled:opacity-50"
               >
                 {indiriliyor ? "…" : "Excel"}
               </button>
+              </>
+              )}
               {sekme === "teslimatlar" && (
                 <button
                   onClick={rotayiOlustur}
                   disabled={rotaHesapla || secilenler.length < 2}
-                  className="min-h-11 flex-[1.3] rounded-hap bg-kirmizi px-3 text-[12px] font-black disabled:opacity-50"
+                  className="min-h-11 flex-[1.3] rounded-hap bg-kirmizi px-3 text-[11px] font-black disabled:opacity-50"
                 >
                   {rotaHesapla ? "Hesaplanıyor…" : "En kısa yol"}
                 </button>
@@ -2723,7 +2950,7 @@ export default function KuryeUygulamasi({
               className="w-full max-w-xl rounded-t-[28px] border-t border-cizgi bg-yuzey px-4 pb-[calc(env(safe-area-inset-bottom)+16px)] pt-4"
             >
               <div className="mx-auto mb-4 h-1.5 w-11 rounded-full bg-cizgi" />
-              <p className="text-[11px] font-black uppercase tracking-wider text-gri">
+              <p className="text-[10.5px] font-black uppercase tracking-wider text-gri">
                 {SEKMELER.find((s) => s.anahtar === sekme)?.ad}
               </p>
               <h2 className="mt-0.5 text-xl font-extrabold tracking-tight">
@@ -2731,7 +2958,7 @@ export default function KuryeUygulamasi({
                   ? `Listenin tamamı silinsin mi? (${secilenler.length})`
                   : `${secilenler.length} kayıt silinsin mi?`}
               </h2>
-              <p className="mt-2 text-[13px] font-semibold leading-snug text-gri">
+              <p className="mt-2 text-[12px] font-semibold leading-snug text-gri">
                 Kayıtlar kalıcı olarak silinir, geri alınamaz.
                 {sekme === "teslimatlar" &&
                   " Teslim edilmiş siparişler tahsilat kaydına bağlı olduğu için silinmez, listede kalır."}
@@ -2742,7 +2969,7 @@ export default function KuryeUygulamasi({
                 <button
                   onClick={() => setTopluSilOnay(false)}
                   disabled={islemde}
-                  className="min-h-12 flex-1 rounded-hap bg-yuzey2 text-[14px] font-bold text-gri"
+                  className="min-h-12 flex-1 rounded-hap bg-yuzey2 text-[12.5px] font-bold text-gri"
                 >
                   Vazgeç
                 </button>
@@ -2750,7 +2977,7 @@ export default function KuryeUygulamasi({
                   whileTap={{ scale: 0.97 }}
                   onClick={() => void secilenleriSil()}
                   disabled={islemde}
-                  className="min-h-12 flex-[2] rounded-hap bg-kirmizi text-[14px] font-black text-white disabled:opacity-60"
+                  className="min-h-12 flex-[2] rounded-hap bg-kirmizi text-[12.5px] font-black text-white disabled:opacity-60"
                 >
                   {islemde ? "Siliniyor…" : "Evet, sil"}
                 </motion.button>
@@ -2767,7 +2994,7 @@ export default function KuryeUygulamasi({
             initial={{ y: 24, opacity: 0, scale: 0.95 }}
             animate={{ y: 0, opacity: 1, scale: 1 }}
             exit={{ y: 24, opacity: 0, scale: 0.95 }}
-            className={`absolute inset-x-0 bottom-32 z-50 mx-auto flex w-fit items-center gap-3 rounded-hap bg-kontrast py-2.5 pl-4 text-[13px] font-bold text-white shadow-yuzen ${
+            className={`absolute inset-x-0 bottom-32 z-50 mx-auto flex w-fit items-center gap-3 rounded-hap bg-kontrast py-2.5 pl-4 text-[12px] font-bold text-white shadow-yuzen ${
               bildirim.eylem ? "pr-2" : "pointer-events-none pr-4"
             }`}
           >
@@ -2778,7 +3005,7 @@ export default function KuryeUygulamasi({
                   bildirim.eylem?.calistir();
                   setBildirim(null);
                 }}
-                className="rounded-hap bg-yuzey/15 px-3 py-1.5 text-[12px] font-black"
+                className="rounded-hap bg-yuzey/15 px-3 py-1.5 text-[11px] font-black"
               >
                 {bildirim.eylem.etiket}
               </button>
@@ -2797,8 +3024,6 @@ export default function KuryeUygulamasi({
             islemde={islemde}
             yontemler={yontemler}
             baslangicOdeme={teslimBaslangic}
-            onYontemEkle={yontemEkle}
-            onYontemKaldir={yontemKaldir}
             onKapat={() => {
               if (!zorunluTeslim) setTeslimModu(null);
             }}
@@ -2821,8 +3046,8 @@ export default function KuryeUygulamasi({
                 (s) => s.durum === "basarisiz" || s.deneme_sayisi > 0,
               ).length
             }
-            toplamMesafeM={rota?.toplamMesafeM ?? 0}
-            toplamSureSn={rota?.toplamSureSn ?? 0}
+            toplamMesafeM={yolOzeti.m}
+            toplamSureSn={yolOzeti.sn}
             islemde={islemde}
             onKapat={() => setVardiyaOzeti(false)}
             onVardiyayiKapat={vardiyayiKapat}
@@ -2869,6 +3094,13 @@ export default function KuryeUygulamasi({
       <AltPanel
         durum={panel}
         onDurum={setPanel}
+        tamEkran={tamEkran}
+        onTamEkran={(acik) => {
+          if (acik === tamEkran) return;
+          // Ses ayarı navigasyondaki sesle ortak: kurye sesi kapattıysa sessiz.
+          if (sesAcik) void kaydirmaSesi(acik);
+          setTamEkran(acik);
+        }}
         baslik={
           <div className="flex items-center gap-2">
             <div className="ince-kaydirma flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto [mask-image:linear-gradient(to_right,black_88%,transparent)]">
@@ -2882,9 +3114,10 @@ export default function KuryeUygulamasi({
                     // Seçim kimlikleri sekmeye özel; karışmasın diye sıfırlanıyor.
                     setSecilenler([]);
                     setArama("");
-                    if (panel === "kapali") setPanel("yari");
+                    // Tam ekrandayken sekme değiştirmek tam ekranı kapatmasın.
+                    if (panel === "kapali" && !tamEkran) setPanel("acik");
                   }}
-                  className={`relative shrink-0 rounded-hap px-3.5 py-2 text-[13px] font-bold transition-colors ${
+                  className={`relative shrink-0 rounded-hap px-3.5 py-2 text-[12px] font-bold transition-colors ${
                     sekme === s.anahtar ? "text-white" : "text-gri hover:bg-yuzey2"
                   }`}
                 >
@@ -2903,10 +3136,11 @@ export default function KuryeUygulamasi({
               whileTap={{ scale: 0.92 }}
               onClick={(e) => {
                 e.stopPropagation();
-                setEkleMenu(true);
+                setDuzenlenen(null);
+                setKayitEkle(true);
               }}
               aria-label="Yeni kayıt ekle"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-kirmizi text-[20px] font-black leading-none text-white shadow-yumusak"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-kirmizi text-[18px] font-black leading-none text-white shadow-yumusak"
             >
               +
             </motion.button>
@@ -2914,34 +3148,37 @@ export default function KuryeUygulamasi({
               whileTap={{ scale: 0.92 }}
               onClick={(e) => {
                 e.stopPropagation();
-                void excelIndir();
+                setYonetimAcik(true);
               }}
-              disabled={indiriliyor}
-              aria-label="Excel'e indir"
-              title="Excel'e indir"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-yuzey2 text-[15px] font-black text-gri disabled:opacity-50"
+              aria-label="Yönetim"
+              title="Yönetim — Excel, toplu işlemler, ödeme yöntemleri"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-yuzey2 text-[15px] font-black text-gri"
             >
-              {indiriliyor ? "…" : "⤓"}
+              ⚙
             </motion.button>
+            {sekme === "teslimatlar" && !gecmisGun && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
+                setSecimTuru("rota");
+                setSiraDuzenle(false);
                 setSecimModu((o) => !o);
                 setBalonSecim(null);
                 setSecilenler([]);
                 setSeciliId(null);
                 setPanel("yari");
               }}
-              className={`shrink-0 rounded-hap px-3 py-2 text-[12px] font-black transition-colors ${
+              className={`shrink-0 rounded-hap px-3 py-2 text-[11px] font-black transition-colors ${
                 secimModu
                   ? "bg-kirmizi text-white"
                   : "bg-kirmizi-sis text-kirmizi-koyu"
               }`}
             >
               {/* Dar ekranda tek kelime; sekme şeridine yer kalsın. */}
-              <span className="hidden xs:inline">Toplu seç</span>
+              <span className="hidden xs:inline">Rota seç</span>
               <span className="xs:hidden">Seç</span>
             </button>
+            )}
           </div>
         }
       >
@@ -2957,6 +3194,7 @@ export default function KuryeUygulamasi({
               onTeslimSonucu={setTeslimModu}
               onNotKaydet={kapiBilgisiKaydet}
               onNavigasyon={() => navigasyonuAc(secili)}
+              onFotoGetir={() => teslimFotosuBagla(db, secili.id)}
               onKonumDuzelt={() => {
                 setKonumDuzeltme(secili.adres?.id ?? null);
                 setPanel("kapali");
@@ -2969,15 +3207,150 @@ export default function KuryeUygulamasi({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.18 }}
-              className="space-y-2 pb-6 pt-1"
+              className="space-y-1 pb-6 pt-1"
             >
               {sekme === "teslimatlar" && (
                 <>
-                  {siraliTeslimatlar.map((s) => (
+                  <div className="sticky top-0 z-10 -mt-1 space-y-1.5 bg-yuzey pb-1.5 pt-1">
+                    {/* Gün gezinme + liste kipleri */}
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => gunKaydir(-1)}
+                        aria-label="Önceki gün"
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-yuzey2 text-[14px] font-black text-gri"
+                      >
+                        ‹
+                      </button>
+                      <button
+                        onClick={() => void gunuGoster(null)}
+                        className={`h-8 min-w-0 shrink rounded-hap px-3 text-[12px] font-black ${
+                          gecmisGun ? "bg-turuncu/15 text-turuncu" : "bg-yuzey2"
+                        }`}
+                        title={gecmisGun ? "Bugüne dön" : undefined}
+                      >
+                        {gecmisYukleniyor ? "…" : gunEtiketi(gecmisGun)}
+                      </button>
+                      <button
+                        onClick={() => gunKaydir(1)}
+                        disabled={!gecmisGun}
+                        aria-label="Sonraki gün"
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-yuzey2 text-[14px] font-black text-gri disabled:opacity-30"
+                      >
+                        ›
+                      </button>
+                      <span className="flex-1" />
+                      {rota && !gecmisGun && (
+                        <button
+                          onClick={() => {
+                            setSiraDuzenle((o) => !o);
+                            setHizliListe(false);
+                            setSecimModu(false);
+                            setDurumSuzgec("acik");
+                          }}
+                          className={`h-8 shrink-0 rounded-hap px-2.5 text-[11px] font-black ${
+                            siraDuzenle ? "bg-kontrast text-white" : "bg-yuzey2 text-gri"
+                          }`}
+                        >
+                          ↕ Sıra
+                        </button>
+                      )}
+                      {!gecmisGun && (
+                        <button
+                          onClick={() => {
+                            setHizliListe((o) => !o);
+                            setSiraDuzenle(false);
+                            setSecimModu(false);
+                            setDurumSuzgec("acik");
+                          }}
+                          title="Günlük dağıtım listesi: her satırda ✓ teslim et, ⤼ atla"
+                          className={`h-8 shrink-0 rounded-hap px-2.5 text-[11px] font-black ${
+                            hizliListe ? "bg-yesil text-white" : "bg-yuzey2 text-gri"
+                          }`}
+                        >
+                          ⚡ Hızlı liste
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Arama */}
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[12px] text-gri">
+                        🔎
+                      </span>
+                      <input
+                        value={arama}
+                        onChange={(e) => setArama(e.target.value)}
+                        placeholder="Ad, telefon ya da adres"
+                        className="h-9 w-full rounded-xl border border-cizgi bg-yuzey2 pl-9 pr-9 text-[12.5px] font-semibold outline-none placeholder:font-medium placeholder:text-gri focus:border-kirmizi"
+                      />
+                      {arama && (
+                        <button
+                          onClick={() => setArama("")}
+                          aria-label="Aramayı temizle"
+                          className="absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-[13px] font-black text-gri"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Durum süzgeci */}
+                    <div className="ince-kaydirma flex gap-1 overflow-x-auto">
+                      {DURUM_SUZGECLERI.map((d) => (
+                        <button
+                          key={d.anahtar}
+                          onClick={() => setDurumSuzgec(d.anahtar)}
+                          className={`h-7 shrink-0 rounded-hap px-2.5 text-[11px] font-bold ${
+                            durumSuzgec === d.anahtar
+                              ? "bg-kontrast text-white"
+                              : "bg-yuzey2 text-gri"
+                          }`}
+                        >
+                          {d.ad} · {suzgecSayilari[d.anahtar]}
+                        </button>
+                      ))}
+                    </div>
+
+                    {hizliListe && (
+                      <p className="px-1 text-[10.5px] font-semibold text-gri">
+                        ✓ planlanan ödemeyle teslim eder (tutarın tamamı) · ⤼ bugün
+                        atlar · ikisi de 6 sn geri alınabilir
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Tek kart içinde ince çizgilerle ayrılmış satırlar */}
+                  {siraliTeslimatlar.length > 0 && (
+                  <div className="overflow-hidden rounded-2xl border border-cizgi divide-y divide-cizgi bg-yuzey">
+                  {siraliTeslimatlar.map((s) => {
+                    const rotaIndeks = rota?.sira.indexOf(s.id) ?? -1;
+                    return (
                     <TeslimatSatiri
                       key={s.id}
                       siparis={s}
-                      sira={rotaSirasi.get(s.id)}
+                      hizli={
+                        hizliListe && !gecmisGun
+                          ? {
+                              onTeslim: () => void hizliTeslim(s),
+                              onAtla: () => void hizliAtla(s),
+                            }
+                          : undefined
+                      }
+                      sirala={
+                        siraDuzenle && rota && rotaIndeks >= 0
+                          ? {
+                              onYukari:
+                                rotaIndeks > 0
+                                  ? () => durakTasi(s.id, -1)
+                                  : undefined,
+                              onAsagi:
+                                rotaIndeks < rota.sira.length - 1
+                                  ? () => durakTasi(s.id, 1)
+                                  : undefined,
+                            }
+                          : undefined
+                      }
+                      sira={gecmisGun ? undefined : rotaSirasi.get(s.id)}
                       secili={seciliId === s.id}
                       secimModu={secimModu}
                       isaretli={secilenler.includes(s.id)}
@@ -2992,9 +3365,20 @@ export default function KuryeUygulamasi({
                         setIslemKayit({ tur: "teslimat", siparis: s })
                       }
                     />
-                  ))}
-                  {siraliTeslimatlar.length === 0 && (
-                    <Bos mesaj="Bugün için teslimat yok." />
+                    );
+                  })}
+                  </div>
+                  )}
+                  {siraliTeslimatlar.length === 0 && !gecmisYukleniyor && (
+                    <Bos
+                      mesaj={
+                        gunTeslimatlari.length === 0
+                          ? gecmisGun
+                            ? "O gün teslimat yok."
+                            : "Bugün için teslimat yok."
+                          : "Bu süzgece uyan teslimat yok."
+                      }
+                    />
                   )}
                 </>
               )}
@@ -3008,6 +3392,8 @@ export default function KuryeUygulamasi({
                     toplam={abonelikler.length}
                     onDegis={setArama}
                   />
+                  {suzulmusAbonelikler.length > 0 && (
+                  <div className="overflow-hidden rounded-2xl border border-cizgi divide-y divide-cizgi bg-yuzey">
                   {suzulmusAbonelikler.slice(0, AZAMI_SATIR).map((a) => (
                     <AbonelikSatiri
                       key={a.id}
@@ -3030,8 +3416,10 @@ export default function KuryeUygulamasi({
                       }
                     />
                   ))}
+                  </div>
+                  )}
                   {suzulmusAbonelikler.length > AZAMI_SATIR && (
-                    <p className="px-1 pt-1 text-[12px] font-semibold text-gri">
+                    <p className="px-1 pt-1 text-[11px] font-semibold text-gri">
                       İlk {AZAMI_SATIR} kayıt gösteriliyor. Aradığını bulmak
                       için yukarıdaki kutuya yaz.
                     </p>
@@ -3041,50 +3429,6 @@ export default function KuryeUygulamasi({
                   )}
                   {abonelikler.length > 0 && suzulmusAbonelikler.length === 0 && (
                     <Bos mesaj="Aramaya uyan abonelik yok." />
-                  )}
-                </>
-              )}
-
-              {sekme === "sepetler" && (
-                <>
-                  {sepetler.length > 20 && (
-                    <ListeArama
-                      deger={arama}
-                      yerTutucu="Ad, telefon ya da adres"
-                      sonuc={suzulmusSepetler.length}
-                      toplam={sepetler.length}
-                      onDegis={setArama}
-                    />
-                  )}
-                  {suzulmusSepetler.slice(0, AZAMI_SATIR).map((s) => (
-                    <SepetSatiri
-                      key={s.id}
-                      sepet={s}
-                      secimModu={secimModu}
-                      isaretli={secilenler.includes(s.id)}
-                      onTikla={() => {
-                        if (secimModu) return secimDegistir(s.id);
-                        if (s.adres?.lat != null) {
-                          haritaApi.current?.ucur({
-                            lat: s.adres.lat,
-                            lng: s.adres.lng!,
-                          });
-                          setPanel("kapali");
-                        }
-                      }}
-                      onIslemler={() =>
-                        setIslemKayit({ tur: "sepet", sepet: s })
-                      }
-                    />
-                  ))}
-                  {suzulmusSepetler.length > AZAMI_SATIR && (
-                    <p className="px-1 pt-1 text-[12px] font-semibold text-gri">
-                      İlk {AZAMI_SATIR} kayıt gösteriliyor.
-                    </p>
-                  )}
-                  {sepetler.length === 0 && <Bos mesaj="Açık sepet yok." />}
-                  {sepetler.length > 0 && suzulmusSepetler.length === 0 && (
-                    <Bos mesaj="Aramaya uyan sepet yok." />
                   )}
                 </>
               )}

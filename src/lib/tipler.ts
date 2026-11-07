@@ -201,6 +201,8 @@ export type RotaSonucu = {
   /** [lng, lat] çiftleri — haritaya çizilecek çizgi. */
   geometri: [number, number][];
   motor: "osrm" | "yerel";
+  /** Kurye durakları elle yeniden sıraladı; çizgi duraklar arası düz. */
+  elle?: boolean;
 };
 
 export type SiteTuru = "site" | "apartman";

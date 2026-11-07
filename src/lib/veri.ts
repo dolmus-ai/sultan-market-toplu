@@ -70,6 +70,27 @@ export async function siparisleriGetir(
 }
 
 /**
+ * Geçmiş bir günün teslimatları — teslim edilenler, edilemeyenler, hepsi.
+ * Bugünün listesinden farkı: başka günlerden sarkan açık siparişler gelmez,
+ * yalnızca o güne planlananlar.
+ */
+export async function gunSiparisleriGetir(
+  db: SupabaseClient,
+  tarih: string,
+): Promise<Siparis[]> {
+  const { data, error } = await db
+    .from("siparisler")
+    .select(SIPARIS_ALANLARI)
+    .eq("planlanan_tarih", tarih)
+    .neq("durum", "iptal")
+    .order("planlanan_saat", { ascending: true, nullsFirst: false })
+    .limit(400);
+
+  if (error) throw error;
+  return (data ?? []) as unknown as Siparis[];
+}
+
+/**
  * PostgREST tek istekte en çok 1000 satır döndürüyor (`db-max-rows`); `.limit()`
  * bunu yükseltmiyor, yalnızca aşağı çekiyor. Market defterinde 1200'den fazla
  * abone var: sınıra takılan liste sessizce kırpılıyordu, abonelikler ekranı

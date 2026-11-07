@@ -100,6 +100,15 @@ body {
   overscroll-behavior: none;
 }
 
+/*
+ * Arayüz ölçeği. Market "her şey fazla büyük" dedi: boşluklar, düğmeler ve
+ * rem tabanlı yazılar kökten %87,5'e iniyor. Harita (MapLibre tuvali ve px
+ * ile çizilen pinler) bundan etkilenmiyor; yalnızca üstündeki arayüz küçülüyor.
+ */
+html {
+  font-size: 87.5%;
+}
+
 body {
   background: var(--zemin);
   color: var(--color-metin);

@@ -215,7 +215,7 @@ export function SultanAcilis({
       {/* Tabela yazısı */}
       <div className="overflow-hidden">
         <motion.p
-          className="whitespace-nowrap text-[30px] font-black leading-none tracking-[-0.02em] text-metin"
+          className="whitespace-nowrap text-[26px] font-black leading-none tracking-[-0.02em] text-metin"
           initial={{ y: 34, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ ...YAY, delay: 1.35 }}

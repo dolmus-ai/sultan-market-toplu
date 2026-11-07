@@ -74,7 +74,7 @@ const TON_SINIFI: Record<Ton, string> = {
 };
 
 /** Parmakla rahat basılsın diye tüm düğmeler en az 40 piksel yüksekliğinde. */
-const DUGME = "h-10 rounded-hap text-[12px] font-black";
+const DUGME = "h-10 rounded-hap text-[11px] font-black";
 
 export default function HaritaBalonu({
   kayit,
@@ -150,24 +150,24 @@ export default function HaritaBalonu({
     >
       <div className="flex items-start gap-2">
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[14px] font-black leading-tight">
+          <span className="block truncate text-[12.5px] font-black leading-tight">
             {ortak.musteri?.ad ?? "Müşteri"}
           </span>
-          <span className="mt-0.5 block truncate text-[11px] text-gri">
+          <span className="mt-0.5 block truncate text-[10.5px] text-gri">
             {ortak.adres ? adresYaz(ortak.adres) : turEtiketi}
           </span>
         </span>
         <button
           onClick={onKapat}
           aria-label="Balonu kapat"
-          className="-mr-1.5 -mt-1.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[16px] font-black text-gri active:bg-yuzey2"
+          className="-mr-1.5 -mt-1.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[14px] font-black text-gri active:bg-yuzey2"
         >
           ×
         </button>
       </div>
 
       <div className="mt-1.5 flex items-baseline justify-between gap-2">
-        <span className="text-[19px] font-black leading-none">
+        <span className="text-[17px] font-black leading-none">
           {para(tutar)}
         </span>
         <span className="shrink-0 rounded-hap bg-kontrast px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white">
@@ -177,7 +177,7 @@ export default function HaritaBalonu({
 
       {/* Ödeme satırı — balonun asıl derdi bu */}
       <p
-        className={`mt-2 rounded-xl px-2.5 py-1.5 text-[12px] font-bold ${
+        className={`mt-2 rounded-xl px-2.5 py-1.5 text-[11px] font-bold ${
           odeme ? TON_SINIFI[odeme.ton] : TON_SINIFI.notr
         }`}
       >
@@ -197,7 +197,7 @@ export default function HaritaBalonu({
             exit={{ opacity: 0, y: -6 }}
             className="mt-2.5"
           >
-            <p className="text-center text-[12px] font-bold text-kirmizi-koyu">
+            <p className="text-center text-[11px] font-bold text-kirmizi-koyu">
               Bu kayıt silinsin mi?
             </p>
             <div className="mt-2 flex gap-1.5">
@@ -261,7 +261,7 @@ export default function HaritaBalonu({
                   whileTap={{ scale: 0.9 }}
                   onClick={() => setSilOnay(true)}
                   aria-label="Kaydı sil"
-                  className={`${DUGME} w-10 shrink-0 bg-yuzey2 text-[15px] text-kirmizi`}
+                  className={`${DUGME} w-10 shrink-0 bg-yuzey2 text-[13.5px] text-kirmizi`}
                 >
                   🗑
                 </motion.button>

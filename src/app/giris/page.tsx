@@ -161,7 +161,7 @@ export default function GirisSayfasi() {
         {hareketAz ? (
           <div className="flex flex-col items-center gap-5">
             <SultanAmblem boyut={92} />
-            <p className="text-[30px] font-black leading-none tracking-[-0.02em]">
+            <p className="text-[26px] font-black leading-none tracking-[-0.02em]">
               SULTAN MARKET
             </p>
             <div className="h-1 w-[168px] rounded-full bg-kirmizi" />
@@ -273,7 +273,7 @@ function Alan({
         placeholder={yer}
         required
         autoComplete={tip === "password" ? "current-password" : "email"}
-        className="h-14 w-full rounded-2xl border border-cizgi bg-yuzey2 px-4 text-[15px] font-medium outline-none transition-all placeholder:text-gri/60 focus:border-kirmizi focus:bg-yuzey focus:ring-4 focus:ring-kirmizi/12"
+        className="h-14 w-full rounded-2xl border border-cizgi bg-yuzey2 px-4 text-[13.5px] font-medium outline-none transition-all placeholder:text-gri/60 focus:border-kirmizi focus:bg-yuzey focus:ring-4 focus:ring-kirmizi/12"
       />
     </label>
   );

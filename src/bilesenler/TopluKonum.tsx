@@ -31,8 +31,9 @@ import type { Abonelik, KayitliSite, Nokta } from "@/lib/tipler";
  * tek konum verilince (Google Haritalar'dan yapıştırılan bağlantı ya da
  * listemizdeki site) o sitedeki her abone, sahibinin elle yaptığı gibi
  * yeniden kurulur: yeni adres (site adı + sokak + mahalle + ilçe, konumu
- * doğrulanmış; blok/daire ve kapı şifresi tarif alanında), Pzt–Cum 09:00
- * yeni abonelik, eski abonelik silinir. Tek kayıt `aboneligi_yeniden_kur`
+ * doğrulanmış; blok/daire ve kapı şifresi tarif alanında), eski aboneliğin
+ * günleri ve saati korunarak yeni abonelik açılır (gün/saat boşsa Pzt–Cum
+ * 09:00), eski abonelik silinir. Tek kayıt `aboneligi_yeniden_kur`
  * veritabanı işleviyle, bölünmeden yapılır.
  */
 
@@ -155,13 +156,13 @@ export default function TopluKonum({
 
   return (
     <div>
-      <div className="rounded-2xl bg-yuzey2 px-3 py-2.5 text-[12px] font-semibold leading-snug text-gri">
+      <div className="rounded-2xl bg-yuzey2 px-3 py-2.5 text-[11px] font-semibold leading-snug text-gri">
         <b className="text-metin">{konumsuz.length}</b> konumsuz abonelik ·{" "}
         {gruplar.filter((g) => !g.tarifMi).length} sitede {siteliAbone} abone ·{" "}
         {gruplar.length - gruplar.filter((g) => !g.tarifMi).length} tarif adresi.
         <span className="mt-1 block">
-          Siteye bir kez konum verin; o sitedeki herkes Pzt–Cum 09:00 olarak
-          yeniden kaydedilir, eski abonelik silinir.
+          Siteye bir kez konum verin; o sitedeki herkes yeni konumla yeniden
+          kaydedilir. Teslim günleri ve saati aynen kalır.
         </span>
       </div>
 
@@ -182,7 +183,7 @@ export default function TopluKonum({
           />
         ))}
         {siteGruplari.length === 0 && (
-          <p className="px-2 py-3 text-[13px] font-semibold text-gri">
+          <p className="px-2 py-3 text-[12px] font-semibold text-gri">
             Aramaya uyan site yok.
           </p>
         )}
@@ -192,14 +193,14 @@ export default function TopluKonum({
         <div className="mt-4">
           <button
             onClick={() => setTarifGoster(!tarifGoster)}
-            className="flex w-full items-center justify-between rounded-2xl px-2.5 py-2 text-[11px] font-black uppercase tracking-wider text-gri hover:bg-yuzey2"
+            className="flex w-full items-center justify-between rounded-2xl px-2.5 py-2 text-[10.5px] font-black uppercase tracking-wider text-gri hover:bg-yuzey2"
           >
             <span>Tarif adresleri · {tarifGruplari.length}</span>
             <span>{tarifGoster ? "Gizle" : "Göster"}</span>
           </button>
           {tarifGoster && (
             <>
-              <p className="px-2.5 pb-1 text-[11px] font-semibold leading-snug text-gri">
+              <p className="px-2.5 pb-1 text-[10.5px] font-semibold leading-snug text-gri">
                 Bir site adı yok; Google&apos;da da bulunmayabilir. Biliyorsanız
                 konumu tek tek yapıştırın, yoksa kurye kapıda işaretlesin.
               </p>
@@ -221,7 +222,7 @@ export default function TopluKonum({
                 ))}
               </div>
               {tarifGruplari.length > 150 && (
-                <p className="px-2.5 py-2 text-[11px] font-semibold text-gri">
+                <p className="px-2.5 py-2 text-[10.5px] font-semibold text-gri">
                   İlk 150 gösteriliyor — arama kutusuyla daraltın.
                 </p>
               )}
@@ -397,14 +398,14 @@ function GrupKarti({
         className="flex w-full items-center gap-3 px-3 py-2.5 text-left"
       >
         <span
-          className={`flex h-9 min-w-9 shrink-0 items-center justify-center rounded-[11px] px-1.5 text-[13px] font-black ${
+          className={`flex h-9 min-w-9 shrink-0 items-center justify-center rounded-[11px] px-1.5 text-[12px] font-black ${
             grup.tarifMi ? "bg-yuzey2 text-gri" : "bg-kurum text-white"
           }`}
         >
           {grup.tarifMi ? "📝" : grup.uyeler.length}
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[14px] font-extrabold">
+          <span className="block truncate text-[12.5px] font-extrabold">
             {grup.tarifMi ? grup.uyeler[0].kayit.musteri?.ad ?? "Abone" : grup.ad}
           </span>
           <span className="block truncate text-[11.5px] font-semibold text-gri">
@@ -434,20 +435,20 @@ function GrupKarti({
             <div className="space-y-2.5 px-3 pb-3">
               {!grup.tarifMi && (
                 <label className="block">
-                  <span className="px-1 text-[11px] font-bold uppercase tracking-wider text-gri">
+                  <span className="px-1 text-[10.5px] font-bold uppercase tracking-wider text-gri">
                     Site adı (adreste böyle yazılır)
                   </span>
                   <input
                     value={ad}
                     onChange={(e) => setAd(e.target.value)}
-                    className="mt-1 h-11 w-full rounded-xl border border-cizgi bg-yuzey2 px-3 text-[16px] font-extrabold outline-none focus:border-kirmizi"
+                    className="mt-1 h-11 w-full rounded-xl border border-cizgi bg-yuzey2 px-3 text-[14px] font-extrabold outline-none focus:border-kirmizi"
                   />
                 </label>
               )}
 
               {/* Üyeler */}
               <div>
-                <p className="flex items-center justify-between px-1 text-[11px] font-bold uppercase tracking-wider text-gri">
+                <p className="flex items-center justify-between px-1 text-[10.5px] font-bold uppercase tracking-wider text-gri">
                   <span>
                     Aboneler · {secilenSayi}/{grup.uyeler.length}
                   </span>
@@ -488,10 +489,10 @@ function GrupKarti({
               {/* Konum */}
               {nokta ? (
                 <div className="rounded-xl border border-yesil/40 bg-yesil/10 px-3 py-2">
-                  <p className="text-[12px] font-bold text-yesil">
+                  <p className="text-[11px] font-bold text-yesil">
                     ✓ Konum: {nokta.lat.toFixed(6)}, {nokta.lng.toFixed(6)}
                   </p>
-                  <div className="mt-1 flex gap-3 text-[12px] font-bold">
+                  <div className="mt-1 flex gap-3 text-[11px] font-bold">
                     <button onClick={() => onGit(nokta)} className="text-metin">
                       Haritada göster
                     </button>
@@ -508,7 +509,7 @@ function GrupKarti({
                         setNokta({ lat: oneri.lat, lng: oneri.lng });
                         onGit(oneri);
                       }}
-                      className="flex min-h-11 w-full items-center gap-2 rounded-xl border border-cizgi bg-yuzey px-3 text-left text-[13px] font-bold hover:bg-yuzey2"
+                      className="flex min-h-11 w-full items-center gap-2 rounded-xl border border-cizgi bg-yuzey px-3 text-left text-[12px] font-bold hover:bg-yuzey2"
                     >
                       📍
                       <span className="min-w-0 flex-1 truncate">
@@ -517,7 +518,7 @@ function GrupKarti({
                           : `Listedeki konum (doğrulanmamış): ${oneri.ad}`}
                       </span>
                       {oneriUzaklik != null && (
-                        <span className="shrink-0 text-[11px] text-gri">
+                        <span className="shrink-0 text-[10.5px] text-gri">
                           {mesafeYaz(oneriUzaklik)}
                         </span>
                       )}
@@ -536,12 +537,12 @@ function GrupKarti({
                       placeholder="Google Haritalar bağlantısı ya da koordinat"
                       aria-label="Google Haritalar bağlantısı ya da koordinat"
                       autoComplete="off"
-                      className="h-11 min-w-0 flex-1 rounded-xl border border-cizgi bg-yuzey2 px-3 text-[16px] font-semibold outline-none focus:border-kirmizi"
+                      className="h-11 min-w-0 flex-1 rounded-xl border border-cizgi bg-yuzey2 px-3 text-[14px] font-semibold outline-none focus:border-kirmizi"
                     />
                     <button
                       onClick={() => yapistir(metin)}
                       disabled={!metin.trim()}
-                      className="h-11 shrink-0 rounded-xl bg-kontrast px-3.5 text-[13px] font-black text-white disabled:opacity-40"
+                      className="h-11 shrink-0 rounded-xl bg-kontrast px-3.5 text-[12px] font-black text-white disabled:opacity-40"
                     >
                       Uygula
                     </button>
@@ -553,19 +554,19 @@ function GrupKarti({
                       )}`}
                       target="_blank"
                       rel="noreferrer"
-                      className="flex min-h-10 flex-1 items-center justify-center rounded-xl bg-yuzey2 px-3 text-[12px] font-bold hover:bg-cizgi"
+                      className="flex min-h-10 flex-1 items-center justify-center rounded-xl bg-yuzey2 px-3 text-[11px] font-bold hover:bg-cizgi"
                     >
                       Google&apos;da ara ↗
                     </a>
                     <button
                       onClick={() => void panodan()}
-                      className="min-h-10 flex-1 rounded-xl bg-yuzey2 px-3 text-[12px] font-bold hover:bg-cizgi"
+                      className="min-h-10 flex-1 rounded-xl bg-yuzey2 px-3 text-[11px] font-bold hover:bg-cizgi"
                     >
                       Panodan yapıştır
                     </button>
                   </div>
                   {hata && (
-                    <p role="alert" className="px-1 text-[12px] font-bold leading-snug text-kirmizi">
+                    <p role="alert" className="px-1 text-[11px] font-bold leading-snug text-kirmizi">
                       {hata}
                     </p>
                   )}
@@ -573,7 +574,7 @@ function GrupKarti({
               )}
 
               {!grup.tarifMi && nokta && (
-                <label className="flex items-center gap-2 px-1 text-[12px] font-semibold text-gri">
+                <label className="flex items-center gap-2 px-1 text-[11px] font-semibold text-gri">
                   <input
                     type="checkbox"
                     checked={haritayaEkle && !zatenHaritada}
@@ -593,7 +594,7 @@ function GrupKarti({
                   whileTap={{ scale: 0.98 }}
                   disabled={!nokta || secilenSayi === 0}
                   onClick={() => void kaydet()}
-                  className="h-12 w-full rounded-hap bg-kirmizi text-[14px] font-black text-white shadow-kirmizi disabled:opacity-40"
+                  className="h-12 w-full rounded-hap bg-kirmizi text-[12.5px] font-black text-white shadow-kirmizi disabled:opacity-40"
                 >
                   {!nokta
                     ? "Önce konum verin"
@@ -601,13 +602,13 @@ function GrupKarti({
                 </motion.button>
               )}
               {kayit.durum === "kaydediliyor" && (
-                <p className="rounded-xl bg-yuzey2 px-3 py-3 text-center text-[13px] font-bold">
+                <p className="rounded-xl bg-yuzey2 px-3 py-3 text-center text-[12px] font-bold">
                   Kaydediliyor… {kayit.yapilan}/{kayit.toplam}
                 </p>
               )}
               {(kayit.durum === "bitti" || kayit.durum === "hata") && (
                 <div
-                  className={`rounded-xl px-3 py-2.5 text-[12px] font-bold ${
+                  className={`rounded-xl px-3 py-2.5 text-[11px] font-bold ${
                     kayit.hatalar.length ? "bg-kirmizi-sis text-kirmizi-koyu" : "bg-yesil/10 text-yesil"
                   }`}
                 >
@@ -649,7 +650,7 @@ function UyeSatiri({
         className="mt-1 h-4 w-4 shrink-0 accent-[var(--color-kirmizi)]"
       />
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[13px] font-extrabold">
+        <span className="block truncate text-[12px] font-extrabold">
           {uye.kayit.musteri?.ad ?? "Abone"}
         </span>
         <span className="block text-[11.5px] font-semibold leading-snug text-gri">

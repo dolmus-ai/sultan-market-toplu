@@ -421,7 +421,7 @@ function Ana({
 }
 
 /** Bilgi şeridinin tek sütunu. */
-function Kutu({ ust, alt, vurgu }: { ust: string; alt: string; vurgu?: boolean }) {
+export function Kutu({ ust, alt, vurgu }: { ust: string; alt: string; vurgu?: boolean }) {
   return (
     <div className="min-w-0 px-2 text-center">
       <p className="text-[10px] font-semibold text-gri">{ust}</p>
@@ -437,7 +437,7 @@ function Kutu({ ust, alt, vurgu }: { ust: string; alt: string; vurgu?: boolean }
 }
 
 /** Kare eylem düğmesi: simge üstte, kısa yazı altta. */
-function Eylem({
+export function Eylem({
   children,
   etiket,
   onClick,
@@ -477,7 +477,7 @@ function Eylem({
   );
 }
 
-function WaSimge() {
+export function WaSimge() {
   return (
     <path
       d="M4 20l1.3-3.9A8 8 0 1 1 8 19l-4 1Z"

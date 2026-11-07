@@ -15,6 +15,7 @@ import Harita, { type HaritaApi, type Katmanlar } from "./Harita";
 import HaritaKontrolleri from "./HaritaKontrolleri";
 import AltPanel, { type PanelDurumu } from "./AltPanel";
 import TeslimatDetay from "./TeslimatDetay";
+import AbonelikDetay from "./AbonelikDetay";
 import TeslimSonucu, { type TeslimSonuc } from "./TeslimSonucu";
 import KayitEkle, {
   type DuzenlenenKayit,
@@ -320,8 +321,11 @@ export default function KuryeUygulamasi({
   function setPanel(d: PanelDurumu) {
     setPanelHam(d);
     setTamEkran(false);
+    setSeciliAbonelikId(null);
   }
   const [seciliId, setSeciliId] = useState<string | null>(null);
+  /** Tam ekran listede ayrıntısı açık abonelik. */
+  const [seciliAbonelikId, setSeciliAbonelikId] = useState<string | null>(null);
 
   const [secimModu, setSecimModu] = useState(false);
   const [secilenler, setSecilenler] = useState<string[]>([]);
@@ -442,6 +446,10 @@ export default function KuryeUygulamasi({
       gecmisTeslimatlar.find((s) => s.id === seciliId) ??
       null,
     [teslimatlar, gecmisTeslimatlar, seciliId],
+  );
+  const seciliAbonelik = useMemo(
+    () => abonelikler.find((a) => a.id === seciliAbonelikId) ?? null,
+    [abonelikler, seciliAbonelikId],
   );
 
   /**
@@ -1203,7 +1211,11 @@ export default function KuryeUygulamasi({
     }
     if (gecmisGun) void gunuGoster(null);
     setSeciliId(id);
-    setPanel("yari");
+    // Tam ekran listeden açılan ayrıntı yine tam ekranda kalsın.
+    if (tamEkran) {
+      setPanelHam("yari");
+      setSeciliAbonelikId(null);
+    } else setPanel("yari");
     const s = teslimatlar.find((t) => t.id === id);
     if (s?.adres?.lat != null)
       haritaApi.current?.ucur({ lat: s.adres.lat, lng: s.adres.lng! });
@@ -3114,6 +3126,8 @@ export default function KuryeUygulamasi({
           // Ses ayarı navigasyondaki sesle ortak: kurye sesi kapattıysa sessiz.
           if (sesAcik) void kaydirmaSesi(acik);
           setTamEkran(acik);
+          // Abonelik ayrıntısı yalnızca tam ekranda; kapanınca liste kalsın.
+          if (!acik) setSeciliAbonelikId(null);
         }}
         baslik={
           <div className="flex items-center gap-2">
@@ -3125,6 +3139,7 @@ export default function KuryeUygulamasi({
                     e.stopPropagation();
                     setSekme(s.anahtar);
                     setSeciliId(null);
+                    setSeciliAbonelikId(null);
                     // Seçim kimlikleri sekmeye özel; karışmasın diye sıfırlanıyor.
                     setSecilenler([]);
                     setArama("");
@@ -3211,6 +3226,39 @@ export default function KuryeUygulamasi({
               onFotoGetir={() => teslimFotosuBagla(db, secili.id)}
               onKonumDuzelt={() => {
                 setKonumDuzeltme(secili.adres?.id ?? null);
+                setPanel("kapali");
+              }}
+            />
+          ) : seciliAbonelik && tamEkran && !secimModu ? (
+            <AbonelikDetay
+              key={`abonelik-${seciliAbonelik.id}`}
+              abonelik={seciliAbonelik}
+              bugun={bugunAbonelikler.some((b) => b.id === seciliAbonelik.id)}
+              bugunkuTeslimat={
+                teslimatlar.find((t) => t.abonelik_id === seciliAbonelik.id) ??
+                null
+              }
+              kuryeKonumu={kuryeKonumu}
+              onKapat={() => setSeciliAbonelikId(null)}
+              onHaritada={() => {
+                const a = seciliAbonelik;
+                if (a.adres?.lat == null) return;
+                haritaApi.current?.ucur({ lat: a.adres.lat, lng: a.adres.lng! });
+                setPanel("kapali");
+              }}
+              onTeslimatAc={(id) => {
+                setSekme("teslimatlar");
+                pinSecildi(id);
+              }}
+              onDuzenle={() => {
+                setDuzenlenen({ tur: "abonelik", abonelik: seciliAbonelik });
+                setKayitEkle(true);
+              }}
+              onIslemler={() =>
+                setIslemKayit({ tur: "abonelik", abonelik: seciliAbonelik })
+              }
+              onKonumDuzelt={() => {
+                setKonumDuzeltme(seciliAbonelik.adres?.id ?? null);
                 setPanel("kapali");
               }}
             />
@@ -3417,6 +3465,8 @@ export default function KuryeUygulamasi({
                       isaretli={secilenler.includes(a.id)}
                       onTikla={() => {
                         if (secimModu) return secimDegistir(a.id);
+                        // Tam ekranda ayrıntı yine tam ekranda açılır.
+                        if (tamEkran) return setSeciliAbonelikId(a.id);
                         if (a.adres?.lat != null) {
                           haritaApi.current?.ucur({
                             lat: a.adres.lat,

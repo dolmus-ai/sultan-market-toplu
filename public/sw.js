@@ -6,7 +6,7 @@
  * işlemlerinin çevrimdışı dayanıklılığı IndexedDB kuyruğunda (lib/cevrimdisi)
  * hallediliyor; burada onları da yakalamak iki ayrı doğruluk kaynağı yaratırdı.
  */
-const SURUM = "sultan-kurye-v1";
+const SURUM = "sultan-kurye-v2";
 const KABUK = ["/giris", "/ikon/amblem.svg", "/manifest.webmanifest"];
 
 self.addEventListener("install", (olay) => {

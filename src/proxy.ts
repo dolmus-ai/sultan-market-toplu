@@ -117,6 +117,7 @@ export const config = {
   matcher: [
     // Statik varlıklar, MapLibre worker dosyaları ve herkese açık OSM
     // derlemesi (/veri/sakarya-siteler.json) oturum kontrolünden muaf.
-    "/((?!_next/static|_next/image|maplibre/|veri/|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|webp|ico|mjs|js|css|map|webmanifest)$).*)",
+    // /api/surum yalnızca derleme kimliğini verir; giriş ekranı da sorsun.
+    "/((?!_next/static|_next/image|maplibre/|veri/|api/surum|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|webp|ico|mjs|js|css|map|webmanifest)$).*)",
   ],
 };

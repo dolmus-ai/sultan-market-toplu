@@ -5,17 +5,54 @@
  * alır, veri isteklerine hiç karışmaz. Sipariş/tahsilat gibi yazma
  * işlemlerinin çevrimdışı dayanıklılığı IndexedDB kuyruğunda (lib/cevrimdisi)
  * hallediliyor; burada onları da yakalamak iki ayrı doğruluk kaynağı yaratırdı.
+ *
+ * Yönlendirmeler: uygulamanın her girişi yönlendiriyor (`/` → `/giris`,
+ * oturumsuz `/harita` → `/giris`, oturumlu `/giris` → `/harita`). Safari,
+ * servis çalışanının sayfa açılışına yönlendirme izlemiş (`redirected`) bir
+ * yanıt dönmesini kabul etmiyor: "Response served by service worker has
+ * redirections" deyip sayfayı hiç açmıyor. Bu yüzden böyle bir yanıt asla
+ * olduğu gibi dönülmüyor ve asla önbelleğe yazılmıyor.
  */
-const SURUM = "sultan-kurye-v3";
+const SURUM = "sultan-kurye-v4";
 const KABUK = ["/giris", "/ikon/amblem.svg", "/manifest.webmanifest"];
+
+/** Önbelleğe yazılmaya uygun mu: sağlam, aynı köken, yönlendirmesiz. */
+function saklanir(yanit) {
+  return yanit && yanit.ok && yanit.type === "basic" && !yanit.redirected;
+}
+
+/**
+ * Yanıtı yönlendirme izi taşımayan temiz bir kopyaya çevirir. Eski
+ * sürümlerin önbelleğinde kalmış kirli kayıtlar için son güvence.
+ */
+async function temizle(yanit) {
+  if (!yanit || !yanit.redirected) return yanit;
+  const govde = await yanit.blob();
+  return new Response(govde, {
+    status: yanit.status,
+    statusText: yanit.statusText,
+    headers: yanit.headers,
+  });
+}
 
 self.addEventListener("install", (olay) => {
   olay.waitUntil(
     caches
       .open(SURUM)
-      // `cache: "reload"` şart: kabuk tarayıcı önbelleğinden değil ağdan
-      // gelsin, yoksa yeni servis çalışanı eski kabuğu kopyalıyor.
-      .then((c) => c.addAll(KABUK.map((u) => new Request(u, { cache: "reload" }))))
+      .then((c) =>
+        Promise.all(
+          KABUK.map((u) =>
+            // `cache: "reload"`: kabuk tarayıcı önbelleğinden değil ağdan
+            // gelsin. `addAll` kullanılmıyor: oturum açıkken `/giris`
+            // `/harita`ya yönleniyor, o yönlendirilmiş yanıt saklanırsa
+            // Safari'de açılış kırılıyordu. Tek kaydın düşmesi de kurulumu
+            // düşürmesin.
+            fetch(new Request(u, { cache: "reload" }))
+              .then((y) => (saklanir(y) ? c.put(u, y) : undefined))
+              .catch(() => {}),
+          ),
+        ),
+      )
       .then(() => self.skipWaiting()),
   );
 });
@@ -37,8 +74,8 @@ self.addEventListener("fetch", (olay) => {
 
   const url = new URL(istek.url);
   if (url.origin !== self.location.origin) return;
-  // Sunucu tarafı veriye ve API'ye dokunma.
-  if (url.pathname.startsWith("/api/")) return;
+  // Sunucu tarafı veriye, API'ye ve Supabase geçidine dokunma.
+  if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/sb/")) return;
 
   // Statik varlıklar: önce önbellek.
   if (url.pathname.startsWith("/_next/static") || url.pathname.startsWith("/ikon")) {
@@ -53,7 +90,7 @@ self.addEventListener("fetch", (olay) => {
              * adı değişmediği için o bozuk kopya sonsuza dek sunuluyor,
              * uygulama o tarayıcıda bir daha açılmıyordu.
              */
-            if (yanit.ok && yanit.type === "basic") {
+            if (saklanir(yanit)) {
               const kopya = yanit.clone();
               caches.open(SURUM).then((c) => c.put(istek, kopya)).catch(() => {});
             }
@@ -70,18 +107,29 @@ self.addEventListener("fetch", (olay) => {
       fetch(istek)
         .then((yanit) => {
           /*
+           * Ağ yönlendirmeyi kendisi izlediyse (bazı Safari sürümleri sayfa
+           * isteğinde bunu yapıyor) içeriği dönmek yerine tarayıcıya son
+           * adrese gitmesini söylüyoruz: adres çubuğu da doğru adresi
+           * gösteriyor, Safari de hata vermiyor.
+           */
+          if (yanit.redirected) return Response.redirect(yanit.url, 302);
+          /*
            * Çevrimdışı yedeği her başarılı açılışta tazele. Kabuk yalnızca
            * kurulumda alınsaydı bayatlardı: bu dosya değişmediği sürece
            * `install` bir daha çalışmıyor, eski kabuk da artık var olmayan
            * eski JS parçalarına işaret ediyor. Çevrimdışı açılış kırılırdı.
            */
-          if (yanit.ok && url.pathname === "/giris") {
+          if (url.pathname === "/giris" && saklanir(yanit)) {
             const kopya = yanit.clone();
-            caches.open(SURUM).then((c) => c.put("/giris", kopya));
+            caches.open(SURUM).then((c) => c.put("/giris", kopya)).catch(() => {});
           }
           return yanit;
         })
-        .catch(() => caches.match("/giris").then((y) => y ?? Response.error())),
+        .catch(() =>
+          caches
+            .match("/giris")
+            .then((y) => (y ? temizle(y) : Response.error())),
+        ),
     );
   }
 });

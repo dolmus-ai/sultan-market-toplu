@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { gecitAdresi } from "@/lib/supabase/gecit";
+
 /**
  * Teslim fotoğrafı.
  *
@@ -65,5 +67,6 @@ export async function teslimFotosuBagla(
     .from(FOTO_DEPOSU)
     .createSignedUrl(`${siparisId}/${son.name}`, 60 * 30);
   if (imzaHata) throw imzaHata;
-  return imza?.signedUrl ?? null;
+  // İmzalı bağlantı supabase.co adresi; engelli ağda da görünsün diye geçitten.
+  return imza?.signedUrl ? gecitAdresi(imza.signedUrl) : null;
 }

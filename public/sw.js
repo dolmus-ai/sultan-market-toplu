@@ -6,7 +6,7 @@
  * işlemlerinin çevrimdışı dayanıklılığı IndexedDB kuyruğunda (lib/cevrimdisi)
  * hallediliyor; burada onları da yakalamak iki ayrı doğruluk kaynağı yaratırdı.
  */
-const SURUM = "sultan-kurye-v2";
+const SURUM = "sultan-kurye-v3";
 const KABUK = ["/giris", "/ikon/amblem.svg", "/manifest.webmanifest"];
 
 self.addEventListener("install", (olay) => {
@@ -47,8 +47,16 @@ self.addEventListener("fetch", (olay) => {
         (bulunan) =>
           bulunan ??
           fetch(istek).then((yanit) => {
-            const kopya = yanit.clone();
-            caches.open(SURUM).then((c) => c.put(istek, kopya));
+            /*
+             * Yalnızca sağlam yanıt saklanır. Önceden 404/500 ya da mobil
+             * operatörün araya soktuğu hata sayfası da saklanıyordu; dosya
+             * adı değişmediği için o bozuk kopya sonsuza dek sunuluyor,
+             * uygulama o tarayıcıda bir daha açılmıyordu.
+             */
+            if (yanit.ok && yanit.type === "basic") {
+              const kopya = yanit.clone();
+              caches.open(SURUM).then((c) => c.put(istek, kopya)).catch(() => {});
+            }
             return yanit;
           }),
       ),

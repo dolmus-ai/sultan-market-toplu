@@ -118,6 +118,8 @@ export const config = {
     // Statik varlıklar, MapLibre worker dosyaları ve herkese açık OSM
     // derlemesi (/veri/sakarya-siteler.json) oturum kontrolünden muaf.
     // /api/surum yalnızca derleme kimliğini verir; giriş ekranı da sorsun.
-    "/((?!_next/static|_next/image|maplibre/|veri/|api/surum|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|webp|ico|mjs|js|css|map|webmanifest)$).*)",
+    // /sb/ Supabase'e geçit (next.config.ts): yetkiyi Supabase kendisi
+    // denetliyor, buradan geçerse oturumsuz giriş isteği /giris'e dönerdi.
+    "/((?!_next/static|_next/image|maplibre/|veri/|sb/|api/surum|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|webp|ico|mjs|js|css|map|webmanifest)$).*)",
   ],
 };

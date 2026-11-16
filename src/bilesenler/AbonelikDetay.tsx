@@ -16,6 +16,7 @@ import { waNumarasi } from "@/lib/whatsapp";
 import type { Abonelik, Nokta, Siparis } from "@/lib/tipler";
 import { Etiket, MusteriAvatar } from "./Listeler";
 import { Eylem, Kutu, WaSimge } from "./TeslimatDetay";
+import TeslimGecmisi from "./TeslimGecmisi";
 
 type Props = {
   abonelik: Abonelik;
@@ -140,6 +141,9 @@ export default function AbonelikDetay({
           <p className="text-[11.5px] font-bold text-turuncu">Konum tanımlı değil</p>
         )}
       </div>
+
+      {/* Bu müşteriye yapılan teslimler (silinmez geçmişten) */}
+      <TeslimGecmisi musteriId={abonelik.musteri_id} />
 
       {/* Bilgi şeridi */}
       <div className="grid grid-cols-3 divide-x divide-cizgi rounded-2xl border border-cizgi bg-yuzey py-2">

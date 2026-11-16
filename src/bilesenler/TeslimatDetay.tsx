@@ -16,6 +16,7 @@ import {
 } from "@/lib/bicim";
 import { haversine, mesafeYaz } from "@/lib/rota";
 import { Etiket, MusteriAvatar } from "./Listeler";
+import TeslimGecmisi from "./TeslimGecmisi";
 import { waAc, waNumarasi } from "@/lib/whatsapp";
 import type { Nokta, Siparis, SiparisDurumu } from "@/lib/tipler";
 
@@ -160,6 +161,9 @@ export default function TeslimatDetay({
           </p>
         )}
       </div>
+
+      {/* Bu müşteriye daha önce yapılan teslimler (silinmez geçmişten) */}
+      <TeslimGecmisi musteriId={siparis.musteri_id} haricSiparis={siparis.id} />
 
       {/* Önceki deneme başarısızsa */}
       {siparis.durum === "basarisiz" && siparis.basarisizlik_sebebi && (

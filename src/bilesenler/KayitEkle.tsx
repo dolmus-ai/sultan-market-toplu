@@ -13,6 +13,7 @@ import {
   musteriAdresleri,
   musteriEkle,
   musterileriAra,
+  teslimSayilari,
   musteriDuzenle,
   sepetDuzenle,
   sepetEkle,
@@ -20,6 +21,7 @@ import {
   siparisEkle,
 } from "@/lib/veri";
 import { kayitliyiAdayaCevir, siteAdresMetni, siteAra } from "@/lib/site";
+import { teslimGunu } from "./TeslimGecmisi";
 import type {
   Abonelik,
   Adres,
@@ -103,6 +105,10 @@ export default function KayitEkle({
   /* --- Müşteri --- */
   const [arama, setArama] = useState("");
   const [sonuclar, setSonuclar] = useState<Musteri[]>([]);
+  /** Arama sonuçlarındaki müşterilere daha önce kaç teslim yapıldığı. */
+  const [teslimler, setTeslimler] = useState<
+    Map<string, { adet: number; son: string }>
+  >(() => new Map());
   const [musteri, setMusteri] = useState<Musteri | null>(null);
   const [yeniMusteri, setYeniMusteri] = useState({ ad: "", telefon: "", notlar: "" });
   const [musteriModu, setMusteriModu] = useState<"ara" | "yeni">("ara");
@@ -206,7 +212,14 @@ export default function KayitEkle({
     const zaman = setTimeout(() => {
       musterileriAra(db, arama)
         .then((liste) => {
-          if (!iptal) setSonuclar(liste);
+          if (iptal) return;
+          setSonuclar(liste);
+          // Hangisine daha önce teslim yapıldığı: silinmez geçmişten.
+          teslimSayilari(db, liste.map((m) => m.id))
+            .then((s) => {
+              if (!iptal) setTeslimler(s);
+            })
+            .catch(() => undefined);
         })
         .catch(() => {
           if (!iptal) setSonuclar([]);
@@ -508,6 +521,13 @@ export default function KayitEkle({
                           </span>
                           <span className="block truncate text-[11px] text-gri">
                             {m.telefon ?? "Telefon yok"}
+                            {teslimler.get(m.id) && (
+                              <span className="font-semibold text-yesil">
+                                {" "}
+                                · {teslimler.get(m.id)!.adet} teslim · son{" "}
+                                {teslimGunu(teslimler.get(m.id)!.son)}
+                              </span>
+                            )}
                           </span>
                         </span>
                       </motion.button>

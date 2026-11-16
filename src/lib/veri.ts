@@ -342,6 +342,68 @@ export async function musterileriAra(
   return (data ?? []) as Musteri[];
 }
 
+/* ------------------------------------------------------------------ */
+/* Teslim geçmişi                                                      */
+/* ------------------------------------------------------------------ */
+
+/** Silinmez teslim geçmişinden bir teslim (supabase: teslim_gecmisi). */
+export type GecmisTeslim = {
+  siparis_id: string;
+  teslim_zamani: string;
+  tutar: number | null;
+  odeme_yontemi: string | null;
+  odeme_alindi: boolean | null;
+  odeme_tutari: number | null;
+};
+
+/**
+ * Bir müşteriye yapılmış teslimatlar, en yenisi önce. Sipariş listeden
+ * silinmiş olsa bile geçmişte duruyor. `haricSiparis` verilirse o siparişin
+ * kendi teslimi sayılmıyor ("daha önce" anlamında).
+ */
+export async function musteriTeslimGecmisi(
+  db: SupabaseClient,
+  musteriId: string,
+  haricSiparis?: string,
+  limit = 5,
+): Promise<{ adet: number; liste: GecmisTeslim[] }> {
+  let sorgu = db
+    .from("teslim_gecmisi")
+    .select(
+      "siparis_id, teslim_zamani, tutar, odeme_yontemi, odeme_alindi, odeme_tutari",
+      { count: "exact" },
+    )
+    .eq("musteri_id", musteriId)
+    .order("teslim_zamani", { ascending: false })
+    .limit(limit);
+  if (haricSiparis) sorgu = sorgu.neq("siparis_id", haricSiparis);
+  const { data, error, count } = await sorgu;
+  if (error) throw error;
+  return { adet: count ?? 0, liste: (data ?? []) as GecmisTeslim[] };
+}
+
+/** Birden çok müşteri için teslim sayısı ve son teslim zamanı. */
+export async function teslimSayilari(
+  db: SupabaseClient,
+  musteriIdler: string[],
+): Promise<Map<string, { adet: number; son: string }>> {
+  const sonuc = new Map<string, { adet: number; son: string }>();
+  if (musteriIdler.length === 0) return sonuc;
+  const { data, error } = await db
+    .from("teslim_gecmisi")
+    .select("musteri_id, teslim_zamani")
+    .in("musteri_id", musteriIdler)
+    .order("teslim_zamani", { ascending: false })
+    .limit(2000);
+  if (error) throw error;
+  for (const r of (data ?? []) as { musteri_id: string; teslim_zamani: string }[]) {
+    const o = sonuc.get(r.musteri_id);
+    if (o) o.adet += 1;
+    else sonuc.set(r.musteri_id, { adet: 1, son: r.teslim_zamani });
+  }
+  return sonuc;
+}
+
 export async function musteriAdresleri(
   db: SupabaseClient,
   musteriId: string,

@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  startTransition,
   useRef,
   useState,
   useSyncExternalStore,
@@ -3156,9 +3157,13 @@ export default function KuryeUygulamasi({
           if (acik === tamEkran) return;
           // Ses ayarı navigasyondaki sesle ortak: kurye sesi kapattıysa sessiz.
           if (sesAcik) void kaydirmaSesi(acik);
-          setTamEkran(acik);
-          // Abonelik ayrıntısı yalnızca tam ekranda; kapanınca liste kalsın.
-          if (!acik) setSeciliAbonelikId(null);
+          // Geçiş olarak işaretli: koca ekranın yeniden çizimi kayma
+          // animasyonunun karelerini bekletmesin, araya bölünerek yapılsın.
+          startTransition(() => {
+            setTamEkran(acik);
+            // Abonelik ayrıntısı yalnızca tam ekranda; kapanınca liste kalsın.
+            if (!acik) setSeciliAbonelikId(null);
+          });
         }}
         baslik={
           <div className="flex items-center gap-2">

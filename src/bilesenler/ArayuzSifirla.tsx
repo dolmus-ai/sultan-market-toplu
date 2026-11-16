@@ -1,132 +1,196 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { AnimatePresence, motion } from "motion/react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
+import {
+  AnimatePresence,
+  animate,
+  motion,
+  useMotionValue,
+  type MotionValue,
+} from "motion/react";
 
-/** Viewport etiketi: yakınlaştırma kilitli / açık. */
+/**
+ * Viewport etiketi: tarayıcının kendi sayfa yakınlaştırması hep kapalı.
+ *
+ * Neden: iPhone Safari, büyütülmüş sayfayı koddan küçültmeye izin vermiyor
+ * ("Arayüzü sıfırla" ya hiç çalışmıyor ya da sayfayı yenilemek gerekiyordu).
+ * Bu yüzden iki parmakla büyütmeyi uygulama kendisi yapıyor (aşağıda);
+ * böylece sıfırlama yenilemeden, akıcı bir animasyonla oluyor.
+ */
 export const VIEWPORT_KILITLI =
   "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover";
-export const VIEWPORT_ACIK =
-  "width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes, viewport-fit=cover";
 
-/** Sayfa ölçeği bu kadarı aşıyorsa "büyütülmüş" sayılır. */
-const BUYUK_OLCEK = 1.04;
-/** Sıfırlama sonrası sayfa yeniden açılırken adrese eklenen işaret. */
-const SIFIRLA_ISARETI = "sifirla";
+const EN_COK = 4;
+const BUYUK_ESIK = 1.02;
+const YAY = { type: "spring", stiffness: 260, damping: 32 } as const;
 
-function sayfaBuyuk() {
-  return (window.visualViewport?.scale ?? 1) > BUYUK_OLCEK;
+export type UygulamaYakinligi = {
+  olcek: MotionValue<number>;
+  x: MotionValue<number>;
+  y: MotionValue<number>;
+  /** Arayüz büyütülmüş mü (sıfırla düğmesi için). */
+  buyuk: boolean;
+  /** Büyütmeyi akıcı bir animasyonla ilk hâline döndürür. */
+  sifirla: () => void;
+};
+
+/** Dokunuş haritada mı (orada iki parmak haritayı yakınlaştırır). */
+function haritada(hedef: EventTarget | null) {
+  return hedef instanceof Element && hedef.closest(".maplibregl-map") != null;
 }
 
 /**
- * Arayüzü ilk açılıştaki hâline döndürür: harita ilk konumuna, yakınlığına
- * ve açısına uçar; sayfa iki parmakla büyütülmüşse ölçek 1'e iner.
+ * Uygulamanın kendi iki parmak yakınlaştırması.
  *
- * Sayfa ölçeğini koddan değiştirmenin standart bir yolu yok. Android Chrome,
- * viewport etiketinde kısa bir an `maximum-scale=1` görünce ölçeği 1'e
- * çekiyor. iPhone Safari ise erişilebilirlik gereği bu sınırı yok sayıyor;
- * orada ölçek inmezse sayfa aynı adresten yeniden açılıyor (yeni açılış her
- * zaman 1 ölçekle başlar). Bekleyen işlemler cihazda sırada durduğu için
- * yeniden açılışta kaybolmuyor.
+ * Yakınlaştırma kilidi kapalıyken haritanın dışında (üst çubuk, paneller,
+ * listeler) iki parmakla açıp kapatmak bütün arayüzü büyütür; iki parmakla
+ * sürüklemek büyütülmüş arayüzde gezdirir. Tek parmak her şeyi eskisi gibi
+ * yapar (liste kaydırma, dokunma). Büyütme ekranın dışına taşmayacak
+ * şekilde sınırlı; bırakınca neredeyse 1'deyse tam 1'e oturur.
  */
-export function arayuzuSifirla(zoomKilitli: boolean, haritaSifirla?: () => void) {
-  haritaSifirla?.();
-  if (!sayfaBuyuk()) return;
+export function useUygulamaYakinligi(acik: boolean): UygulamaYakinligi {
+  const olcek = useMotionValue(1);
+  const x = useMotionValue(0);
+  const y = useMotionValue(0);
+  const [buyuk, setBuyuk] = useState(false);
 
-  const meta = document.querySelector<HTMLMetaElement>('meta[name="viewport"]');
-  if (meta) meta.content = VIEWPORT_KILITLI;
-  window.scrollTo(0, 0);
-  window.setTimeout(() => {
-    window.scrollTo(0, 0);
-    if (meta && !zoomKilitli) meta.content = VIEWPORT_ACIK;
-    if (!sayfaBuyuk()) return;
-    const url = new URL(window.location.href);
-    url.searchParams.set(SIFIRLA_ISARETI, String(Date.now()));
-    window.location.replace(url.toString());
-  }, 400);
-}
+  useEffect(
+    () => olcek.on("change", (s) => setBuyuk(s > BUYUK_ESIK)),
+    [olcek],
+  );
 
-/** Sıfırlama için yeniden açıldıysak adresteki işareti sessizce temizler. */
-export function useSifirlaIsaretiniTemizle() {
-  useEffect(() => {
-    const url = new URL(window.location.href);
-    if (!url.searchParams.has(SIFIRLA_ISARETI)) return;
-    url.searchParams.delete(SIFIRLA_ISARETI);
-    window.history.replaceState(window.history.state, "", url.toString());
-  }, []);
-}
-
-/** Sayfa yakınlaştırılmış mı, ve görünen alanın konumu. */
-function useGorunenAlan() {
-  const [alan, setAlan] = useState<{
-    olcek: number;
-    x: number;
-    y: number;
-    genislik: number;
-  } | null>(null);
+  const sifirla = useCallback(() => {
+    void animate(olcek, 1, YAY);
+    void animate(x, 0, YAY);
+    void animate(y, 0, YAY);
+  }, [olcek, x, y]);
 
   useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const guncelle = () =>
-      setAlan({
-        olcek: vv.scale,
-        x: vv.offsetLeft,
-        y: vv.offsetTop,
-        genislik: vv.width,
-      });
-    vv.addEventListener("resize", guncelle);
-    vv.addEventListener("scroll", guncelle);
-    return () => {
-      vv.removeEventListener("resize", guncelle);
-      vv.removeEventListener("scroll", guncelle);
+    if (!acik) {
+      // Kilit açılınca büyütülmüş arayüz kendiliğinden normale dönsün.
+      if (olcek.get() > 1) sifirla();
+      return;
+    }
+
+    let jest: {
+      d0: number;
+      mx0: number;
+      my0: number;
+      s0: number;
+      x0: number;
+      y0: number;
+    } | null = null;
+
+    const uzaklik = (a: Touch, b: Touch) =>
+      Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+
+    /** Arayüz ekranı her zaman kaplasın: kenarlardan içeri boşluk açılmasın. */
+    const sinirla = (s: number, tx: number, ty: number) => {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      return {
+        tx: Math.min(0, Math.max(w - w * s, tx)),
+        ty: Math.min(0, Math.max(h - h * s, ty)),
+      };
     };
-  }, []);
 
-  return alan;
+    const basla = (e: TouchEvent) => {
+      if (e.touches.length !== 2) return;
+      const [a, b] = [e.touches[0], e.touches[1]];
+      if (haritada(a.target) || haritada(b.target)) return;
+      olcek.stop();
+      x.stop();
+      y.stop();
+      jest = {
+        d0: Math.max(1, uzaklik(a, b)),
+        mx0: (a.clientX + b.clientX) / 2,
+        my0: (a.clientY + b.clientY) / 2,
+        s0: olcek.get(),
+        x0: x.get(),
+        y0: y.get(),
+      };
+      e.preventDefault();
+    };
+
+    const surukle = (e: TouchEvent) => {
+      if (!jest || e.touches.length !== 2) return;
+      e.preventDefault();
+      const [a, b] = [e.touches[0], e.touches[1]];
+      const mx = (a.clientX + b.clientX) / 2;
+      const my = (a.clientY + b.clientY) / 2;
+      const s = Math.min(EN_COK, Math.max(1, (jest.s0 * uzaklik(a, b)) / jest.d0));
+      // Parmakların başta tuttuğu nokta parmakların altında kalsın.
+      const px = (jest.mx0 - jest.x0) / jest.s0;
+      const py = (jest.my0 - jest.y0) / jest.s0;
+      const { tx, ty } = sinirla(s, mx - px * s, my - py * s);
+      olcek.set(s);
+      x.set(tx);
+      y.set(ty);
+    };
+
+    const bitir = (e: TouchEvent) => {
+      if (!jest || e.touches.length >= 2) return;
+      jest = null;
+      if (olcek.get() < 1.05) sifirla();
+    };
+
+    const secenek = { passive: false } as const;
+    document.addEventListener("touchstart", basla, secenek);
+    document.addEventListener("touchmove", surukle, secenek);
+    document.addEventListener("touchend", bitir);
+    document.addEventListener("touchcancel", bitir);
+    return () => {
+      document.removeEventListener("touchstart", basla);
+      document.removeEventListener("touchmove", surukle);
+      document.removeEventListener("touchend", bitir);
+      document.removeEventListener("touchcancel", bitir);
+    };
+  }, [acik, olcek, x, y, sifirla]);
+
+  return { olcek, x, y, buyuk, sifirla };
 }
 
 /**
- * Sayfa büyütülmüşken görünen alanın tepesinde beliren "Arayüzü sıfırla"
- * düğmesi. Büyütülünce haritanın düğmeleri ekran dışında kalabiliyor; bu
- * düğme görünen alana yapışık ve normal boyutunda duruyor.
+ * Arayüz büyütülmüşken ekranın tepesinde beliren "Arayüzü sıfırla" düğmesi.
+ * Büyütülen arayüzün dışında (body'de) duruyor; hep normal boyutta görünür.
  */
 export function YakinlikSifirlaDugmesi({
-  zoomKilitli,
-  onHaritaSifirla,
+  buyuk,
+  onSifirla,
 }: {
-  zoomKilitli: boolean;
-  onHaritaSifirla?: () => void;
+  buyuk: boolean;
+  onSifirla: () => void;
 }) {
-  useSifirlaIsaretiniTemizle();
-  const alan = useGorunenAlan();
-  const buyuk = alan != null && alan.olcek > BUYUK_OLCEK;
-
-  return (
+  // Sunucu çiziminde ve hidrasyonda portal kurulmaz; ikisi aynı kalsın.
+  const istemcide = useSyncExternalStore(
+    abonelikYok,
+    () => true,
+    () => false,
+  );
+  if (!istemcide) return null;
+  return createPortal(
     <AnimatePresence>
-      {buyuk && alan && (
-        <div
-          className="pointer-events-none fixed left-0 top-0 z-[90] flex justify-center"
-          style={{
-            width: alan.genislik * alan.olcek,
-            transform: `translate(${alan.x}px, ${alan.y}px) scale(${1 / alan.olcek})`,
-            transformOrigin: "0 0",
-          }}
+      {buyuk && (
+        <motion.div
+          key="sifirla"
+          initial={{ opacity: 0, y: -12, scale: 0.9 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: -12, scale: 0.9 }}
+          transition={{ type: "spring", stiffness: 420, damping: 30 }}
+          className="pointer-events-none fixed inset-x-0 top-[calc(env(safe-area-inset-top)+12px)] z-[95] flex justify-center"
         >
-          <motion.button
-            initial={{ opacity: 0, y: -10, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -10, scale: 0.9 }}
-            transition={{ type: "spring", stiffness: 420, damping: 30 }}
-            onClick={() => arayuzuSifirla(zoomKilitli, onHaritaSifirla)}
-            className="pointer-events-auto mt-[calc(env(safe-area-inset-top)+12px)] flex h-10 items-center gap-2 rounded-hap bg-kontrast px-4 text-[13px] font-black text-white shadow-yuzen active:scale-95"
+          <button
+            onClick={onSifirla}
+            className="pointer-events-auto flex h-10 items-center gap-2 rounded-hap bg-kontrast px-4 text-[13px] font-black text-white shadow-yuzen active:scale-95"
           >
             <SifirlaSimgesi />
             Arayüzü sıfırla
-          </motion.button>
-        </div>
+          </button>
+        </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 }
 
@@ -143,3 +207,5 @@ export function SifirlaSimgesi({ boyut = 16 }: { boyut?: number }) {
     </svg>
   );
 }
+
+const abonelikYok = () => () => {};

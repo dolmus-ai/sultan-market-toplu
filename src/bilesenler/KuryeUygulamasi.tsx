@@ -38,10 +38,9 @@ import { SultanAmblem, SultanVeda, VEDA_SURESI } from "./SultanLogo";
 import UstCubuk from "./UstCubuk";
 import CikisCekmecesi from "./CikisCekmecesi";
 import {
-  VIEWPORT_ACIK,
   VIEWPORT_KILITLI,
   YakinlikSifirlaDugmesi,
-  arayuzuSifirla,
+  useUygulamaYakinligi,
 } from "./ArayuzSifirla";
 import { ModGecisDugmesi } from "./ModGecisi";
 import YonetimMenusu from "./YonetimMenusu";
@@ -598,9 +597,11 @@ export default function KuryeUygulamasi({
   }, [katmanlar.karanlik, sesAcik, zoomKilitli]);
 
   /*
-   * Yakınlaştırma kilidi. Yalnızca viewport etiketine yazmak mobilde
-   * yetmiyordu: iOS Safari `user-scalable=no`yu yok sayıyor, Next de etiketi
-   * kendi değeriyle yeniden yazabiliyor. Kilitliyken üç katman var:
+   * Tarayıcının kendi sayfa büyütmesi hep kapalı (kilit açıkken de):
+   * büyütmeyi uygulama kendisi yapıyor, aşağıdaki `useUygulamaYakinligi`.
+   * Yalnızca viewport etiketine yazmak mobilde yetmiyordu: iOS Safari
+   * `user-scalable=no`yu yok sayıyor, Next de etiketi kendi değeriyle
+   * yeniden yazabiliyor. Üç katman var:
    *  - viewport etiketi (Android'de ölçeği 1'e de döndürür),
    *  - <html>e `zoom-kilitli` sınıfı → `touch-action: pan-x pan-y`
    *    (Chrome/Android ve iOS'ta iki parmak ve çift dokunma yakınlaşmasını
@@ -613,10 +614,9 @@ export default function KuryeUygulamasi({
     const kok = document.documentElement;
     const meta = document.querySelector<HTMLMetaElement>('meta[name="viewport"]');
     if (meta) {
-      meta.content = zoomKilitli ? VIEWPORT_KILITLI : VIEWPORT_ACIK;
+      meta.content = VIEWPORT_KILITLI;
     }
-    kok.classList.toggle("zoom-kilitli", zoomKilitli);
-    if (!zoomKilitli) return;
+    kok.classList.add("zoom-kilitli");
 
     const haritada = (e: Event) =>
       e.target instanceof Element && e.target.closest(".maplibregl-map") != null;
@@ -636,7 +636,19 @@ export default function KuryeUygulamasi({
       document.removeEventListener("gesturechange", jestEngelle);
       document.removeEventListener("touchmove", dokunmaEngelle);
     };
-  }, [zoomKilitli]);
+  }, []);
+
+  /*
+   * Kilit kapalıyken iki parmakla büyütmeyi tarayıcı değil uygulama yapıyor
+   * (ArayuzSifirla): tarayıcının büyütmesi iPhone'da koddan geri alınamıyor,
+   * "Arayüzü sıfırla" sayfayı yenilemek zorunda kalıyordu.
+   */
+  const yakinlik = useUygulamaYakinligi(!zoomKilitli);
+  const yakinligiSifirla = yakinlik.sifirla;
+  const arayuzuSifirla = useCallback(() => {
+    yakinligiSifirla();
+    haritaApi.current?.ilkGorunum();
+  }, [yakinligiSifirla]);
 
   /* ------------------------- Bildirim ------------------------- */
   const uyar = useCallback(
@@ -2357,7 +2369,15 @@ export default function KuryeUygulamasi({
   const toplamTahsilat = aktifTeslimatlar.reduce((t, s) => t + s.tutar, 0);
 
   return (
-    <main className="relative h-dvh w-full overflow-hidden bg-yuzey2">
+    <motion.main
+      style={{
+        scale: yakinlik.olcek,
+        x: yakinlik.x,
+        y: yakinlik.y,
+        transformOrigin: "0 0",
+      }}
+      className="relative h-dvh w-full overflow-hidden bg-yuzey2"
+    >
       <Harita
         ref={haritaApi}
         teslimatlar={teslimatlar}
@@ -2559,8 +2579,8 @@ export default function KuryeUygulamasi({
 
       {/* Sayfa büyütülmüşken görünen alanın tepesinde "Arayüzü sıfırla". */}
       <YakinlikSifirlaDugmesi
-        zoomKilitli={zoomKilitli}
-        onHaritaSifirla={() => haritaApi.current?.ilkGorunum()}
+        buyuk={yakinlik.buyuk}
+        onSifirla={arayuzuSifirla}
       />
 
       {/* Sol kenardan sağa kaydırınca açılan ekran: kurye bilgisi ve çıkış. */}
@@ -2601,9 +2621,7 @@ export default function KuryeUygulamasi({
         }}
         onKatman={(k) => setKatmanlar((o) => ({ ...o, [k]: !o[k] }))}
         zoomKilitli={zoomKilitli}
-        onArayuzSifirla={() =>
-          arayuzuSifirla(zoomKilitli, () => haritaApi.current?.ilkGorunum())
-        }
+        onArayuzSifirla={arayuzuSifirla}
         onZoomKilidi={() => {
           const yeni = !zoomKilitli;
           setZoomKilitli(yeni);
@@ -3649,7 +3667,7 @@ export default function KuryeUygulamasi({
         </AnimatePresence>
       </AltPanel>
       )}
-    </main>
+    </motion.main>
   );
 }
 

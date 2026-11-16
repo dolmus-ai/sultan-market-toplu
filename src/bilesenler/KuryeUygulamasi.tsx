@@ -32,6 +32,12 @@ import { AbonelikSatiri, ListeArama, TeslimatSatiri } from "./Listeler";
 import { SultanAmblem, SultanVeda, VEDA_SURESI } from "./SultanLogo";
 import UstCubuk from "./UstCubuk";
 import CikisCekmecesi from "./CikisCekmecesi";
+import {
+  VIEWPORT_ACIK,
+  VIEWPORT_KILITLI,
+  YakinlikSifirlaDugmesi,
+  arayuzuSifirla,
+} from "./ArayuzSifirla";
 import { ModGecisDugmesi } from "./ModGecisi";
 import YonetimMenusu from "./YonetimMenusu";
 
@@ -585,9 +591,7 @@ export default function KuryeUygulamasi({
     const kok = document.documentElement;
     const meta = document.querySelector<HTMLMetaElement>('meta[name="viewport"]');
     if (meta) {
-      meta.content = zoomKilitli
-        ? "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
-        : "width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes, viewport-fit=cover";
+      meta.content = zoomKilitli ? VIEWPORT_KILITLI : VIEWPORT_ACIK;
     }
     kok.classList.toggle("zoom-kilitli", zoomKilitli);
     if (!zoomKilitli) return;
@@ -2514,6 +2518,9 @@ export default function KuryeUygulamasi({
         </div>
       </UstCubuk>
 
+      {/* Sayfa büyütülmüşken görünen alanın tepesinde "Arayüzü sıfırla". */}
+      <YakinlikSifirlaDugmesi zoomKilitli={zoomKilitli} />
+
       {/* Sol kenardan sağa kaydırınca açılan ekran: kurye bilgisi ve çıkış. */}
       {!navHedef && (
         <CikisCekmecesi
@@ -2553,6 +2560,7 @@ export default function KuryeUygulamasi({
         }}
         onKatman={(k) => setKatmanlar((o) => ({ ...o, [k]: !o[k] }))}
         zoomKilitli={zoomKilitli}
+        onArayuzSifirla={() => arayuzuSifirla(zoomKilitli)}
         onZoomKilidi={() => {
           const yeni = !zoomKilitli;
           setZoomKilitli(yeni);

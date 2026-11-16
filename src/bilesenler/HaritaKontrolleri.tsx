@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import type { Katmanlar } from "./Harita";
+import { SifirlaSimgesi } from "./ArayuzSifirla";
 
 type Props = {
   bearing: number;
@@ -19,6 +20,8 @@ type Props = {
   /** Sayfanın iki parmakla yakınlaştırılması kilitli mi. */
   zoomKilitli: boolean;
   onZoomKilidi: () => void;
+  /** İki parmakla büyütülmüş sayfayı ilk açılıştaki ölçeğe döndürür. */
+  onArayuzSifirla: () => void;
 };
 
 // Sepetler bölümü kaldırıldı: katmanı listede yok.
@@ -47,6 +50,7 @@ export default function HaritaKontrolleri({
   onKatman,
   zoomKilitli,
   onZoomKilidi,
+  onArayuzSifirla,
 }: Props) {
   /*
    * Haritanın sağı sade kalsın: hep görünen tek bir küçük düğme var.
@@ -208,6 +212,12 @@ export default function HaritaKontrolleri({
               strokeLinecap="round"
             />
           </svg>
+        </Dugme>
+      </Kume>
+
+      <Kume>
+        <Dugme etiket="Arayüzü sıfırla" onClick={onArayuzSifirla}>
+          <SifirlaSimgesi />
         </Dugme>
       </Kume>
       </motion.div>

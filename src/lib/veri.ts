@@ -403,7 +403,13 @@ export type GecmisKayit = GecmisTeslim & {
  */
 export async function teslimGecmisiListesi(
   db: SupabaseClient,
-  secenek: { arama?: string; sayfa?: number; boyut?: number } = {},
+  secenek: {
+    arama?: string;
+    sayfa?: number;
+    boyut?: number;
+    /** Yalnızca abonelikten gelen teslimler (abonelik geçmişi). */
+    sadeceAbonelik?: boolean;
+  } = {},
 ): Promise<{ kayitlar: GecmisKayit[]; toplam: number }> {
   const boyut = secenek.boyut ?? 40;
   const bas = (secenek.sayfa ?? 0) * boyut;
@@ -417,6 +423,7 @@ export async function teslimGecmisiListesi(
     .range(bas, bas + boyut - 1);
   const temiz = secenek.arama?.trim().replace(/[,%()]/g, " ");
   if (temiz) sorgu = sorgu.or(`musteri_ad.ilike.%${temiz}%,telefon.ilike.%${temiz}%`);
+  if (secenek.sadeceAbonelik) sorgu = sorgu.eq("kaynak", "abonelik");
   const { data, error, count } = await sorgu;
   if (error) throw error;
   return { kayitlar: (data ?? []) as GecmisKayit[], toplam: count ?? 0 };

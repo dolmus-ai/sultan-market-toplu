@@ -28,11 +28,13 @@ function odemeDurumu(k: GecmisKayit): { metin: string; renk: string } {
 
 /**
  * Bütün önceki teslimatlar: tam ekran listedeki "Teslimat geçmişi"
- * düğmesiyle açılır. Kaynak silinmez teslim geçmişi; listeden silinmiş
+ * düğmesiyle açılır. Abonelikler sekmesindeyken aynı düğme "Abonelik
+ * geçmişi" olur ve yalnızca aboneliklerden gelen teslimleri gösterir. Kaynak silinmez teslim geçmişi; listeden silinmiş
  * siparişler de burada. Bir teslime dokununca ayrıntısı açılır; oradan
  * aynen ya da düzenleyerek yeniden teslimata alınır.
  */
 export default function TeslimGecmisiEkrani({
+  tur = "teslimat",
   db,
   yontemler,
   islemde,
@@ -40,6 +42,8 @@ export default function TeslimGecmisiEkrani({
   onAynenAl,
   onDuzenleyerekAl,
 }: {
+  /** "abonelik": yalnızca aboneliklerden gelen teslimler. */
+  tur?: "teslimat" | "abonelik";
   db: SupabaseClient;
   yontemler: OdemeYontemiTanimi[];
   islemde: boolean;
@@ -53,13 +57,19 @@ export default function TeslimGecmisiEkrani({
   const [sayfa, setSayfa] = useState(0);
   const [durum, setDurum] = useState<"yukleniyor" | "hazir" | "hata">("yukleniyor");
   const [acikId, setAcikId] = useState<string | null>(null);
+  const abonelik = tur === "abonelik";
 
   // Arama değişince ilk sayfadan, yazarken 250 ms bekleyerek.
   useEffect(() => {
     let iptal = false;
     const zaman = setTimeout(() => {
       setDurum("yukleniyor");
-      teslimGecmisiListesi(db, { arama, sayfa: 0, boyut: SAYFA })
+      teslimGecmisiListesi(db, {
+        arama,
+        sayfa: 0,
+        boyut: SAYFA,
+        sadeceAbonelik: abonelik,
+      })
         .then(({ kayitlar: k, toplam: t }) => {
           if (iptal) return;
           setKayitlar(k);
@@ -75,7 +85,7 @@ export default function TeslimGecmisiEkrani({
       iptal = true;
       clearTimeout(zaman);
     };
-  }, [db, arama]);
+  }, [db, arama, abonelik]);
 
   async function dahaFazla() {
     const sonraki = sayfa + 1;
@@ -85,6 +95,7 @@ export default function TeslimGecmisiEkrani({
         arama,
         sayfa: sonraki,
         boyut: SAYFA,
+        sadeceAbonelik: abonelik,
       });
       setKayitlar((o) => [...o, ...k]);
       setToplam(t);
@@ -124,7 +135,9 @@ export default function TeslimGecmisiEkrani({
           >
             ← Geri
           </button>
-          <h2 className="flex-1 text-[16px] font-black tracking-tight">Teslimat geçmişi</h2>
+          <h2 className="flex-1 text-[16px] font-black tracking-tight">
+            {abonelik ? "Abonelik geçmişi" : "Teslimat geçmişi"}
+          </h2>
           {durum !== "yukleniyor" && (
             <span className="text-[11px] font-semibold text-gri">{toplam} teslim</span>
           )}
@@ -160,7 +173,11 @@ export default function TeslimGecmisiEkrani({
         )}
         {durum === "hazir" && kayitlar.length === 0 && (
           <p className="py-10 text-center text-[12.5px] text-gri">
-            {arama ? "Aramaya uyan teslim yok." : "Henüz teslim edilmiş sipariş yok."}
+            {arama
+              ? "Aramaya uyan teslim yok."
+              : abonelik
+                ? "Henüz abonelikten teslim edilmiş sipariş yok."
+                : "Henüz teslim edilmiş sipariş yok."}
           </p>
         )}
 

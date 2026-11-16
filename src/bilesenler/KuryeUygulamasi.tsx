@@ -401,8 +401,13 @@ export default function KuryeUygulamasi({
   const [navAdimIndeks, setNavAdimIndeks] = useState(0);
   const [navTakip, setNavTakip] = useState(true);
   const [sesAcik, setSesAcik] = useState(() => tercihOku().ses ?? true);
-  /** Tam ekran listeden açılan teslimat geçmişi ekranı. */
-  const [gecmisAcik, setGecmisAcik] = useState(false);
+  /**
+   * Tam ekran listeden açılan geçmiş ekranı: teslimatlar sekmesinde bütün
+   * teslimler, abonelikler sekmesinde aboneliklerden gelenler. Kapalıysa null.
+   */
+  const [gecmisTuru, setGecmisTuru] = useState<"teslimat" | "abonelik" | null>(
+    null,
+  );
   /** Geçmişten "Düzenleyerek al": kayıt formu bununla dolu açılır. */
   const [kayitTaslagi, setKayitTaslagi] = useState<KayitTaslagi | null>(null);
   /** Çıkışa basıldı: veda animasyonu oynuyor. */
@@ -1939,7 +1944,7 @@ export default function KuryeUygulamasi({
         planlanan_tarih: bugununTarihi(),
         odeme_yontemi: k.odeme_yontemi,
       });
-      setGecmisAcik(false);
+      setGecmisTuru(null);
       kayitEklendi(
         { tur: "teslimat", siparis },
         `${k.musteri_ad ?? "Müşteri"} bugünkü teslimatlara eklendi`,
@@ -2917,7 +2922,7 @@ export default function KuryeUygulamasi({
             onEklendi={(kayit, mesaj) => {
               setKayitAdresi(null);
               // Geçmişten açıldıysa yeni teslimat listede görünsün.
-              if (kayitTaslagi) setGecmisAcik(false);
+              if (kayitTaslagi) setGecmisTuru(null);
               setKayitTaslagi(null);
               kayitEklendi(kayit, mesaj);
             }}
@@ -3229,13 +3234,14 @@ export default function KuryeUygulamasi({
 
       {/* Teslimat geçmişi: tam ekran listenin üstünde */}
       <AnimatePresence>
-        {gecmisAcik && (
+        {gecmisTuru && (
           <TeslimGecmisiEkrani
-            key="teslim-gecmisi"
+            key={`gecmis-${gecmisTuru}`}
+            tur={gecmisTuru}
             db={db}
             yontemler={yontemler}
             islemde={islemde}
-            onKapat={() => setGecmisAcik(false)}
+            onKapat={() => setGecmisTuru(null)}
             onAynenAl={(k) => void gecmistenAynenAl(k)}
             onDuzenleyerekAl={gecmistenDuzenleyerekAl}
           />
@@ -3352,8 +3358,10 @@ export default function KuryeUygulamasi({
         tamEkran={tamEkran}
         tamEkranSol={
           <button
-            onClick={() => setGecmisAcik(true)}
-            className="flex h-8 items-center gap-1.5 rounded-hap bg-kontrast px-3 text-[12px] font-black text-white active:scale-95"
+            onClick={() =>
+              setGecmisTuru(sekme === "abonelikler" ? "abonelik" : "teslimat")
+            }
+            className="flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-hap bg-kontrast px-3 text-[12px] font-black text-white active:scale-95"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
               <path
@@ -3364,7 +3372,7 @@ export default function KuryeUygulamasi({
                 strokeLinejoin="round"
               />
             </svg>
-            Teslimat geçmişi
+            {sekme === "abonelikler" ? "Abonelik geçmişi" : "Teslimat geçmişi"}
           </button>
         }
         onTamEkran={(acik) => {

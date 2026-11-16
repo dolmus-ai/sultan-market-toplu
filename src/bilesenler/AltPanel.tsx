@@ -382,13 +382,13 @@ export default function AltPanel({
       >
         <div className="shrink-0 px-4 pb-2 pt-[calc(env(safe-area-inset-top)+10px)]">
           <div className="mb-2 flex items-center justify-end gap-2">
-            {tamEkranSol && <div className="mr-auto">{tamEkranSol}</div>}
-            <span className="text-[10.5px] font-semibold text-gri">
+            {tamEkranSol && <div className="mr-auto shrink-0">{tamEkranSol}</div>}
+            <span className="min-w-0 truncate text-[10.5px] font-semibold text-gri">
               Sağa kaydırarak da kapanır
             </span>
             <button
               onClick={() => onTamEkran(false)}
-              className="flex h-8 items-center gap-1 rounded-hap bg-yuzey2 px-3 text-[12px] font-bold text-gri"
+              className="flex h-8 shrink-0 items-center gap-1 whitespace-nowrap rounded-hap bg-yuzey2 px-3 text-[12px] font-bold text-gri"
             >
               Harita →
             </button>

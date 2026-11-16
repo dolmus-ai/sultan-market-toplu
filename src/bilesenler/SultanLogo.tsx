@@ -235,3 +235,70 @@ export function SultanAcilis({
     </div>
   );
 }
+
+/* ------------------------------------------------------------------ */
+/* Çıkış animasyonu                                                    */
+/* ------------------------------------------------------------------ */
+
+/** Çıkış animasyonunun süresi (ms); çağıran taraf yönlendirmeyi buna göre bekler. */
+export const VEDA_SURESI = 1600;
+
+/**
+ * Çıkış yapılırken ekranı kaplayan veda: uygulama bulanıklaşır, amblem
+ * dönerek büyür, arkasında kırmızı bir hale yayılır, "Görüşmek üzere"
+ * yazısı belirir; en sonda hepsi yukarı süzülüp kaybolur.
+ */
+export function SultanVeda() {
+  const sure = VEDA_SURESI / 1000;
+  const zaman = [0, 0.28, 0.4, 0.78, 1];
+  return (
+    <motion.div
+      role="status"
+      aria-label="Çıkış yapılıyor"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.22 }}
+      className="fixed inset-0 z-[100] flex flex-col items-center justify-center"
+    >
+      <div className="absolute inset-0 bg-yuzey/70 backdrop-blur-2xl" />
+
+      {/* Hale */}
+      <motion.div
+        aria-hidden
+        className="absolute h-56 w-56 rounded-full bg-kirmizi/30 blur-3xl"
+        initial={{ scale: 0.3, opacity: 0 }}
+        animate={{ scale: [0.3, 1.5, 1.2, 1.3, 2], opacity: [0, 0.9, 0.6, 0.5, 0] }}
+        transition={{ duration: sure, times: zaman, ease: "easeOut" }}
+      />
+
+      <motion.div
+        className="relative"
+        initial={{ scale: 0.4, rotate: -16, opacity: 0, y: 24 }}
+        animate={{
+          scale: [0.4, 1.12, 1, 1, 0.82],
+          rotate: [-16, 4, 0, 0, 0],
+          opacity: [0, 1, 1, 1, 0],
+          y: [24, 0, 0, 0, -40],
+        }}
+        transition={{ duration: sure, times: zaman, ease: [0.22, 1, 0.36, 1] }}
+      >
+        <SultanAmblem boyut={104} />
+      </motion.div>
+
+      <motion.p
+        className="relative mt-5 text-[22px] font-black tracking-[-0.02em] text-metin"
+        initial={{ opacity: 0, y: 14 }}
+        animate={{ opacity: [0, 0, 1, 1, 0], y: [14, 14, 0, 0, -30] }}
+        transition={{ duration: sure, times: zaman, ease: "easeOut" }}
+      >
+        Görüşmek üzere
+      </motion.p>
+      <motion.div
+        className="relative mt-2 h-1 rounded-full bg-kirmizi"
+        initial={{ width: 0 }}
+        animate={{ width: [0, 0, 120, 120, 0], opacity: [1, 1, 1, 1, 0] }}
+        transition={{ duration: sure, times: zaman, ease: [0.22, 1, 0.36, 1] }}
+      />
+    </motion.div>
+  );
+}

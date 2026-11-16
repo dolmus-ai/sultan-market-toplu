@@ -220,3 +220,74 @@ export async function kaydirmaSesi(acilis: boolean) {
   tik.start(tikBas);
   tik.stop(tikBas + 0.14);
 }
+
+/**
+ * Çıkış sesi: açılış melodisinin tersi gibi — notalar iner, altında
+ * pes tarafa kayan yumuşak bir "vuuş" ve sonunda derin bir vuruş.
+ * Dokunuşun içinden çağrılmalı.
+ */
+export async function cikisSesi(): Promise<void> {
+  const ctx = sesBaglami();
+  if (!ctx) return;
+  try {
+    if (ctx.state === "suspended") await ctx.resume();
+  } catch {
+    return;
+  }
+  if (ctx.state !== "running") return;
+
+  const simdi = ctx.currentTime;
+  const ana = ctx.createGain();
+  ana.gain.value = 0.15;
+  ana.connect(ctx.destination);
+
+  // Vuuş: tizden pese süpürülen gürültü.
+  const sure = 0.7;
+  const tampon = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * sure), ctx.sampleRate);
+  const veri = tampon.getChannelData(0);
+  for (let i = 0; i < veri.length; i++) veri[i] = Math.random() * 2 - 1;
+  const gurultu = ctx.createBufferSource();
+  gurultu.buffer = tampon;
+  const suzgec = ctx.createBiquadFilter();
+  suzgec.type = "bandpass";
+  suzgec.Q.value = 1.2;
+  suzgec.frequency.setValueAtTime(2800, simdi);
+  suzgec.frequency.exponentialRampToValueAtTime(320, simdi + sure);
+  const gurultuZarf = ctx.createGain();
+  gurultuZarf.gain.setValueAtTime(0.0001, simdi);
+  gurultuZarf.gain.exponentialRampToValueAtTime(0.35, simdi + 0.1);
+  gurultuZarf.gain.exponentialRampToValueAtTime(0.0001, simdi + sure);
+  gurultu.connect(suzgec).connect(gurultuZarf).connect(ana);
+  gurultu.start(simdi);
+  gurultu.stop(simdi + sure);
+
+  // İnen zil: Si5 · Sol#5 · Mi5 · Si4
+  [987.77, 830.61, 659.25, 493.88].forEach((frekans, i, dizi) => {
+    const t = simdi + 0.08 + i * 0.12;
+    const son = i === dizi.length - 1;
+    const osilator = ctx.createOscillator();
+    const zarf = ctx.createGain();
+    osilator.type = son ? "sine" : "triangle";
+    osilator.frequency.setValueAtTime(frekans, t);
+    zarf.gain.setValueAtTime(0.0001, t);
+    zarf.gain.exponentialRampToValueAtTime(0.85, t + 0.015);
+    zarf.gain.exponentialRampToValueAtTime(0.0001, t + (son ? 1.1 : 0.45));
+    osilator.connect(zarf).connect(ana);
+    osilator.start(t);
+    osilator.stop(t + (son ? 1.15 : 0.5));
+  });
+
+  // Logo oturduğu anda derin, yumuşak bir vuruş.
+  const vt = simdi + 0.45;
+  const vurus = ctx.createOscillator();
+  const vurusZarf = ctx.createGain();
+  vurus.type = "sine";
+  vurus.frequency.setValueAtTime(130.81, vt);
+  vurus.frequency.exponentialRampToValueAtTime(55, vt + 0.4);
+  vurusZarf.gain.setValueAtTime(0.0001, vt);
+  vurusZarf.gain.exponentialRampToValueAtTime(0.6, vt + 0.02);
+  vurusZarf.gain.exponentialRampToValueAtTime(0.0001, vt + 0.6);
+  vurus.connect(vurusZarf).connect(ana);
+  vurus.start(vt);
+  vurus.stop(vt + 0.65);
+}

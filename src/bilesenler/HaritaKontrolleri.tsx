@@ -49,8 +49,8 @@ export default function HaritaKontrolleri({
   onZoomKilidi,
 }: Props) {
   /*
-   * Haritanın sağı sade kalsın: yalnızca + / − hep görünür. Pusula, 3B,
-   * katmanlar ve konum "diğer butonlar" düğmesiyle açılıyor.
+   * Haritanın sağı sade kalsın: hep görünen tek bir küçük düğme var.
+   * Yakınlaştırma, pusula, 3B, katmanlar ve konum ona basınca açılıyor.
    */
   const [digerAcik, setDigerAcik] = useState(false);
   const donuk = Math.abs(bearing) > 1 || pitch > 1;
@@ -61,38 +61,39 @@ export default function HaritaKontrolleri({
   }
 
   return (
-    <div className={`pointer-events-none absolute right-3 top-20 flex flex-col items-end gap-2 ${
+    <div className={`pointer-events-none absolute right-3 top-20 flex flex-col items-end gap-1.5 ${
         katmanPaneli ? "z-40" : "z-20"
       }`}>
       <Kume>
         <Dugme
-          etiket="Yakınlaştır"
-          onClick={() => onYakinlastir(1)}
-          ust
-        >
-          <Cizgi yatay />
-          <Cizgi />
-        </Dugme>
-        <div className="mx-1.5 h-px bg-cizgi" />
-        <Dugme etiket="Uzaklaştır" onClick={() => onYakinlastir(-1)} alt>
-          <Cizgi yatay />
-        </Dugme>
-      </Kume>
-
-      <Kume>
-        <Dugme
-          etiket={digerAcik ? "Diğer butonları gizle" : "Diğer butonları göster"}
+          etiket={digerAcik ? "Harita düğmelerini gizle" : "Harita düğmelerini göster"}
           onClick={digerDegistir}
           aktif={digerAcik}
-          ust
-          alt
         >
-          <motion.span
-            animate={{ rotate: digerAcik ? 90 : 0 }}
-            className="text-[15px] font-black leading-none"
+          <motion.svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            animate={{ rotate: digerAcik ? 45 : 0 }}
+            transition={{ type: "spring", stiffness: 420, damping: 26 }}
           >
-            ⋯
-          </motion.span>
+            {digerAcik ? (
+              <path
+                d="M12 5v14M5 12h14"
+                stroke="currentColor"
+                strokeWidth="2.4"
+                strokeLinecap="round"
+              />
+            ) : (
+              <>
+                <rect x="4" y="4" width="6.5" height="6.5" rx="2" fill="currentColor" />
+                <rect x="13.5" y="4" width="6.5" height="6.5" rx="2" fill="currentColor" />
+                <rect x="4" y="13.5" width="6.5" height="6.5" rx="2" fill="currentColor" />
+                <rect x="13.5" y="13.5" width="6.5" height="6.5" rx="2" fill="currentColor" />
+              </>
+            )}
+          </motion.svg>
           {/* Konum takibi açıkken ya da harita döndürülmüşken küçük işaret */}
           {!digerAcik && (konumTakibi || donuk) && (
             <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-kirmizi" />
@@ -108,8 +109,19 @@ export default function HaritaKontrolleri({
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: -8, scale: 0.95 }}
         transition={{ type: "spring", stiffness: 420, damping: 30 }}
-        className="flex flex-col items-end gap-2"
+        className="flex origin-top flex-col items-end gap-1.5"
       >
+      <Kume>
+        <Dugme etiket="Yakınlaştır" onClick={() => onYakinlastir(1)}>
+          <Cizgi yatay />
+          <Cizgi />
+        </Dugme>
+        <div className="mx-1.5 h-px bg-cizgi" />
+        <Dugme etiket="Uzaklaştır" onClick={() => onYakinlastir(-1)}>
+          <Cizgi yatay />
+        </Dugme>
+      </Kume>
+
       {/* Pusula — kuzeye döndürür */}
       <AnimatePresence>
         {digerAcik && (
@@ -142,8 +154,6 @@ export default function HaritaKontrolleri({
           etiket="Görünümü eğ"
           onClick={onEgim}
           aktif={pitch > 20}
-          ust
-          alt
         >
           <span className="text-[11px] font-extrabold leading-none">
             {pitch > 20 ? "3B" : "2B"}
@@ -156,8 +166,6 @@ export default function HaritaKontrolleri({
           etiket="Katmanlar"
           onClick={() => onKatmanPaneli(!katmanPaneli)}
           aktif={katmanPaneli}
-          ust
-          alt
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
             <path
@@ -182,8 +190,6 @@ export default function HaritaKontrolleri({
           etiket="Konumuma git"
           onClick={onKonum}
           aktif={konumTakibi}
-          ust
-          alt
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
             <circle
@@ -287,7 +293,7 @@ export default function HaritaKontrolleri({
 
 function Kume({ children }: { children: React.ReactNode }) {
   return (
-    <div className="pointer-events-auto overflow-hidden rounded-[18px] border border-cizgi bg-yuzey/85 shadow-yumusak backdrop-blur-xl">
+    <div className="pointer-events-auto overflow-hidden rounded-[16px] border border-cizgi bg-yuzey/85 shadow-yumusak backdrop-blur-xl">
       {children}
     </div>
   );
@@ -303,8 +309,6 @@ function Dugme({
   etiket: string;
   onClick: () => void;
   aktif?: boolean;
-  ust?: boolean;
-  alt?: boolean;
 }) {
   return (
     <button

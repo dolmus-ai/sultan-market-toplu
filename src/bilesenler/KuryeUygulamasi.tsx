@@ -29,7 +29,8 @@ import VardiyaOzeti from "./VardiyaOzeti";
 import NavigasyonPaneli, { type NavigasyonDurumu } from "./NavigasyonPaneli";
 import AdresBulucu, { BinaSimgesi } from "./AdresBulucu";
 import { AbonelikSatiri, ListeArama, TeslimatSatiri } from "./Listeler";
-import { SultanAmblem } from "./SultanLogo";
+import { SultanAmblem, SultanVeda, VEDA_SURESI } from "./SultanLogo";
+import UstCubuk from "./UstCubuk";
 import { ModGecisDugmesi } from "./ModGecisi";
 import YonetimMenusu from "./YonetimMenusu";
 
@@ -78,7 +79,7 @@ import {
 import { waAc } from "@/lib/whatsapp";
 import { bekleyenler, kuyruguIsle, kuyrukVeyaGonder } from "@/lib/cevrimdisi";
 import { teslimFotosuBagla, teslimFotosuYukle } from "@/lib/foto";
-import { kaydirmaSesi } from "@/lib/jingle";
+import { cikisSesi, kaydirmaSesi } from "@/lib/jingle";
 import type {
   Abonelik,
   KayitliSite,
@@ -373,6 +374,8 @@ export default function KuryeUygulamasi({
   const [navAdimIndeks, setNavAdimIndeks] = useState(0);
   const [navTakip, setNavTakip] = useState(true);
   const [sesAcik, setSesAcik] = useState(() => tercihOku().ses ?? true);
+  /** Çıkışa basıldı: veda animasyonu oynuyor. */
+  const [cikiliyor, setCikiliyor] = useState(false);
   /** İki parmakla sayfa yakınlaştırma kilidi — kurye kendisi açıp kapatıyor. */
   const [zoomKilitli, setZoomKilitli] = useState(
     () => tercihOku().zoomKilitli ?? false,
@@ -2172,7 +2175,15 @@ export default function KuryeUygulamasi({
   }
 
   async function cikis() {
-    await db.auth.signOut();
+    if (cikiliyor) return;
+    setCikiliyor(true);
+    // Ses dokunuşun içinden başlamalı; tarayıcı sonrasını engelliyor.
+    if (sesAcik) void cikisSesi();
+    // Oturum kapanırken veda animasyonu sonuna kadar oynasın.
+    await Promise.all([
+      db.auth.signOut().catch(() => undefined),
+      new Promise((r) => window.setTimeout(r, VEDA_SURESI - 100)),
+    ]);
     yonlendir.replace("/giris");
     yonlendir.refresh();
   }
@@ -2376,13 +2387,9 @@ export default function KuryeUygulamasi({
       />
 
       {/* Üst çubuk */}
-      <motion.header
-        initial={{ y: -24, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ type: "spring", stiffness: 320, damping: 30 }}
-        className="pointer-events-none absolute inset-x-0 top-0 z-20 p-3 pt-[calc(env(safe-area-inset-top)+12px)]"
-      >
-        <div className="pointer-events-auto flex items-center gap-2.5 rounded-[22px] border border-cizgi bg-yuzey/85 p-2 pr-3 shadow-yumusak backdrop-blur-2xl">
+      {/* Yukarı kaydırınca saklanır, sola kaydırınca çıkış düğmesi görünür. */}
+      <UstCubuk onCikis={() => void cikis()}>
+        <div className="flex items-center gap-2.5 rounded-[22px] border border-cizgi bg-yuzey/85 p-2 pr-3 shadow-yumusak backdrop-blur-2xl">
           <SultanAmblem boyut={32} />
           <div className="min-w-0 flex-1">
             <p className="truncate text-[12px] font-extrabold leading-tight">
@@ -2454,23 +2461,10 @@ export default function KuryeUygulamasi({
           >
             {kurye?.vardiyada ? "Vardiyada" : "Mola"}
           </button>
-          <button
-            onClick={cikis}
-            aria-label="Çıkış"
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-yuzey2 text-gri transition-colors hover:bg-cizgi"
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
-              <path
-                d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3M16 15l4-3-4-3M20 12H10"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </button>
         </div>
-      </motion.header>
+      </UstCubuk>
+
+      <AnimatePresence>{cikiliyor && <SultanVeda key="veda" />}</AnimatePresence>
 
       <HaritaKontrolleri
         bearing={aci.bearing}

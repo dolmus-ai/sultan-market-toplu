@@ -255,6 +255,9 @@ function bulucuOfseti(kart: boolean): [number, number] {
  */
 const BOS_SEPETLER: Sepet[] = [];
 
+/** Kademeli teslimat listesinde ilk anda ve her adımda çizilen satır. */
+const ILK_SATIR = 40;
+
 export default function KuryeUygulamasi({
   kurye,
   baslangicTeslimatlar,
@@ -589,6 +592,26 @@ export default function KuryeUygulamasi({
         (rotaSirasi.get(a.id) ?? 999) - (rotaSirasi.get(b.id) ?? 999),
     );
   }, [gunTeslimatlari, durumSuzgec, aramaAnahtari, rotaSirasi, gecmisGun]);
+
+  /*
+   * Kademeli çizim: liste yüzlerce açık siparişe çıkabiliyor (400'e kadar
+   * yükleniyor) ve hepsini birden çizmek iPhone'da tam ekrana geçişi
+   * kastırıyordu. İlk 40 satır çiziliyor, liste sonuna yaklaştıkça 40'ar
+   * ekleniyor. Arama, süzgeç, seçim ve dışa aktarma yine bütün listeyle
+   * çalışıyor; süzgeç değişince baştan 40.
+   */
+  const listeAnahtari = `${durumSuzgec}|${aramaAnahtari}|${gecmisGun ?? ""}`;
+  const [gorunenSatir, setGorunenSatir] = useState({ anahtar: "", sayi: ILK_SATIR });
+  const satirSiniri =
+    gorunenSatir.anahtar === listeAnahtari ? gorunenSatir.sayi : ILK_SATIR;
+  const dahaFazlaSatir = useCallback(
+    () =>
+      setGorunenSatir((o) => ({
+        anahtar: listeAnahtari,
+        sayi: (o.anahtar === listeAnahtari ? o.sayi : ILK_SATIR) + ILK_SATIR,
+      })),
+    [listeAnahtari],
+  );
 
   /* Temayı belgeye yansıt ve tercihleri sakla. */
   useEffect(() => {
@@ -3646,7 +3669,7 @@ export default function KuryeUygulamasi({
                   {/* Satırlar yalnızca kendi verisi değişince çiziliyor; grup,
                       biri değişince diğerlerinin kayma animasyonu sürsün diye. */}
                   <LayoutGroup>
-                  {siraliTeslimatlar.map((s) => {
+                  {siraliTeslimatlar.slice(0, satirSiniri).map((s) => {
                     const rotaIndeks = rota?.sira.indexOf(s.id) ?? -1;
                     return (
                     <TeslimatSatiri
@@ -3693,6 +3716,12 @@ export default function KuryeUygulamasi({
                   })}
                   </LayoutGroup>
                   </div>
+                  )}
+                  {siraliTeslimatlar.length > satirSiniri && (
+                    <DahaFazlaSatir
+                      kalan={siraliTeslimatlar.length - satirSiniri}
+                      onGerek={dahaFazlaSatir}
+                    />
                   )}
                   {siraliTeslimatlar.length === 0 && !gecmisYukleniyor && (
                     <Bos
@@ -3775,5 +3804,41 @@ function Bos({ mesaj }: { mesaj: string }) {
       <span className="text-3xl opacity-40">🗺️</span>
       <p className="text-sm font-semibold text-gri">{mesaj}</p>
     </div>
+  );
+}
+
+/**
+ * Kademeli listenin sonu: ekrana yaklaşınca (kaydırırken, 300 px önceden)
+ * sonraki satırları ister. Gözlemci yoksa ya da kurye beklemek istemezse
+ * dokunarak da açılır.
+ */
+function DahaFazlaSatir({
+  kalan,
+  onGerek,
+}: {
+  kalan: number;
+  onGerek: () => void;
+}) {
+  const ref = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const gozlemci = new IntersectionObserver(
+      (girdiler) => {
+        if (girdiler.some((g) => g.isIntersecting)) onGerek();
+      },
+      { rootMargin: "300px 0px" },
+    );
+    gozlemci.observe(el);
+    return () => gozlemci.disconnect();
+  }, [onGerek]);
+  return (
+    <button
+      ref={ref}
+      onClick={onGerek}
+      className="mt-1.5 h-9 w-full rounded-2xl bg-yuzey2 text-[12px] font-bold text-gri"
+    >
+      {kalan} teslimat daha
+    </button>
   );
 }

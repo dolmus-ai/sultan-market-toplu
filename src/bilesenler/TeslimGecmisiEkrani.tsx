@@ -6,11 +6,79 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { adresYaz, odemeAdi, para } from "@/lib/bicim";
 import { teslimGecmisiListesi, type GecmisKayit } from "@/lib/veri";
+import { gecmisiIndir, type AktarBicimi } from "@/lib/gecmisAktar";
 import type { OdemeYontemiTanimi } from "@/lib/tipler";
 import { MusteriAvatar } from "./Listeler";
 import { teslimGunu } from "./TeslimGecmisi";
 
 const SAYFA = 40;
+
+type TarihKipi = "tum" | "bugun" | "hafta" | "ay" | "gecenAy" | "aralik";
+
+const TARIH_KIPLERI: { kip: TarihKipi; ad: string }[] = [
+  { kip: "tum", ad: "Tümü" },
+  { kip: "bugun", ad: "Bugün" },
+  { kip: "hafta", ad: "Son 7 gün" },
+  { kip: "ay", ad: "Bu ay" },
+  { kip: "gecenAy", ad: "Geçen ay" },
+  { kip: "aralik", ad: "Tarih seç" },
+];
+
+/** "2026-11-16" (yerel gün). */
+function gunMetni(t: Date) {
+  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+}
+
+/** Yerel günün başlangıcı (gün kaydırmalı). */
+function gunBasi(t: Date, kaydir = 0) {
+  return new Date(t.getFullYear(), t.getMonth(), t.getDate() + kaydir);
+}
+
+function okunur(t: Date) {
+  return t.toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+
+/**
+ * Seçilen kipten teslim zamanı aralığı: başlangıç dahil, bitiş hariç.
+ * Açıklama dosyalara da yazılıyor: indirilen dosya hangi aralığın çıktısı.
+ */
+function aralikHesapla(
+  kip: TarihKipi,
+  ozelBas: string,
+  ozelBit: string,
+): { baslangic: Date | null; bitis: Date | null; aciklama: string } {
+  const bugun = new Date();
+  const yarin = gunBasi(bugun, 1);
+  switch (kip) {
+    case "bugun":
+      return { baslangic: gunBasi(bugun), bitis: yarin, aciklama: `Bugün (${okunur(bugun)})` };
+    case "hafta": {
+      const b = gunBasi(bugun, -6);
+      return { baslangic: b, bitis: yarin, aciklama: `Son 7 gün (${okunur(b)} – ${okunur(bugun)})` };
+    }
+    case "ay": {
+      const b = new Date(bugun.getFullYear(), bugun.getMonth(), 1);
+      return { baslangic: b, bitis: yarin, aciklama: `Bu ay (${okunur(b)} – ${okunur(bugun)})` };
+    }
+    case "gecenAy": {
+      const b = new Date(bugun.getFullYear(), bugun.getMonth() - 1, 1);
+      const s = new Date(bugun.getFullYear(), bugun.getMonth(), 1);
+      return {
+        baslangic: b,
+        bitis: s,
+        aciklama: `Geçen ay (${okunur(b)} – ${okunur(gunBasi(s, -1))})`,
+      };
+    }
+    case "aralik": {
+      const b = ozelBas ? new Date(`${ozelBas}T00:00:00`) : null;
+      const s = ozelBit ? gunBasi(new Date(`${ozelBit}T00:00:00`), 1) : null;
+      const parca = [b ? okunur(b) : "başlangıç yok", s ? okunur(gunBasi(s, -1)) : "bugüne kadar"];
+      return { baslangic: b, bitis: s, aciklama: `Tarih aralığı (${parca.join(" – ")})` };
+    }
+    default:
+      return { baslangic: null, bitis: null, aciklama: "Tüm tarihler" };
+  }
+}
 
 function saatYaz(iso: string) {
   return new Date(iso).toLocaleTimeString("tr-TR", {
@@ -59,7 +127,47 @@ export default function TeslimGecmisiEkrani({
   const [acikId, setAcikId] = useState<string | null>(null);
   const abonelik = tur === "abonelik";
 
-  // Arama değişince ilk sayfadan, yazarken 250 ms bekleyerek.
+  /* Tarih süzgeci */
+  const [kip, setKip] = useState<TarihKipi>("tum");
+  const [ozelBas, setOzelBas] = useState("");
+  const [ozelBit, setOzelBit] = useState(() => gunMetni(new Date()));
+  const aralik = useMemo(() => aralikHesapla(kip, ozelBas, ozelBit), [kip, ozelBas, ozelBit]);
+  const baslangic = aralik.baslangic?.toISOString() ?? null;
+  const bitis = aralik.bitis?.toISOString() ?? null;
+
+  /* İndirme */
+  const [indirMenusu, setIndirMenusu] = useState(false);
+  const [indiriliyor, setIndiriliyor] = useState<AktarBicimi | null>(null);
+  const [indirMesaji, setIndirMesaji] = useState<string | null>(null);
+
+  async function indir(bicim: AktarBicimi) {
+    setIndiriliyor(bicim);
+    setIndirMesaji(null);
+    try {
+      const adet = await gecmisiIndir(
+        db,
+        {
+          tur,
+          arama,
+          baslangic,
+          bitis,
+          aciklama: [aralik.aciklama, arama.trim() ? `Arama: ${arama.trim()}` : null]
+            .filter(Boolean)
+            .join(" · "),
+        },
+        bicim,
+        yontemler,
+      );
+      if (adet === 0) setIndirMesaji("Süzgece uyan teslim yok; dosya inmedi.");
+      else setIndirMenusu(false);
+    } catch {
+      setIndirMesaji("Dosya hazırlanamadı. Bağlantını kontrol edip yeniden dene.");
+    } finally {
+      setIndiriliyor(null);
+    }
+  }
+
+  // Arama ya da tarih değişince ilk sayfadan, yazarken 250 ms bekleyerek.
   useEffect(() => {
     let iptal = false;
     const zaman = setTimeout(() => {
@@ -69,6 +177,8 @@ export default function TeslimGecmisiEkrani({
         sayfa: 0,
         boyut: SAYFA,
         sadeceAbonelik: abonelik,
+        baslangic,
+        bitis,
       })
         .then(({ kayitlar: k, toplam: t }) => {
           if (iptal) return;
@@ -85,7 +195,7 @@ export default function TeslimGecmisiEkrani({
       iptal = true;
       clearTimeout(zaman);
     };
-  }, [db, arama, abonelik]);
+  }, [db, arama, abonelik, baslangic, bitis]);
 
   async function dahaFazla() {
     const sonraki = sayfa + 1;
@@ -96,6 +206,8 @@ export default function TeslimGecmisiEkrani({
         sayfa: sonraki,
         boyut: SAYFA,
         sadeceAbonelik: abonelik,
+        baslangic,
+        bitis,
       });
       setKayitlar((o) => [...o, ...k]);
       setToplam(t);
@@ -141,6 +253,24 @@ export default function TeslimGecmisiEkrani({
           {durum !== "yukleniyor" && (
             <span className="text-[11px] font-semibold text-gri">{toplam} teslim</span>
           )}
+          <button
+            onClick={() => {
+              setIndirMesaji(null);
+              setIndirMenusu(true);
+            }}
+            className="flex h-8 shrink-0 items-center gap-1 whitespace-nowrap rounded-hap bg-kontrast px-3 text-[12px] font-black text-white active:scale-95"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+              <path
+                d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 20h14"
+                stroke="currentColor"
+                strokeWidth="2.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            İndir
+          </button>
         </div>
         <div className="relative">
           <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[12px] text-gri">
@@ -162,6 +292,45 @@ export default function TeslimGecmisiEkrani({
             </button>
           )}
         </div>
+
+        {/* Tarih süzgeci */}
+        <div className="ince-kaydirma -mx-4 flex gap-1.5 overflow-x-auto px-4">
+          {TARIH_KIPLERI.map((t) => (
+            <button
+              key={t.kip}
+              onClick={() => setKip(t.kip)}
+              className={`h-7 shrink-0 whitespace-nowrap rounded-hap px-2.5 text-[11px] font-bold ${
+                kip === t.kip ? "bg-kontrast text-white" : "bg-yuzey2 text-gri"
+              }`}
+            >
+              {t.ad}
+            </button>
+          ))}
+        </div>
+        {kip === "aralik" && (
+          <div className="flex items-center gap-2">
+            <label className="flex min-w-0 flex-1 flex-col gap-0.5 text-[10px] font-bold uppercase tracking-wider text-gri">
+              Başlangıç
+              <input
+                type="date"
+                value={ozelBas}
+                max={ozelBit || undefined}
+                onChange={(e) => setOzelBas(e.target.value)}
+                className="h-9 w-full rounded-xl border border-cizgi bg-yuzey2 px-2 text-[12.5px] font-semibold normal-case tracking-normal text-metin outline-none focus:border-kirmizi"
+              />
+            </label>
+            <label className="flex min-w-0 flex-1 flex-col gap-0.5 text-[10px] font-bold uppercase tracking-wider text-gri">
+              Bitiş
+              <input
+                type="date"
+                value={ozelBit}
+                min={ozelBas || undefined}
+                onChange={(e) => setOzelBit(e.target.value)}
+                className="h-9 w-full rounded-xl border border-cizgi bg-yuzey2 px-2 text-[12.5px] font-semibold normal-case tracking-normal text-metin outline-none focus:border-kirmizi"
+              />
+            </label>
+          </div>
+        )}
       </div>
 
       {/* Liste */}
@@ -173,8 +342,8 @@ export default function TeslimGecmisiEkrani({
         )}
         {durum === "hazir" && kayitlar.length === 0 && (
           <p className="py-10 text-center text-[12.5px] text-gri">
-            {arama
-              ? "Aramaya uyan teslim yok."
+            {arama || kip !== "tum"
+              ? "Süzgece uyan teslim yok."
               : abonelik
                 ? "Henüz abonelikten teslim edilmiş sipariş yok."
                 : "Henüz teslim edilmiş sipariş yok."}
@@ -218,9 +387,76 @@ export default function TeslimGecmisiEkrani({
           <p className="py-10 text-center text-[12.5px] text-gri">Yükleniyor…</p>
         )}
       </div>
+
+      {/* İndirme seçenekleri: ekrandaki süzgecin aynısıyla */}
+      <AnimatePresence>
+        {indirMenusu && (
+          <motion.div
+            key="indir"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => !indiriliyor && setIndirMenusu(false)}
+            className="absolute inset-0 z-20 flex items-end bg-black/40"
+          >
+            <motion.div
+              initial={{ y: 40 }}
+              animate={{ y: 0 }}
+              exit={{ y: 40 }}
+              transition={{ type: "spring", stiffness: 420, damping: 36 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full space-y-2.5 rounded-t-[24px] bg-yuzey px-4 pb-[calc(env(safe-area-inset-bottom)+16px)] pt-4"
+            >
+              <div>
+                <p className="text-[15px] font-black">
+                  {abonelik ? "Abonelik geçmişini indir" : "Teslimat geçmişini indir"}
+                </p>
+                <p className="mt-0.5 text-[11.5px] font-semibold text-gri">
+                  {aralik.aciklama}
+                  {arama.trim() ? ` · Arama: ${arama.trim()}` : ""} · {toplam} teslim
+                </p>
+              </div>
+              {INDIR_BICIMLERI.map((b) => (
+                <button
+                  key={b.bicim}
+                  onClick={() => void indir(b.bicim)}
+                  disabled={indiriliyor != null || toplam === 0}
+                  className="flex w-full items-center gap-3 rounded-2xl border border-cizgi bg-yuzey px-3 py-2.5 text-left active:bg-yuzey2 disabled:opacity-50"
+                >
+                  <span className="text-[20px]">{b.simge}</span>
+                  <span className="min-w-0 flex-1 leading-tight">
+                    <span className="block text-[13.5px] font-black">{b.ad}</span>
+                    <span className="block text-[11px] text-gri">{b.alt}</span>
+                  </span>
+                  <span className="text-[11.5px] font-bold text-gri">
+                    {indiriliyor === b.bicim ? "Hazırlanıyor…" : "İndir"}
+                  </span>
+                </button>
+              ))}
+              {indirMesaji && (
+                <p className="text-[11.5px] font-semibold text-turuncu">{indirMesaji}</p>
+              )}
+              {toplam === 0 && !indirMesaji && (
+                <p className="text-[11.5px] font-semibold text-gri">Süzgece uyan teslim yok.</p>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.section>
   );
 }
+
+const INDIR_BICIMLERI: {
+  bicim: AktarBicimi;
+  ad: string;
+  alt: string;
+  simge: string;
+}[] = [
+  { bicim: "xlsx", ad: "Excel", alt: ".xlsx · tablo, toplamlı", simge: "📊" },
+  { bicim: "pdf", ad: "PDF", alt: ".pdf · yazdırmaya hazır", simge: "📄" },
+  { bicim: "txt", ad: "Metin", alt: ".txt · düz yazı", simge: "📝" },
+];
 
 function GecmisSatiri({
   kayit: k,

@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 
 import {
   abonelikleriYaz,
+  gecmisiYaz,
+  type DisGecmis,
   dosyaAdi,
   sepetleriYaz,
   teslimatlariYaz,
@@ -24,10 +26,21 @@ export const runtime = "nodejs";
 /** Bir seferde dışa aktarılabilecek kayıt sayısı. */
 const AZAMI_KAYIT = 20_000;
 
-const TURLER: DisaAktarTuru[] = ["teslimatlar", "abonelikler", "sepetler"];
+const TURLER: DisaAktarTuru[] = [
+  "teslimatlar",
+  "abonelikler",
+  "sepetler",
+  "teslim-gecmisi",
+  "abonelik-gecmisi",
+];
 
 export async function POST(istek: Request) {
-  let govde: { tur?: string; kayitlar?: unknown[] };
+  let govde: {
+    tur?: string;
+    kayitlar?: unknown[];
+    baslik?: string;
+    suzgec?: string;
+  };
   try {
     govde = (await istek.json()) as typeof govde;
   } catch {
@@ -58,7 +71,13 @@ export async function POST(istek: Request) {
 
   let tampon: Buffer;
   try {
-    if (tur === "teslimatlar") {
+    if (tur === "teslim-gecmisi" || tur === "abonelik-gecmisi") {
+      tampon = await gecmisiYaz(
+        kayitlar as DisGecmis[],
+        String(govde.baslik ?? "Geçmiş").slice(0, 120),
+        String(govde.suzgec ?? "").slice(0, 300),
+      );
+    } else if (tur === "teslimatlar") {
       tampon = await teslimatlariYaz(kayitlar as DisTeslimat[]);
     } else if (tur === "abonelikler") {
       tampon = await abonelikleriYaz(kayitlar as DisAbonelik[]);

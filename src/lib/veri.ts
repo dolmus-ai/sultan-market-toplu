@@ -409,6 +409,9 @@ export async function teslimGecmisiListesi(
     boyut?: number;
     /** Yalnızca abonelikten gelen teslimler (abonelik geçmişi). */
     sadeceAbonelik?: boolean;
+    /** Teslim zamanı aralığı (ISO); bitiş dahil değil. */
+    baslangic?: string | null;
+    bitis?: string | null;
   } = {},
 ): Promise<{ kayitlar: GecmisKayit[]; toplam: number }> {
   const boyut = secenek.boyut ?? 40;
@@ -424,6 +427,8 @@ export async function teslimGecmisiListesi(
   const temiz = secenek.arama?.trim().replace(/[,%()]/g, " ");
   if (temiz) sorgu = sorgu.or(`musteri_ad.ilike.%${temiz}%,telefon.ilike.%${temiz}%`);
   if (secenek.sadeceAbonelik) sorgu = sorgu.eq("kaynak", "abonelik");
+  if (secenek.baslangic) sorgu = sorgu.gte("teslim_zamani", secenek.baslangic);
+  if (secenek.bitis) sorgu = sorgu.lt("teslim_zamani", secenek.bitis);
   const { data, error, count } = await sorgu;
   if (error) throw error;
   return { kayitlar: (data ?? []) as GecmisKayit[], toplam: count ?? 0 };

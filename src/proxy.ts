@@ -120,6 +120,6 @@ export const config = {
     // /api/surum yalnızca derleme kimliğini verir; giriş ekranı da sorsun.
     // /sb/ Supabase'e geçit (next.config.ts): yetkiyi Supabase kendisi
     // denetliyor, buradan geçerse oturumsuz giriş isteği /giris'e dönerdi.
-    "/((?!_next/static|_next/image|maplibre/|veri/|sb/|api/surum|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|webp|ico|mjs|js|css|map|webmanifest)$).*)",
+    "/((?!_next/static|_next/image|maplibre/|veri/|sb/|api/surum|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|webp|ico|mjs|js|css|map|webmanifest|ttf)$).*)",
   ],
 };

@@ -11,7 +11,12 @@
 
 import { GUN_KISA } from "./bicim";
 
-export type DisaAktarTuru = "teslimatlar" | "abonelikler" | "sepetler";
+export type DisaAktarTuru =
+  | "teslimatlar"
+  | "abonelikler"
+  | "sepetler"
+  | "teslim-gecmisi"
+  | "abonelik-gecmisi";
 
 /** Dışa aktarılacak kayıtların ihtiyaç duyulan alanları. */
 type DisMusteri = { ad?: string | null; telefon?: string | null } | null;
@@ -324,6 +329,65 @@ export async function sepetleriYaz(kayitlar: DisSepet[]): Promise<Buffer> {
       k.adres?.lng ?? "",
     ]);
   }
+  return yaz(kitap);
+}
+
+/** Teslim geçmişinden bir satır (istemci düz metin olarak hazırlıyor). */
+export type DisGecmis = {
+  teslim: string;
+  musteri: string;
+  telefon: string;
+  adres: string;
+  tarif: string;
+  kaynak: string;
+  tutar: number | null;
+  odenen: number | null;
+  odeme: string;
+  odeme_durumu: string;
+  odeyen: string;
+};
+
+/**
+ * Teslim / abonelik geçmişi. İlk satırlarda başlık ve uygulanan süzgeç,
+ * altta toplam: dosya hangi aralığın, hangi aramanın çıktısı belli olsun.
+ */
+export async function gecmisiYaz(
+  kayitlar: DisGecmis[],
+  baslik: string,
+  suzgec: string,
+): Promise<Buffer> {
+  const kitap = await kitapAc();
+  const sayfa = kitap.addWorksheet("GEÇMİŞ");
+  sayfa.addRow([baslik]).font = { bold: true, size: 14 };
+  sayfa.addRow([suzgec]).font = { italic: true, color: { argb: "FF6B6B73" } };
+  sayfa.addRow([]);
+  const baslikSatiri = sayfa.addRow([
+    "TESLİM", "MÜŞTERİ", "TEL", "ADRES", "TARİF", "KAYNAK",
+    "TUTAR", "ÖDENEN", "ÖDEME", "DURUM", "ÖDEYEN",
+  ]);
+  baslikSatiri.font = { bold: true, color: { argb: "FFFFFFFF" } };
+  baslikSatiri.eachCell((h) => {
+    h.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE30A17" } };
+  });
+  [18, 24, 16, 46, 22, 11, 11, 11, 13, 14, 18].forEach((g, i) => {
+    sayfa.getColumn(i + 1).width = g;
+  });
+  sayfa.views = [{ state: "frozen", ySplit: 4 }];
+
+  let toplam = 0;
+  for (const k of kayitlar) {
+    toplam += k.odenen ?? k.tutar ?? 0;
+    const satir = sayfa.addRow([
+      k.teslim, k.musteri, k.telefon, k.adres, k.tarif, k.kaynak,
+      k.tutar ?? "", k.odenen ?? "", k.odeme, k.odeme_durumu, k.odeyen,
+    ]);
+    satir.getCell(7).numFmt = '#,##0.00 "₺"';
+    satir.getCell(8).numFmt = '#,##0.00 "₺"';
+  }
+  sayfa.addRow([]);
+  const alt = sayfa.addRow([`${kayitlar.length} teslim`, "", "", "", "", "TOPLAM", "", toplam]);
+  alt.font = { bold: true };
+  alt.getCell(8).numFmt = '#,##0.00 "₺"';
   return yaz(kitap);
 }
 

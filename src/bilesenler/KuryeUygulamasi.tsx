@@ -625,6 +625,55 @@ export default function KuryeUygulamasi({
     [],
   );
 
+  /* ------------------------- Geri hareketi ------------------------- */
+  /*
+   * Safari'de ekranın sol kenarından sağa kaydırmak "geri" demek: üst çubuğu
+   * sağa kaydırıp çıkış düğmesini açmak isteyen kurye uygulamadan atılıyordu.
+   * İki önlem:
+   * 1. Sol kenarın en dış şeridinde başlayan dokunuş tarayıcının geri
+   *    hareketine verilmiyor (sürükleme ve düğmeler pointer olaylarıyla
+   *    çalıştığı için etkilenmiyor).
+   * 2. Yine de geri gidilirse bir tuzak kaydı yakalıyor: kurye ekranda
+   *    kalıyor, uyarı çıkıyor. 2 sn içinde ikinci kez geri giderse gerçekten
+   *    çıkılıyor; telefonun geri tuşu da böylece kilitlenmiyor.
+   */
+  useEffect(() => {
+    const KENAR = 18;
+    const dokunus = (e: TouchEvent) => {
+      const t = e.touches[0];
+      if (t && t.clientX < KENAR) e.preventDefault();
+    };
+    document.addEventListener("touchstart", dokunus, { passive: false });
+
+    /*
+     * Tuzak kaydı Next'in kendi geçmiş bilgisini de taşımalı: taşımazsa
+     * geri dönüldüğünde Next sayfayı baştan yüklüyor. Adres verilmiyor,
+     * aynı sayfa yerinde kalıyor. Zaten tuzaktaysak ikinci kez kurulmaz.
+     */
+    const tuzakKur = () => {
+      const durum = (window.history.state ?? {}) as Record<string, unknown>;
+      if (durum.kuryeTuzak) return;
+      window.history.pushState({ ...durum, kuryeTuzak: true }, "");
+    };
+    tuzakKur();
+    let sonGeri = 0;
+    const geri = () => {
+      const simdi = Date.now();
+      if (simdi - sonGeri < 2000) {
+        window.history.back();
+        return;
+      }
+      sonGeri = simdi;
+      tuzakKur();
+      uyar("Uygulamadan çıkmak için bir kez daha geri git");
+    };
+    window.addEventListener("popstate", geri);
+    return () => {
+      document.removeEventListener("touchstart", dokunus);
+      window.removeEventListener("popstate", geri);
+    };
+  }, [uyar]);
+
   /* ------------------------- Çevrimdışı kuyruk ------------------------- */
   useEffect(() => {
     void bekleyenler().then((b) => setBekleyenSayisi(b.length));

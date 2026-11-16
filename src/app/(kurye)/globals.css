@@ -266,3 +266,13 @@ html.zoom-kilitli body {
     backdrop-filter: none !important;
   }
 }
+
+/* ---------- Uzun listeler ----------
+   Ekranda görünmeyen liste satırları çizilmiyor; tarayıcı yerlerini
+   tahmini yükseklikle tutuyor, kaydırdıkça görünür olanları çiziyor.
+   Görünüm aynı; tam ekran liste açılırken yüzlerce satırın birden
+   yerleşim ve boyama hesabı yapılmıyor. */
+.satir-cizimi {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 54px;
+}

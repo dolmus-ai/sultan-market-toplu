@@ -10,7 +10,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import { useRouter } from "next/navigation";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 
 import Harita, {
   ILK_EGIM,
@@ -502,6 +502,11 @@ export default function KuryeUygulamasi({
     const bugun = new Date();
     return abonelikler.filter((a) => abonelikBugunMu(a, bugun));
   }, [abonelikler, saatHazir]);
+  /** Satır başına listeyi taramak yerine tek seferlik küme. */
+  const bugunAbonelikIdleri = useMemo(
+    () => new Set(bugunAbonelikler.map((b) => b.id)),
+    [bugunAbonelikler],
+  );
 
   const aktifTeslimatlar = useMemo(
     () => teslimatlar.filter((s) => AKTIF_DURUMLAR.includes(s.durum)),
@@ -3522,6 +3527,9 @@ export default function KuryeUygulamasi({
                   {/* Tek kart içinde ince çizgilerle ayrılmış satırlar */}
                   {siraliTeslimatlar.length > 0 && (
                   <div className="overflow-hidden rounded-2xl border border-cizgi divide-y divide-cizgi bg-yuzey">
+                  {/* Satırlar yalnızca kendi verisi değişince çiziliyor; grup,
+                      biri değişince diğerlerinin kayma animasyonu sürsün diye. */}
+                  <LayoutGroup>
                   {siraliTeslimatlar.map((s) => {
                     const rotaIndeks = rota?.sira.indexOf(s.id) ?? -1;
                     return (
@@ -3567,6 +3575,7 @@ export default function KuryeUygulamasi({
                     />
                     );
                   })}
+                  </LayoutGroup>
                   </div>
                   )}
                   {siraliTeslimatlar.length === 0 && !gecmisYukleniyor && (
@@ -3598,7 +3607,7 @@ export default function KuryeUygulamasi({
                     <AbonelikSatiri
                       key={a.id}
                       abonelik={a}
-                      bugun={bugunAbonelikler.some((b) => b.id === a.id)}
+                      bugun={bugunAbonelikIdleri.has(a.id)}
                       secimModu={secimModu}
                       isaretli={secilenler.includes(a.id)}
                       onTikla={() => {

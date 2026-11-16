@@ -1,5 +1,6 @@
 "use client";
 
+import { memo, useLayoutEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 
 import {
@@ -36,19 +37,7 @@ function SecimKutusu({ isaretli }: { isaretli: boolean }) {
 /* Teslimat satırı                                                     */
 /* ------------------------------------------------------------------ */
 
-export function TeslimatSatiri({
-  siparis,
-  sira,
-  secili,
-  secimModu,
-  isaretli,
-  gecikme,
-  binaSayisi,
-  onTikla,
-  onIslemler,
-  hizli,
-  sirala,
-}: {
+type TeslimatSatiriProps = {
   siparis: Siparis;
   sira?: number;
   secili: boolean;
@@ -65,6 +54,74 @@ export function TeslimatSatiri({
   hizli?: { onTeslim: () => void; onAtla: () => void };
   /** Sırayı düzenle: ▲ ▼ düğmeleri (uçtakinde biri yok). */
   sirala?: { onYukari?: () => void; onAsagi?: () => void };
+};
+
+/**
+ * Listeler yüzlerce satır olabiliyor ve ana ekran her güncellemede (konum,
+ * zamanlayıcı, tam ekrana geçiş) hepsini yeniden çiziyordu; tam ekran liste
+ * açılırken telefonda kasan buydu. Satır artık yalnızca kendi verisi
+ * değişince çiziliyor. Dışarıdan gelen işlevler her çizimde yeni kuruluyor;
+ * o yüzden bir ref'te tutulup sabit sarmalayıcılarla çağrılıyor: dokunuş
+ * hep en güncel işlevi çalıştırır, görünüm ve davranış aynı kalır.
+ */
+export function TeslimatSatiri(props: TeslimatSatiriProps) {
+  const son = useRef(props);
+  useLayoutEffect(() => {
+    son.current = props;
+  });
+  const [cagir] = useState(() => ({
+    tikla: () => son.current.onTikla(),
+    islemler: () => son.current.onIslemler?.(),
+    teslim: () => son.current.hizli?.onTeslim(),
+    atla: () => son.current.hizli?.onAtla(),
+    yukari: () => son.current.sirala?.onYukari?.(),
+    asagi: () => son.current.sirala?.onAsagi?.(),
+  }));
+  const { hizli, sirala } = props;
+  return (
+    <TeslimatSatiriIc
+      siparis={props.siparis}
+      sira={props.sira}
+      secili={props.secili}
+      secimModu={props.secimModu}
+      isaretli={props.isaretli}
+      gecikme={props.gecikme}
+      binaSayisi={props.binaSayisi}
+      onTikla={cagir.tikla}
+      onIslemler={props.onIslemler ? cagir.islemler : undefined}
+      hizliVar={hizli != null}
+      onTeslim={cagir.teslim}
+      onAtla={cagir.atla}
+      siralaVar={sirala != null}
+      onYukari={sirala?.onYukari ? cagir.yukari : undefined}
+      onAsagi={sirala?.onAsagi ? cagir.asagi : undefined}
+    />
+  );
+}
+
+const TeslimatSatiriIc = memo(function TeslimatSatiriIc({
+  siparis,
+  sira,
+  secili,
+  secimModu,
+  isaretli,
+  gecikme,
+  binaSayisi,
+  onTikla,
+  onIslemler,
+  hizliVar,
+  onTeslim,
+  onAtla,
+  siralaVar,
+  onYukari,
+  onAsagi,
+}: Omit<TeslimatSatiriProps, "hizli" | "sirala"> & {
+  hizliVar: boolean;
+  onTeslim: () => void;
+  onAtla: () => void;
+  siralaVar: boolean;
+  onYukari?: () => void;
+  onAsagi?: () => void;
 }) {
   const konumYok = siparis.adres?.lat == null;
   const acik = ["bekliyor", "hazirlaniyor", "yolda", "basarisiz"].includes(
@@ -75,7 +132,7 @@ export function TeslimatSatiri({
     <motion.button
       layout
       onClick={onTikla}
-      className={`flex w-full items-center gap-2.5 px-3 py-2 text-left transition-colors active:bg-yuzey2 ${
+      className={`satir-cizimi flex w-full items-center gap-2.5 px-3 py-2 text-left transition-colors active:bg-yuzey2 ${
         secili || isaretli ? "bg-kirmizi-sis" : "bg-yuzey"
       }`}
     >
@@ -135,21 +192,21 @@ export function TeslimatSatiri({
           </span>
         )}
       </span>
-      {sirala && !secimModu ? (
+      {siralaVar && !secimModu ? (
         <span className="flex shrink-0 flex-col gap-0.5">
-          <KucukDugme etiket="Yukarı taşı" onTikla={sirala.onYukari}>
+          <KucukDugme etiket="Yukarı taşı" onTikla={onYukari}>
             ▲
           </KucukDugme>
-          <KucukDugme etiket="Aşağı taşı" onTikla={sirala.onAsagi}>
+          <KucukDugme etiket="Aşağı taşı" onTikla={onAsagi}>
             ▼
           </KucukDugme>
         </span>
-      ) : hizli && acik && !secimModu ? (
+      ) : hizliVar && acik && !secimModu ? (
         <span className="flex shrink-0 gap-1">
-          <KucukDugme etiket="Atla" onTikla={hizli.onAtla} ton="atla">
+          <KucukDugme etiket="Atla" onTikla={onAtla} ton="atla">
             ⤼
           </KucukDugme>
-          <KucukDugme etiket="Teslim edildi" onTikla={hizli.onTeslim} ton="teslim">
+          <KucukDugme etiket="Teslim edildi" onTikla={onTeslim} ton="teslim">
             ✓
           </KucukDugme>
         </span>
@@ -158,7 +215,7 @@ export function TeslimatSatiri({
       )}
     </motion.button>
   );
-}
+});
 
 /** Satır içi küçük düğme — satırın kendi tıklamasını tetiklemez. */
 function KucukDugme({
@@ -206,21 +263,45 @@ function KucukDugme({
 /* Abonelik satırı                                                     */
 /* ------------------------------------------------------------------ */
 
-export function AbonelikSatiri({
-  abonelik,
-  bugun,
-  secimModu = false,
-  isaretli = false,
-  onTikla,
-  onIslemler,
-}: {
+type AbonelikSatiriProps = {
   abonelik: Abonelik;
   bugun: boolean;
   secimModu?: boolean;
   isaretli?: boolean;
   onTikla: () => void;
   onIslemler?: () => void;
-}) {
+};
+
+/** Teslimat satırıyla aynı sebeple: yalnızca kendi verisi değişince çizilir. */
+export function AbonelikSatiri(props: AbonelikSatiriProps) {
+  const son = useRef(props);
+  useLayoutEffect(() => {
+    son.current = props;
+  });
+  const [cagir] = useState(() => ({
+    tikla: () => son.current.onTikla(),
+    islemler: () => son.current.onIslemler?.(),
+  }));
+  return (
+    <AbonelikSatiriIc
+      abonelik={props.abonelik}
+      bugun={props.bugun}
+      secimModu={props.secimModu}
+      isaretli={props.isaretli}
+      onTikla={cagir.tikla}
+      onIslemler={props.onIslemler ? cagir.islemler : undefined}
+    />
+  );
+}
+
+const AbonelikSatiriIc = memo(function AbonelikSatiriIc({
+  abonelik,
+  bugun,
+  secimModu = false,
+  isaretli = false,
+  onTikla,
+  onIslemler,
+}: AbonelikSatiriProps) {
   const tutar = kayitTutari(abonelik);
   return (
     // `layout` yok: abonelik listesi binlerce satıra çıkabiliyor ve Motion'ın
@@ -228,7 +309,7 @@ export function AbonelikSatiri({
     // saniyelere çıkarıyordu. Bu liste zaten yeniden sıralanmıyor.
     <motion.button
       onClick={onTikla}
-      className={`flex w-full items-center gap-2.5 px-3 py-2 text-left transition-colors active:bg-yuzey2 ${
+      className={`satir-cizimi flex w-full items-center gap-2.5 px-3 py-2 text-left transition-colors active:bg-yuzey2 ${
         isaretli ? "bg-kirmizi-sis" : "bg-yuzey"
       }`}
     >
@@ -269,7 +350,7 @@ export function AbonelikSatiri({
       {onIslemler && !secimModu && <IslemDugmesi onTikla={onIslemler} />}
     </motion.button>
   );
-}
+});
 
 /* ------------------------------------------------------------------ */
 /* Sepet satırı                                                        */

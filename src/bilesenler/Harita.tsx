@@ -65,6 +65,10 @@ export type Katmanlar = {
   siteler: boolean;
 };
 
+/** Haritanın ilk açılıştaki eğimi ve yönü. */
+export const ILK_EGIM = 45;
+export const ILK_YON = -12;
+
 export type HaritaApi = {
   /**
    * `ofset` hedefi ekran ortasından piksel olarak kaydırır — yan panel ya da
@@ -80,6 +84,8 @@ export type HaritaApi = {
   geometriyiSigdir: (geometri: [number, number][], altBosluk?: number) => void;
   /** Sürüş kamerası: kuryenin arkasından, eğik ve yakın. */
   surusKamerasi: (nokta: Nokta, bearing: number) => void;
+  /** Haritayı ilk açılıştaki konumuna, yakınlığına ve açısına döndürür. */
+  ilkGorunum: () => void;
 };
 
 type Props = {
@@ -924,6 +930,7 @@ export default function Harita({
   const tasindiRef = useRef(onOnizlemeTasindi);
   const temaRef = useRef<Tema>(katmanlar.karanlik ? "karanlik" : "aydinlik");
   const onKullaniciHareketiRef = useRef(onKullaniciHareketi);
+  const onAciDegistiRef = useRef(onAciDegisti);
   /** Google oturumu açılamayınca gösterilen sebep. */
   const [googleHatasi, setGoogleHatasi] = useState<string | null>(null);
   const atifRef = useRef<GoogleAtifi | null>(null);
@@ -966,6 +973,7 @@ export default function Harita({
     tiklamaRef.current = onHaritaTikla;
     secenekRef.current = onSecenekSec;
     onKullaniciHareketiRef.current = onKullaniciHareketi;
+    onAciDegistiRef.current = onAciDegisti;
     abonelikRef.current = onAbonelikSecim;
     sepetRef.current = onSepetSecim;
     uzunRef.current = onUzunBasis;
@@ -990,8 +998,8 @@ export default function Harita({
         style: acilisStili(temaRef.current),
         center: [MERKEZ.lng, MERKEZ.lat],
         zoom: MERKEZ.zoom,
-        pitch: 45,
-        bearing: -12,
+        pitch: ILK_EGIM,
+        bearing: ILK_YON,
         // Google modunda atıf ve logo kendi denetimimizden geliyor.
         attributionControl: GOOGLE_MODU ? false : { compact: true },
         dragRotate: true,
@@ -1049,12 +1057,20 @@ export default function Harita({
       harita.on("zoomend", () => {
         hedefZoomRef.current = null;
       });
-      harita.on("rotate", () =>
-        onAciDegisti?.(harita.getBearing(), harita.getPitch()),
-      );
-      harita.on("pitch", () =>
-        onAciDegisti?.(harita.getBearing(), harita.getPitch()),
-      );
+      /*
+       * Döndürme/eğme olayları her karede birkaç kez geliyor; dışarıya kare
+       * başına en çok bir kez bildiriliyor.
+       */
+      let aciKaresi = 0;
+      const aciBildir = () => {
+        if (aciKaresi) return;
+        aciKaresi = requestAnimationFrame(() => {
+          aciKaresi = 0;
+          onAciDegistiRef.current?.(harita.getBearing(), harita.getPitch());
+        });
+      };
+      harita.on("rotate", aciBildir);
+      harita.on("pitch", aciBildir);
 
       // `load` ilk karolar inene kadar beklediği için katmanları stil
       // ayrıştırılır ayrıştırılmaz kuruyoruz.
@@ -1546,10 +1562,13 @@ export default function Harita({
     };
   }, [hazir, balonVar]);
 
+  // Yalnızca konum değişince taşı: `balon` nesnesi her çizimde yeniden kuruluyor.
+  const balonLng = balon?.lng;
+  const balonLat = balon?.lat;
   useEffect(() => {
-    if (!balon) return;
-    balonMarkerRef.current?.setLngLat([balon.lng, balon.lat]);
-  }, [balon]);
+    if (balonLng == null || balonLat == null) return;
+    balonMarkerRef.current?.setLngLat([balonLng, balonLat]);
+  }, [balonLng, balonLat, balonKap]);
 
   /* ---------------- Dışa açılan harita komutları ---------------- */
   useImperativeHandle(
@@ -1597,6 +1616,15 @@ export default function Harita({
       },
       pusulaSifirla: () =>
         haritaRef.current?.easeTo({ bearing: 0, pitch: 0, duration: 600 }),
+      ilkGorunum: () =>
+        haritaRef.current?.flyTo({
+          center: [MERKEZ.lng, MERKEZ.lat],
+          zoom: MERKEZ.zoom,
+          pitch: ILK_EGIM,
+          bearing: ILK_YON,
+          duration: 900,
+          essential: true,
+        }),
       egimDegistir: () => {
         const harita = haritaRef.current;
         if (!harita) return;

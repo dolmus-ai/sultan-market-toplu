@@ -260,7 +260,7 @@ export function SultanVeda() {
       transition={{ duration: 0.22 }}
       className="fixed inset-0 z-[100] flex flex-col items-center justify-center"
     >
-      <div className="absolute inset-0 bg-yuzey/70 backdrop-blur-2xl" />
+      <div className="bulanik-kalsin absolute inset-0 bg-yuzey/70 backdrop-blur-2xl" />
 
       {/* Hale */}
       <motion.div

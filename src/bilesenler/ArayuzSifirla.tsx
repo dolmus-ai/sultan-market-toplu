@@ -9,22 +9,51 @@ export const VIEWPORT_KILITLI =
 export const VIEWPORT_ACIK =
   "width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes, viewport-fit=cover";
 
+/** Sayfa ölçeği bu kadarı aşıyorsa "büyütülmüş" sayılır. */
+const BUYUK_OLCEK = 1.04;
+/** Sıfırlama sonrası sayfa yeniden açılırken adrese eklenen işaret. */
+const SIFIRLA_ISARETI = "sifirla";
+
+function sayfaBuyuk() {
+  return (window.visualViewport?.scale ?? 1) > BUYUK_OLCEK;
+}
+
 /**
- * Sayfanın iki parmakla yakınlaştırılmış hâlini ilk açılıştaki ölçeğe döndürür.
+ * Arayüzü ilk açılıştaki hâline döndürür: harita ilk konumuna, yakınlığına
+ * ve açısına uçar; sayfa iki parmakla büyütülmüşse ölçek 1'e iner.
  *
- * Tarayıcılar sayfa ölçeğini koddan değiştirmeye izin vermiyor; ama viewport
- * etiketinde `maximum-scale=1` görünce ölçeği 1'e çekiyorlar (iOS Safari ve
- * Android Chrome). Etiket kısa bir an kilitli değere çekilip sonra eski hâline
- * döndürülüyor: yakınlaştırma kilidi kapalıysa kurye yine büyütebiliyor.
+ * Sayfa ölçeğini koddan değiştirmenin standart bir yolu yok. Android Chrome,
+ * viewport etiketinde kısa bir an `maximum-scale=1` görünce ölçeği 1'e
+ * çekiyor. iPhone Safari ise erişilebilirlik gereği bu sınırı yok sayıyor;
+ * orada ölçek inmezse sayfa aynı adresten yeniden açılıyor (yeni açılış her
+ * zaman 1 ölçekle başlar). Bekleyen işlemler cihazda sırada durduğu için
+ * yeniden açılışta kaybolmuyor.
  */
-export function arayuzuSifirla(zoomKilitli: boolean) {
+export function arayuzuSifirla(zoomKilitli: boolean, haritaSifirla?: () => void) {
+  haritaSifirla?.();
+  if (!sayfaBuyuk()) return;
+
   const meta = document.querySelector<HTMLMetaElement>('meta[name="viewport"]');
   if (meta) meta.content = VIEWPORT_KILITLI;
   window.scrollTo(0, 0);
   window.setTimeout(() => {
     window.scrollTo(0, 0);
     if (meta && !zoomKilitli) meta.content = VIEWPORT_ACIK;
-  }, 350);
+    if (!sayfaBuyuk()) return;
+    const url = new URL(window.location.href);
+    url.searchParams.set(SIFIRLA_ISARETI, String(Date.now()));
+    window.location.replace(url.toString());
+  }, 400);
+}
+
+/** Sıfırlama için yeniden açıldıysak adresteki işareti sessizce temizler. */
+export function useSifirlaIsaretiniTemizle() {
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has(SIFIRLA_ISARETI)) return;
+    url.searchParams.delete(SIFIRLA_ISARETI);
+    window.history.replaceState(window.history.state, "", url.toString());
+  }, []);
 }
 
 /** Sayfa yakınlaştırılmış mı, ve görünen alanın konumu. */
@@ -64,11 +93,14 @@ function useGorunenAlan() {
  */
 export function YakinlikSifirlaDugmesi({
   zoomKilitli,
+  onHaritaSifirla,
 }: {
   zoomKilitli: boolean;
+  onHaritaSifirla?: () => void;
 }) {
+  useSifirlaIsaretiniTemizle();
   const alan = useGorunenAlan();
-  const buyuk = alan != null && alan.olcek > 1.04;
+  const buyuk = alan != null && alan.olcek > BUYUK_OLCEK;
 
   return (
     <AnimatePresence>
@@ -86,7 +118,7 @@ export function YakinlikSifirlaDugmesi({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -10, scale: 0.9 }}
             transition={{ type: "spring", stiffness: 420, damping: 30 }}
-            onClick={() => arayuzuSifirla(zoomKilitli)}
+            onClick={() => arayuzuSifirla(zoomKilitli, onHaritaSifirla)}
             className="pointer-events-auto mt-[calc(env(safe-area-inset-top)+12px)] flex h-10 items-center gap-2 rounded-hap bg-kontrast px-4 text-[13px] font-black text-white shadow-yuzen active:scale-95"
           >
             <SifirlaSimgesi />

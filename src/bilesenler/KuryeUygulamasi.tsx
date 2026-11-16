@@ -12,8 +12,13 @@ import {
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 
-import Harita, { type HaritaApi, type Katmanlar } from "./Harita";
-import HaritaKontrolleri from "./HaritaKontrolleri";
+import Harita, {
+  ILK_EGIM,
+  ILK_YON,
+  type HaritaApi,
+  type Katmanlar,
+} from "./Harita";
+import HaritaKontrolleri, { yeniAciDeposu } from "./HaritaKontrolleri";
 import AltPanel, { type PanelDurumu } from "./AltPanel";
 import TeslimatDetay from "./TeslimatDetay";
 import AbonelikDetay from "./AbonelikDetay";
@@ -94,6 +99,7 @@ import type {
   KuryeKonumu,
   Nokta,
   RotaSonucu,
+  Sepet,
   Adres,
   OdemeYontemiTanimi,
   Siparis,
@@ -240,6 +246,12 @@ function bulucuOfseti(kart: boolean): [number, number] {
   return kart ? [0, -Math.round(window.innerHeight * 0.28)] : [0, 0];
 }
 
+/**
+ * Sepetler bölümü kaldırıldı ama harita hâlâ bir dizi bekliyor. Her çizimde
+ * yeni `[]` verilince harita o katmanı her seferinde yeniden yüklüyordu.
+ */
+const BOS_SEPETLER: Sepet[] = [];
+
 export default function KuryeUygulamasi({
   kurye,
   baslangicTeslimatlar,
@@ -358,6 +370,8 @@ export default function KuryeUygulamasi({
   const [katmanPaneli, setKatmanPaneli] = useState(false);
 
   const [kuryeKonumu, setKuryeKonumu] = useState<Nokta | null>(null);
+  /** Ekrana en son yansıyan GPS konumu (titreşim eşiği için). */
+  const cizilenKonumRef = useRef<Nokta | null>(null);
   /** Konum bir teslimat adresine sabitlendi mi? */
   const sabitKonumRef = useRef(false);
   const [sabitKonum, setSabitKonum] = useState(false);
@@ -371,7 +385,10 @@ export default function KuryeUygulamasi({
   const konumaUcRef = useRef(false);
   const [kuryeYonu, setKuryeYonu] = useState<number | null>(null);
   const [konumTakibi, setKonumTakibi] = useState(false);
-  const [aci, setAci] = useState({ bearing: -12, pitch: 45 });
+  /** Haritanın yönü/eğimi: durum değil, yalnızca harita düğmelerinin dinlediği depo. */
+  const [aciDeposu] = useState(() =>
+    yeniAciDeposu({ bearing: ILK_YON, pitch: ILK_EGIM }),
+  );
 
   const [navHedef, setNavHedef] = useState<Siparis | null>(null);
   const [navDurum, setNavDurum] = useState<NavigasyonDurumu>("secim");
@@ -893,6 +910,7 @@ export default function KuryeUygulamasi({
     sonDogrulukRef.current = null;
     sonOlcumZamaniRef.current = 0;
     kuryeKonumuRef.current = nokta;
+    cizilenKonumRef.current = nokta;
     setKuryeKonumu(nokta);
     setKonumTakibi(true);
     haritaApi.current?.ucur(nokta, 17);
@@ -964,7 +982,18 @@ export default function KuryeUygulamasi({
         sonOlcumZamaniRef.current = simdiki;
         kuryeKonumuRef.current = nokta;
 
-        setKuryeKonumu(nokta);
+        /*
+         * Ekrana yalnızca gerçek hareket yansısın. GPS saniyede bir, yerinde
+         * dururken bile birkaç metre oynayan ölçüm veriyor; her biri koca
+         * ekranı ve listeyi yeniden çizdirince telefonda kaydırma ve
+         * geçişler takılıyordu. Sürüşte her ölçüm işleniyor.
+         */
+        const surus = navRef.current.durum === "surus";
+        const cizilen = cizilenKonumRef.current;
+        if (surus || !cizilen || haversine(cizilen, nokta) >= 4) {
+          cizilenKonumRef.current = nokta;
+          setKuryeKonumu(nokta);
+        }
 
         /*
          * Vardiya yolu gerçek GPS izinden: yalnızca iyi ölçümler sayılıyor ve
@@ -1014,7 +1043,12 @@ export default function KuryeUygulamasi({
           konum.coords.heading != null && !Number.isNaN(konum.coords.heading)
             ? konum.coords.heading
             : null;
-        if (yon != null) setKuryeYonu(yon);
+        if (yon != null) {
+          // Küçük titreşimler yeniden çizim yaptırmasın.
+          setKuryeYonu((o) =>
+            o == null || Math.abs(((yon - o + 540) % 360) - 180) >= 5 ? yon : o,
+          );
+        }
 
         // Sürüş modunda sıradaki manevraya geç ve kamerayı kuryeye kilitle.
         const { durum: navD, secenek, takip } = navRef.current;
@@ -1266,7 +1300,7 @@ export default function KuryeUygulamasi({
       lat: navSecili.geometri[0][1],
       lng: navSecili.geometri[0][0],
     };
-    haritaApi.current?.surusKamerasi(nokta, kuryeYonu ?? aci.bearing);
+    haritaApi.current?.surusKamerasi(nokta, kuryeYonu ?? aciDeposu.oku().bearing);
 
     // İlk yönergeyi hemen söyle — kullanıcı dokunuşu sesi de yetkilendirir.
     if (sesRef.current && navSecili.adimlar[0]) {
@@ -2323,7 +2357,7 @@ export default function KuryeUygulamasi({
         ref={haritaApi}
         teslimatlar={teslimatlar}
         abonelikler={bugunAbonelikler}
-        sepetler={[]}
+        sepetler={BOS_SEPETLER}
         seciliId={seciliId}
         secimModu={secimModu}
         secilenler={secilenler}
@@ -2436,7 +2470,7 @@ export default function KuryeUygulamasi({
           }
           setBalonSecim(null);
         }}
-        onAciDegisti={(bearing, pitch) => setAci({ bearing, pitch })}
+        onAciDegisti={aciDeposu.yaz}
         onHazir={haritaHazir}
       />
 
@@ -2519,7 +2553,10 @@ export default function KuryeUygulamasi({
       </UstCubuk>
 
       {/* Sayfa büyütülmüşken görünen alanın tepesinde "Arayüzü sıfırla". */}
-      <YakinlikSifirlaDugmesi zoomKilitli={zoomKilitli} />
+      <YakinlikSifirlaDugmesi
+        zoomKilitli={zoomKilitli}
+        onHaritaSifirla={() => haritaApi.current?.ilkGorunum()}
+      />
 
       {/* Sol kenardan sağa kaydırınca açılan ekran: kurye bilgisi ve çıkış. */}
       {!navHedef && (
@@ -2536,8 +2573,7 @@ export default function KuryeUygulamasi({
       <AnimatePresence>{cikiliyor && <SultanVeda key="veda" />}</AnimatePresence>
 
       <HaritaKontrolleri
-        bearing={aci.bearing}
-        pitch={aci.pitch}
+        aciDeposu={aciDeposu}
         katmanlar={katmanlar}
         katmanPaneli={katmanPaneli}
         konumTakibi={konumTakibi}
@@ -2560,7 +2596,9 @@ export default function KuryeUygulamasi({
         }}
         onKatman={(k) => setKatmanlar((o) => ({ ...o, [k]: !o[k] }))}
         zoomKilitli={zoomKilitli}
-        onArayuzSifirla={() => arayuzuSifirla(zoomKilitli)}
+        onArayuzSifirla={() =>
+          arayuzuSifirla(zoomKilitli, () => haritaApi.current?.ilkGorunum())
+        }
         onZoomKilidi={() => {
           const yeni = !zoomKilitli;
           setZoomKilitli(yeni);

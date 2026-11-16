@@ -1,13 +1,42 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import type { Katmanlar } from "./Harita";
 import { SifirlaSimgesi } from "./ArayuzSifirla";
 
+/**
+ * Haritanın yönü ve eğimi için küçük bir depo. Harita dönerken bu değerler
+ * her karede değişiyor; ana ekranın durumunda tutulunca koca ekran her karede
+ * yeniden çiziliyor, telefonda kasıyordu. Artık yalnızca bu düğmeler dinliyor.
+ */
+export type AciDeposu = {
+  oku: () => { bearing: number; pitch: number };
+  yaz: (bearing: number, pitch: number) => void;
+  abone: (f: () => void) => () => void;
+};
+
+export function yeniAciDeposu(ilk: { bearing: number; pitch: number }): AciDeposu {
+  let deger = ilk;
+  const dinleyiciler = new Set<() => void>();
+  return {
+    oku: () => deger,
+    yaz: (bearing, pitch) => {
+      if (deger.bearing === bearing && deger.pitch === pitch) return;
+      deger = { bearing, pitch };
+      dinleyiciler.forEach((f) => f());
+    },
+    abone: (f) => {
+      dinleyiciler.add(f);
+      return () => {
+        dinleyiciler.delete(f);
+      };
+    },
+  };
+}
+
 type Props = {
-  bearing: number;
-  pitch: number;
+  aciDeposu: AciDeposu;
   katmanlar: Katmanlar;
   katmanPaneli: boolean;
   konumTakibi: boolean;
@@ -37,8 +66,7 @@ const KATMAN_ETIKET: Partial<
 };
 
 export default function HaritaKontrolleri({
-  bearing,
-  pitch,
+  aciDeposu,
   katmanlar,
   katmanPaneli,
   konumTakibi,
@@ -57,6 +85,11 @@ export default function HaritaKontrolleri({
    * Yakınlaştırma, pusula, 3B, katmanlar ve konum ona basınca açılıyor.
    */
   const [digerAcik, setDigerAcik] = useState(false);
+  const { bearing, pitch } = useSyncExternalStore(
+    aciDeposu.abone,
+    aciDeposu.oku,
+    aciDeposu.oku,
+  );
   const donuk = Math.abs(bearing) > 1 || pitch > 1;
 
   function digerDegistir() {

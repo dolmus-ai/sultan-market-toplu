@@ -27,6 +27,8 @@ type Props = {
   tamEkran: boolean;
   onTamEkran: (acik: boolean) => void;
   baslik: React.ReactNode;
+  /** Tam ekranın en üst satırında, solda duran ek düğme(ler). */
+  tamEkranSol?: React.ReactNode;
   children: React.ReactNode;
 };
 
@@ -102,6 +104,7 @@ export default function AltPanel({
   tamEkran,
   onTamEkran,
   baslik,
+  tamEkranSol,
   children,
 }: Props) {
   const kontrol = useDragControls();
@@ -379,6 +382,7 @@ export default function AltPanel({
       >
         <div className="shrink-0 px-4 pb-2 pt-[calc(env(safe-area-inset-top)+10px)]">
           <div className="mb-2 flex items-center justify-end gap-2">
+            {tamEkranSol && <div className="mr-auto">{tamEkranSol}</div>}
             <span className="text-[10.5px] font-semibold text-gri">
               Sağa kaydırarak da kapanır
             </span>

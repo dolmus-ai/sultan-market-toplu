@@ -382,6 +382,46 @@ export async function musteriTeslimGecmisi(
   return { adet: count ?? 0, liste: (data ?? []) as GecmisTeslim[] };
 }
 
+/** Geçmiş ekranı için bir teslimin bütün ayrıntısı. */
+export type GecmisKayit = GecmisTeslim & {
+  id: string;
+  musteri_id: string | null;
+  adres_id: string | null;
+  kurye_id: string | null;
+  musteri_ad: string | null;
+  telefon: string | null;
+  /** Teslim anındaki adresin kopyası (adresler satırı). */
+  adres: Adres | null;
+  kaynak: string | null;
+  odeme_yapan: string | null;
+  planlanan_tarih: string | null;
+};
+
+/**
+ * Bütün teslimlerin geçmişi, en yenisi önce, sayfa sayfa. Arama müşteri
+ * adında ve telefonunda. Listeden silinmiş siparişler de burada.
+ */
+export async function teslimGecmisiListesi(
+  db: SupabaseClient,
+  secenek: { arama?: string; sayfa?: number; boyut?: number } = {},
+): Promise<{ kayitlar: GecmisKayit[]; toplam: number }> {
+  const boyut = secenek.boyut ?? 40;
+  const bas = (secenek.sayfa ?? 0) * boyut;
+  let sorgu = db
+    .from("teslim_gecmisi")
+    .select(
+      "id, siparis_id, musteri_id, adres_id, kurye_id, musteri_ad, telefon, adres, kaynak, tutar, odeme_yontemi, odeme_alindi, odeme_tutari, odeme_yapan, planlanan_tarih, teslim_zamani",
+      { count: "exact" },
+    )
+    .order("teslim_zamani", { ascending: false })
+    .range(bas, bas + boyut - 1);
+  const temiz = secenek.arama?.trim().replace(/[,%()]/g, " ");
+  if (temiz) sorgu = sorgu.or(`musteri_ad.ilike.%${temiz}%,telefon.ilike.%${temiz}%`);
+  const { data, error, count } = await sorgu;
+  if (error) throw error;
+  return { kayitlar: (data ?? []) as GecmisKayit[], toplam: count ?? 0 };
+}
+
 /** Birden çok müşteri için teslim sayısı ve son teslim zamanı. */
 export async function teslimSayilari(
   db: SupabaseClient,

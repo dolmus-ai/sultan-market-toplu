@@ -32,6 +32,8 @@ type Props = {
   onNotKaydet: (kuryeNotu: string, kapiKodu: string) => void;
   /** Teslim fotoğrafının imzalı bağlantısı; yoksa null. */
   onFotoGetir?: () => Promise<string | null>;
+  /** "Daha önce teslim" kartı görünsün mü (yalnızca tam ekran listede). */
+  gecmisGoster?: boolean;
 };
 
 export default function TeslimatDetay({
@@ -45,6 +47,7 @@ export default function TeslimatDetay({
   onKonumDuzelt,
   onNotKaydet,
   onFotoGetir,
+  gecmisGoster = false,
 }: Props) {
   const adres = siparis.adres;
   const konumVar = adres?.lat != null && adres?.lng != null;
@@ -163,7 +166,9 @@ export default function TeslimatDetay({
       </div>
 
       {/* Bu müşteriye daha önce yapılan teslimler (silinmez geçmişten) */}
-      <TeslimGecmisi musteriId={siparis.musteri_id} haricSiparis={siparis.id} />
+      {gecmisGoster && (
+        <TeslimGecmisi musteriId={siparis.musteri_id} haricSiparis={siparis.id} />
+      )}
 
       {/* Önceki deneme başarısızsa */}
       {siparis.durum === "basarisiz" && siparis.basarisizlik_sebebi && (

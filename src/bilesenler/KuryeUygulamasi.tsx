@@ -23,9 +23,11 @@ import AltPanel, { type PanelDurumu } from "./AltPanel";
 import TeslimatDetay from "./TeslimatDetay";
 import AbonelikDetay from "./AbonelikDetay";
 import TeslimSonucu, { type TeslimSonuc } from "./TeslimSonucu";
+import TeslimGecmisiEkrani from "./TeslimGecmisiEkrani";
 import KayitEkle, {
   type DuzenlenenKayit,
   type EklenenKayit,
+  type KayitTaslagi,
 } from "./KayitEkle";
 import HaritaBalonu, { type BalonKayit } from "./HaritaBalonu";
 import KonumTamamla from "./KonumTamamla";
@@ -72,6 +74,8 @@ import {
   siparisleriGetir,
   gunSiparisleriGetir,
   topluSil,
+  siparisEkle,
+  type GecmisKayit,
 } from "@/lib/veri";
 import {
   sakaryadaMi,
@@ -397,6 +401,10 @@ export default function KuryeUygulamasi({
   const [navAdimIndeks, setNavAdimIndeks] = useState(0);
   const [navTakip, setNavTakip] = useState(true);
   const [sesAcik, setSesAcik] = useState(() => tercihOku().ses ?? true);
+  /** Tam ekran listeden açılan teslimat geçmişi ekranı. */
+  const [gecmisAcik, setGecmisAcik] = useState(false);
+  /** Geçmişten "Düzenleyerek al": kayıt formu bununla dolu açılır. */
+  const [kayitTaslagi, setKayitTaslagi] = useState<KayitTaslagi | null>(null);
   /** Çıkışa basıldı: veda animasyonu oynuyor. */
   const [cikiliyor, setCikiliyor] = useState(false);
   /** İki parmakla sayfa yakınlaştırma kilidi — kurye kendisi açıp kapatıyor. */
@@ -1919,6 +1927,50 @@ export default function KuryeUygulamasi({
       : [kayit, ...liste];
   }
 
+  /** Geçmişteki bir teslimi bugüne aynen yeni teslimat olarak açar. */
+  async function gecmistenAynenAl(k: GecmisKayit) {
+    if (!k.musteri_id || !k.adres_id) return gecmistenDuzenleyerekAl(k);
+    setIslemde(true);
+    try {
+      const siparis = await siparisEkle(db, {
+        musteri_id: k.musteri_id,
+        adres_id: k.adres_id,
+        tutar: k.tutar ?? 0,
+        planlanan_tarih: bugununTarihi(),
+        odeme_yontemi: k.odeme_yontemi,
+      });
+      setGecmisAcik(false);
+      kayitEklendi(
+        { tur: "teslimat", siparis },
+        `${k.musteri_ad ?? "Müşteri"} bugünkü teslimatlara eklendi`,
+      );
+    } catch {
+      uyar("Yeniden teslimata alınamadı");
+    } finally {
+      setIslemde(false);
+    }
+  }
+
+  /** Geçmişteki bir teslimi kayıt formunda, dolu açar; kurye düzenleyip kaydeder. */
+  function gecmistenDuzenleyerekAl(k: GecmisKayit) {
+    setKayitTaslagi({
+      musteri: k.musteri_id
+        ? {
+            id: k.musteri_id,
+            ad: k.musteri_ad ?? "Müşteri",
+            telefon: k.telefon,
+            notlar: null,
+          }
+        : null,
+      yeniMusteri: { ad: k.musteri_ad ?? "", telefon: k.telefon ?? "" },
+      adres: k.adres_id && k.adres ? k.adres : null,
+      tutar: k.tutar,
+      odeme_yontemi: k.odeme_yontemi,
+    });
+    setDuzenlenen(null);
+    setKayitEkle(true);
+  }
+
   function kayitEklendi(kayit: EklenenKayit, mesaj: string) {
     if (kayit.tur === "teslimat") {
       setTeslimatlar((o) => birlestir(o, kayit.siparis));
@@ -2855,13 +2907,18 @@ export default function KuryeUygulamasi({
             duzenlenen={duzenlenen}
             siteler={siteler}
             baslangicAdres={kayitAdresi}
+            taslak={kayitTaslagi}
             onKapat={() => {
               setKayitEkle(false);
               setDuzenlenen(null);
               setKayitAdresi(null);
+              setKayitTaslagi(null);
             }}
             onEklendi={(kayit, mesaj) => {
               setKayitAdresi(null);
+              // Geçmişten açıldıysa yeni teslimat listede görünsün.
+              if (kayitTaslagi) setGecmisAcik(false);
+              setKayitTaslagi(null);
               kayitEklendi(kayit, mesaj);
             }}
           />
@@ -3170,6 +3227,21 @@ export default function KuryeUygulamasi({
         )}
       </AnimatePresence>
 
+      {/* Teslimat geçmişi: tam ekran listenin üstünde */}
+      <AnimatePresence>
+        {gecmisAcik && (
+          <TeslimGecmisiEkrani
+            key="teslim-gecmisi"
+            db={db}
+            yontemler={yontemler}
+            islemde={islemde}
+            onKapat={() => setGecmisAcik(false)}
+            onAynenAl={(k) => void gecmistenAynenAl(k)}
+            onDuzenleyerekAl={gecmistenDuzenleyerekAl}
+          />
+        )}
+      </AnimatePresence>
+
       {/* Bildirim */}
       <AnimatePresence>
         {bildirim && (
@@ -3278,6 +3350,23 @@ export default function KuryeUygulamasi({
         durum={panel}
         onDurum={setPanel}
         tamEkran={tamEkran}
+        tamEkranSol={
+          <button
+            onClick={() => setGecmisAcik(true)}
+            className="flex h-8 items-center gap-1.5 rounded-hap bg-kontrast px-3 text-[12px] font-black text-white active:scale-95"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+              <path
+                d="M3 12a9 9 0 1 0 3-6.7M3 4v4h4M12 7v5l3 2"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            Teslimat geçmişi
+          </button>
+        }
         onTamEkran={(acik) => {
           if (acik === tamEkran) return;
           // Ses ayarı navigasyondaki sesle ortak: kurye sesi kapattıysa sessiz.
@@ -3385,6 +3474,7 @@ export default function KuryeUygulamasi({
               onNotKaydet={kapiBilgisiKaydet}
               onNavigasyon={() => navigasyonuAc(secili)}
               onFotoGetir={() => teslimFotosuBagla(db, secili.id)}
+              gecmisGoster={tamEkran}
               onKonumDuzelt={() => {
                 setKonumDuzeltme(secili.adres?.id ?? null);
                 setPanel("kapali");

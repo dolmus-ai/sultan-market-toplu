@@ -41,6 +41,20 @@ export type EklenenKayit =
 /** Düzenleme kipinde açılırken verilen mevcut kayıt. */
 export type DuzenlenenKayit = EklenenKayit;
 
+/**
+ * Yeni teslimatı önceden doldurmak için (teslimat geçmişinden "Düzenleyerek
+ * al"). Müşteri ve adres hâlâ kayıtlıysa akış doğrudan ayrıntı adımında
+ * açılır; adres yoksa adres, müşteri de yoksa yeni müşteri adımında.
+ */
+export type KayitTaslagi = {
+  musteri: Musteri | null;
+  /** Müşteri kaydı silinmişse yeni müşteri bununla dolu açılır. */
+  yeniMusteri?: { ad: string; telefon: string };
+  adres: Adres | null;
+  tutar: number | null;
+  odeme_yontemi: string | null;
+};
+
 type Adim = "musteri" | "adres" | "tur" | "detay";
 type KayitTuru = "teslimat" | "abonelik" | "sepet";
 
@@ -75,6 +89,7 @@ export default function KayitEkle({
   duzenlenen,
   siteler = [],
   baslangicAdres,
+  taslak,
   onKapat,
   onEklendi,
 }: {
@@ -94,11 +109,17 @@ export default function KayitEkle({
     lng: number;
     etiket: string;
   } | null;
+  /** Yeni teslimatı önceden doldurur (geçmişten "Düzenleyerek al"). */
+  taslak?: KayitTaslagi | null;
   onKapat: () => void;
   onEklendi: (kayit: EklenenKayit, mesaj: string) => void;
 }) {
   const duzenleme = duzenlenen != null;
-  const [adim, setAdim] = useState<Adim>(duzenlenen ? "detay" : "musteri");
+  const [adim, setAdim] = useState<Adim>(() => {
+    if (duzenlenen) return "detay";
+    if (taslak?.musteri) return taslak.adres ? "detay" : "adres";
+    return "musteri";
+  });
   const [islemde, setIslemde] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
 
@@ -109,13 +130,19 @@ export default function KayitEkle({
   const [teslimler, setTeslimler] = useState<
     Map<string, { adet: number; son: string }>
   >(() => new Map());
-  const [musteri, setMusteri] = useState<Musteri | null>(null);
-  const [yeniMusteri, setYeniMusteri] = useState({ ad: "", telefon: "", notlar: "" });
-  const [musteriModu, setMusteriModu] = useState<"ara" | "yeni">("ara");
+  const [musteri, setMusteri] = useState<Musteri | null>(taslak?.musteri ?? null);
+  const [yeniMusteri, setYeniMusteri] = useState({
+    ad: taslak?.musteri ? "" : (taslak?.yeniMusteri?.ad ?? ""),
+    telefon: taslak?.musteri ? "" : (taslak?.yeniMusteri?.telefon ?? ""),
+    notlar: "",
+  });
+  const [musteriModu, setMusteriModu] = useState<"ara" | "yeni">(
+    !taslak?.musteri && taslak?.yeniMusteri ? "yeni" : "ara",
+  );
 
   /* --- Adres --- */
   const [adresler, setAdresler] = useState<Adres[]>([]);
-  const [adres, setAdres] = useState<Adres | null>(null);
+  const [adres, setAdres] = useState<Adres | null>(taslak?.adres ?? null);
   const [yeniAdres, setYeniAdres] = useState({
     baslik: "Ev",
     adres_metni: baslangicAdres?.adres_metni ?? "",
@@ -134,6 +161,7 @@ export default function KayitEkle({
     if (duzenlenen?.tur === "teslimat") return String(duzenlenen.siparis.tutar);
     if (duzenlenen?.tur === "abonelik") return String(duzenlenen.abonelik.tutar);
     if (duzenlenen?.tur === "sepet") return String(duzenlenen.sepet.tutar);
+    if (taslak?.tutar != null) return String(taslak.tutar);
     return "";
   });
   const [tarih, setTarih] = useState(
@@ -150,6 +178,7 @@ export default function KayitEkle({
   });
   const [yontem, setYontem] = useState(
     (duzenlenen?.tur === "teslimat" ? duzenlenen.siparis.odeme_yontemi : null) ??
+      taslak?.odeme_yontemi ??
       yontemler[0]?.kod ??
       "nakit",
   );
@@ -204,6 +233,23 @@ export default function KayitEkle({
       ? { durum: "bulundu", ad: baslangicAdres.etiket, kaba: false }
       : { durum: "bos" },
   );
+
+  /* Taslakla açıldıysa müşterinin kayıtlı adresleri hazır dursun. */
+  const taslakMusteriId = taslak?.musteri?.id;
+  useEffect(() => {
+    if (!taslakMusteriId) return;
+    let iptal = false;
+    musteriAdresleri(db, taslakMusteriId)
+      .then((liste) => {
+        if (iptal) return;
+        setAdresler(liste);
+        setAdres((o) => o ?? liste[0] ?? null);
+      })
+      .catch(() => undefined);
+    return () => {
+      iptal = true;
+    };
+  }, [db, taslakMusteriId]);
 
   /* Müşteri araması — yazarken 250 ms bekliyor. */
   useEffect(() => {

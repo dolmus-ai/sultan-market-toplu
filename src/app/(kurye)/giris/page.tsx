@@ -84,10 +84,22 @@ export default function GirisSayfasi() {
     });
 
     if (error) {
+      /*
+       * "Load failed" (Safari) / "Failed to fetch" (Chrome): istek sunucuya
+       * hiç ulaşmadı. Sayfa önbellekten açılmış ama ağ bu adresi engelliyor
+       * ya da bağlantı yok; kuryeye ham İngilizce hata yerine ne olduğunu söyle.
+       */
+      const agHatasi =
+        error.name === "AuthRetryableFetchError" ||
+        /load failed|failed to fetch|networkerror|network request failed/i.test(
+          error.message,
+        );
       setHata(
         error.message.includes("Invalid login")
           ? "E-posta veya şifre hatalı."
-          : error.message,
+          : agHatasi
+            ? "Sunucuya ulaşılamıyor. Mobil veri bu adresi engelliyor olabilir; Wi-Fi ile ya da telefonun Özel DNS ayarını one.one.one.one yapıp yeniden dene."
+            : error.message,
       );
       setBekliyor(false);
       return;

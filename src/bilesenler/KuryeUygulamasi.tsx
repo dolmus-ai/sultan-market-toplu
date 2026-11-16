@@ -31,6 +31,7 @@ import AdresBulucu, { BinaSimgesi } from "./AdresBulucu";
 import { AbonelikSatiri, ListeArama, TeslimatSatiri } from "./Listeler";
 import { SultanAmblem, SultanVeda, VEDA_SURESI } from "./SultanLogo";
 import UstCubuk from "./UstCubuk";
+import CikisCekmecesi from "./CikisCekmecesi";
 import { ModGecisDugmesi } from "./ModGecisi";
 import YonetimMenusu from "./YonetimMenusu";
 
@@ -2512,6 +2513,18 @@ export default function KuryeUygulamasi({
           </button>
         </div>
       </UstCubuk>
+
+      {/* Sol kenardan sağa kaydırınca açılan ekran: kurye bilgisi ve çıkış. */}
+      {!navHedef && (
+        <CikisCekmecesi
+          kuryeAdi={kurye?.ad || "Kurye"}
+          ozet={`${aktifTeslimatlar.length} teslimat · ${para(kasaToplami)} kasada`}
+          onCikis={() => void cikis()}
+          onAcilis={(acik) => {
+            if (sesAcik) void kaydirmaSesi(acik);
+          }}
+        />
+      )}
 
       <AnimatePresence>{cikiliyor && <SultanVeda key="veda" />}</AnimatePresence>
 

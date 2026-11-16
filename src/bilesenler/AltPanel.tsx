@@ -217,7 +217,11 @@ export default function AltPanel({
   } | null>(null);
 
   function kenarBasla(e: React.PointerEvent<HTMLDivElement>) {
-    e.currentTarget.setPointerCapture(e.pointerId);
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      /* işaretçi zaten bırakılmışsa yakalamadan devam */
+    }
     const t = performance.now();
     kenar.current = {
       x: e.clientX,

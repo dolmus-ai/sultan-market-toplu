@@ -6,6 +6,7 @@ import {
   motion,
   useMotionValue,
   useTransform,
+  type MotionValue,
   type PanInfo,
 } from "motion/react";
 
@@ -52,7 +53,8 @@ function gizliDinle(f: () => void) {
  * - Yukarı kaydırınca saklanır; yerinde küçük bir sekme kalır, ona dokunmak
  *   ya da aşağı çekmek çubuğu geri getirir. Tercih bu cihazda hatırlanır.
  * - Sola kaydırınca arkasındaki "Çıkış yap" düğmesi görünür (arkasında
- *   bulanık amblem). Sağa kaydırmak ya da çubuğa dokunmak geri kapatır.
+ *   bulanık amblem). Sağa kaydırınca aynı düğme bu kez solda açılır.
+ *   Ters yöne kaydırmak ya da çubuğa dokunmak geri kapatır.
  */
 export default function UstCubuk({
   children,
@@ -63,24 +65,34 @@ export default function UstCubuk({
 }) {
   const gizli = useSyncExternalStore(gizliDinle, gizliOku, () => false);
   const setGizli = gizliYaz;
-  const [cikisAcik, setCikisAcik] = useState(false);
+  /** Çıkış alanı hangi yanda açık: "sag" kart sola, "sol" kart sağa kaymış. */
+  const [cikisAcik, setCikisAcik] = useState<"sag" | "sol" | null>(null);
 
   const x = useMotionValue(0);
-  // Çıkış alanı yalnızca kart kaydıkça görünsün; kart yarı saydam.
-  const cikisGorunurluk = useTransform(x, [-CIKIS_GENISLIK, -12, 0], [1, 0.4, 0]);
-  const amblemOlcek = useTransform(x, [-CIKIS_GENISLIK, 0], [1, 0.7]);
+  // Çıkış alanları yalnızca kart o yöne kaydıkça görünsün; kart yarı saydam.
+  const sagGorunurluk = useTransform(x, [-CIKIS_GENISLIK, -12, 0], [1, 0.4, 0]);
+  const solGorunurluk = useTransform(x, [0, 12, CIKIS_GENISLIK], [0, 0.4, 1]);
+  const sagOlcek = useTransform(x, [-CIKIS_GENISLIK, 0], [1, 0.7]);
+  const solOlcek = useTransform(x, [0, CIKIS_GENISLIK], [0.7, 1]);
 
   function birakildi(_: unknown, b: PanInfo) {
     const dikey = Math.abs(b.offset.y) > Math.abs(b.offset.x);
     if (dikey) {
       if (b.offset.y < -24 || b.velocity.y < -350) {
-        setCikisAcik(false);
+        setCikisAcik(null);
         setGizli(true);
       }
       return;
     }
-    if (b.offset.x < -40 || b.velocity.x < -300) setCikisAcik(true);
-    else if (b.offset.x > 16 || b.velocity.x > 300) setCikisAcik(false);
+    const sola = b.offset.x < -40 || b.velocity.x < -300;
+    const saga = b.offset.x > 40 || b.velocity.x > 300;
+    const geri = (yon: number) => yon * b.offset.x > 16 || yon * b.velocity.x > 300;
+    if (cikisAcik === "sag") {
+      if (geri(1)) setCikisAcik(null);
+    } else if (cikisAcik === "sol") {
+      if (geri(-1)) setCikisAcik(null);
+    } else if (sola) setCikisAcik("sag");
+    else if (saga) setCikisAcik("sol");
   }
 
   return (
@@ -95,52 +107,49 @@ export default function UstCubuk({
             transition={YAY}
             className="pointer-events-auto relative"
           >
-            {/* Kartın arkası: bulanık amblemin önünde çıkış düğmesi */}
-            <motion.div
-              style={{ opacity: cikisGorunurluk }}
-              className="absolute inset-y-0 right-0 flex w-[124px] items-center justify-end overflow-hidden rounded-[22px] bg-gradient-to-br from-kirmizi to-[#9f0710]"
-            >
-              <motion.div
-                aria-hidden
-                style={{ scale: amblemOlcek }}
-                className="pointer-events-none absolute right-3 top-1/2 -mt-[38px] opacity-60 blur-[5px]"
-              >
-                <SultanAmblem boyut={76} />
-              </motion.div>
-              <button
-                onClick={onCikis}
-                tabIndex={cikisAcik ? 0 : -1}
-                aria-label="Çıkış yap"
-                className="relative flex h-full w-[104px] flex-col items-center justify-center gap-0.5 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.35)] active:scale-95"
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                  <path
-                    d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3M16 15l4-3-4-3M20 12H10"
-                    stroke="currentColor"
-                    strokeWidth="2.2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-                <span className="text-[11px] font-black">Çıkış yap</span>
-              </button>
-            </motion.div>
+            {/* Kartın arkası: iki yanda bulanık amblemin önünde çıkış düğmesi */}
+            <CikisAlani
+              yan="sag"
+              gorunurluk={sagGorunurluk}
+              olcek={sagOlcek}
+              acik={cikisAcik === "sag"}
+              onCikis={onCikis}
+            />
+            <CikisAlani
+              yan="sol"
+              gorunurluk={solGorunurluk}
+              olcek={solOlcek}
+              acik={cikisAcik === "sol"}
+              onCikis={onCikis}
+            />
 
-            {/* Kart: sola → çıkış, yukarı → sakla */}
+            {/* Kart: sola/sağa → çıkış, yukarı → sakla */}
             <motion.div
               drag
               dragDirectionLock
-              dragConstraints={{ left: -CIKIS_GENISLIK, right: 0, top: 0, bottom: 0 }}
-              dragElastic={{ left: 0.12, right: 0.04, top: 0.6, bottom: 0.04 }}
+              dragConstraints={{
+                left: -CIKIS_GENISLIK,
+                right: CIKIS_GENISLIK,
+                top: 0,
+                bottom: 0,
+              }}
+              dragElastic={{ left: 0.12, right: 0.12, top: 0.6, bottom: 0.04 }}
               dragMomentum={false}
               onDragEnd={birakildi}
-              animate={{ x: cikisAcik ? -CIKIS_GENISLIK : 0 }}
+              animate={{
+                x:
+                  cikisAcik === "sag"
+                    ? -CIKIS_GENISLIK
+                    : cikisAcik === "sol"
+                      ? CIKIS_GENISLIK
+                      : 0,
+              }}
               transition={YAY}
               onClickCapture={(e) => {
                 // Çıkış açıkken karta dokunmak önce onu kapatsın.
                 if (!cikisAcik) return;
                 e.stopPropagation();
-                setCikisAcik(false);
+                setCikisAcik(null);
               }}
               style={{ x, touchAction: "none" }}
               className="relative"
@@ -181,5 +190,58 @@ export default function UstCubuk({
         )}
       </AnimatePresence>
     </header>
+  );
+}
+
+/** Kartın arkasındaki çıkış alanı: kırmızı zemin, bulanık amblem, düğme. */
+function CikisAlani({
+  yan,
+  gorunurluk,
+  olcek,
+  acik,
+  onCikis,
+}: {
+  yan: "sag" | "sol";
+  gorunurluk: MotionValue<number>;
+  olcek: MotionValue<number>;
+  acik: boolean;
+  onCikis: () => void;
+}) {
+  const sag = yan === "sag";
+  return (
+    <motion.div
+      style={{ opacity: gorunurluk }}
+      className={`absolute inset-y-0 flex w-[124px] items-center overflow-hidden rounded-[22px] from-kirmizi to-[#9f0710] ${
+        sag ? "right-0 justify-end bg-gradient-to-br" : "left-0 justify-start bg-gradient-to-bl"
+      }`}
+    >
+      <motion.div
+        aria-hidden
+        style={{ scale: olcek }}
+        className={`pointer-events-none absolute top-1/2 -mt-[38px] opacity-60 blur-[5px] ${
+          sag ? "right-3" : "left-3"
+        }`}
+      >
+        <SultanAmblem boyut={76} />
+      </motion.div>
+      <button
+        onClick={onCikis}
+        tabIndex={acik ? 0 : -1}
+        aria-hidden={!acik}
+        aria-label="Çıkış yap"
+        className="relative flex h-full w-[104px] flex-col items-center justify-center gap-0.5 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.35)] active:scale-95"
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+          <path
+            d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3M16 15l4-3-4-3M20 12H10"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+        <span className="text-[11px] font-black">Çıkış yap</span>
+      </button>
+    </motion.div>
   );
 }

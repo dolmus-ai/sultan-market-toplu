@@ -69,10 +69,11 @@ export default function HaritaKontrolleri({
           etiket={digerAcik ? "Harita düğmelerini gizle" : "Harita düğmelerini göster"}
           onClick={digerDegistir}
           aktif={digerAcik}
+          buyuk
         >
           <motion.svg
-            width="16"
-            height="16"
+            width="21"
+            height="21"
             viewBox="0 0 24 24"
             fill="none"
             animate={{ rotate: digerAcik ? 45 : 0 }}
@@ -304,18 +305,21 @@ function Dugme({
   etiket,
   onClick,
   aktif,
+  buyuk,
 }: {
   children: React.ReactNode;
   etiket: string;
   onClick: () => void;
   aktif?: boolean;
+  /** Hepsini açan ana düğme: daha büyük, kolay bulunsun. */
+  buyuk?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
       aria-label={etiket}
       title={etiket}
-      className={`relative flex h-9 w-9 items-center justify-center transition-colors active:scale-90 ${
+      className={`relative flex items-center ${buyuk ? "h-12 w-12" : "h-9 w-9"} justify-center transition-colors active:scale-90 ${
         aktif ? "bg-kirmizi text-white" : "text-metin hover:bg-yuzey2"
       }`}
     >
